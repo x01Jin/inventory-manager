@@ -130,6 +130,16 @@ class Supplier:
             logger.error(f"Failed to get suppliers: {e}")
             return []
 
+    @classmethod
+    def get_by_id(cls, supplier_id: int) -> Optional['Supplier']:
+        """Get supplier by ID."""
+        try:
+            rows = db.execute_query("SELECT * FROM Suppliers WHERE id = ?", (supplier_id,))
+            return cls(**dict(rows[0])) if rows else None
+        except Exception as e:
+            logger.error(f"Failed to get supplier {supplier_id}: {e}")
+            return None
+
 
 @dataclass
 class Item:
@@ -204,9 +214,27 @@ class Item:
             return False
 
     def delete(self, editor_name: str, reason: str) -> bool:
-        """Delete the item and log to disposal history."""
+        """Delete the item and all related records if not currently borrowed."""
         try:
             if not self.id:
+                return False
+
+            # Check if item is currently borrowed (has unreturned requisitions)
+            borrowed_check = """
+            SELECT COUNT(*) as borrowed_count
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON ri.requisition_id = r.id
+            WHERE ri.item_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM Stock_Movements sm
+                WHERE sm.item_id = ri.item_id
+                AND sm.movement_type = 'RETURN'
+                AND sm.source_id = r.id
+            )
+            """
+            borrowed_result = db.execute_query(borrowed_check, (self.id,))
+            if borrowed_result and borrowed_result[0]['borrowed_count'] > 0:
+                logger.warning(f"Cannot delete item {self.id}: item is currently borrowed")
                 return False
 
             # Log to disposal history
@@ -216,9 +244,26 @@ class Item:
             """
             db.execute_update(disposal_query, (self.id, reason, editor_name))
 
-            # Delete item
+            # Cascade delete all related records in proper order
+
+            # 1. Delete stock movements first (may reference batches)
+            db.execute_update("DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,))
+
+            # 2. Delete item batches
+            db.execute_update("DELETE FROM Item_Batches WHERE item_id = ?", (self.id,))
+
+            # 3. Delete requisition items
+            db.execute_update("DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,))
+
+            # 4. Delete update history
+            db.execute_update("DELETE FROM Update_History WHERE item_id = ?", (self.id,))
+
+            # 5. Finally delete the item itself
             db.execute_update("DELETE FROM Items WHERE id = ?", (self.id,))
+
+            logger.info(f"Successfully deleted item {self.id} and all related records")
             return True
+
         except Exception as e:
             logger.error(f"Failed to delete item {self.id}: {e}")
             return False

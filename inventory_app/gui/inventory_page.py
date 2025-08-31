@@ -6,16 +6,16 @@ Implements core functionality from program specifications.
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem,
-    QLineEdit, QComboBox, QGroupBox, QMessageBox,
-    QTextEdit, QDateEdit, QCheckBox, QSpinBox, QDialog, QDialogButtonBox
+    QLineEdit, QGroupBox, QMessageBox,
+    QDialog, QHeaderView
 )
-from PyQt6.QtCore import QDate
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
-from inventory_app.database.models import Item, Category, Supplier
+from inventory_app.database.models import Item, Category, CategoryType, Supplier
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.gui.item_dialog import ItemDialog
 
 
 class InventoryPage(QWidget):
@@ -64,26 +64,40 @@ class InventoryPage(QWidget):
         self.setup_stats(layout)
 
     def setup_inventory_table(self, parent_layout):
-        """Setup the inventory table."""
-        table_group = QGroupBox("Inventory Items")
+        """Setup the inventory table with comprehensive columns."""
+        table_group = QGroupBox("Laboratory Inventory Items")
         table_layout = QVBoxLayout(table_group)
 
         self.inventory_table = QTableWidget()
-        self.inventory_table.setColumnCount(9)
+        self.inventory_table.setColumnCount(13)
         self.inventory_table.setHorizontalHeaderLabels([
-            "Name", "Category", "Brand", "Expiration", "Status", "Notes", "Available", "Borrowed", "Actions"
+            "Name", "Category", "Size", "Brand", "Specifications", "Supplier",
+            "PO Number", "Expiration", "Calibration", "Status", "Available", "Borrowed", "Actions"
         ])
 
-        # Set reasonable column widths
-        self.inventory_table.setColumnWidth(0, 150)  # Name
-        self.inventory_table.setColumnWidth(1, 120)  # Category
-        self.inventory_table.setColumnWidth(2, 120)  # Brand
-        self.inventory_table.setColumnWidth(3, 100)  # Expiration
-        self.inventory_table.setColumnWidth(4, 100)  # Status
-        self.inventory_table.setColumnWidth(5, 200)  # Notes
-        self.inventory_table.setColumnWidth(6, 80)   # Available
-        self.inventory_table.setColumnWidth(7, 80)   # Borrowed
-        self.inventory_table.setColumnWidth(8, 80)   # Actions
+        # Configure responsive column sizing
+        header = self.inventory_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(60)  # Minimum width for any column
+
+            # Set specific minimum widths for key columns
+            self.inventory_table.setColumnWidth(0, 150)  # Name
+            self.inventory_table.setColumnWidth(1, 120)  # Category
+            self.inventory_table.setColumnWidth(2, 80)   # Size
+            self.inventory_table.setColumnWidth(3, 100)  # Brand
+            self.inventory_table.setColumnWidth(4, 180)  # Specifications
+            self.inventory_table.setColumnWidth(5, 120)  # Supplier
+            self.inventory_table.setColumnWidth(6, 100)  # PO Number
+            self.inventory_table.setColumnWidth(7, 100)  # Expiration
+            self.inventory_table.setColumnWidth(8, 100)  # Calibration
+            self.inventory_table.setColumnWidth(9, 100)  # Status
+            self.inventory_table.setColumnWidth(10, 80)  # Available
+            self.inventory_table.setColumnWidth(11, 80)  # Borrowed
+            self.inventory_table.setColumnWidth(12, 120) # Actions
+
+            # Make specifications column stretch to fill space
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Specifications column stretches
 
         self.inventory_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.inventory_table)
@@ -106,34 +120,58 @@ class InventoryPage(QWidget):
         parent_layout.addLayout(stats_layout)
 
     def refresh_inventory(self):
-        """Refresh the inventory display."""
+        """Refresh the inventory display with comprehensive data."""
         try:
             items = Item.get_all()
             self.inventory_table.setRowCount(len(items))
 
             total_items = len(items)
             expiring_soon = 0
+            calibrating_soon = 0
+            low_stock = 0
 
             from datetime import date, timedelta
             today = date.today()
             warning_date = today + timedelta(days=90)  # 3 months warning
 
             for row, item in enumerate(items):
-                # Name
+                # Column 0: Name
                 self.inventory_table.setItem(row, 0, QTableWidgetItem(item.name or ""))
 
-                # Category
-                category_name = "Unknown"
+                # Column 1: Category (with type)
+                category_display = "Unknown"
                 if item.category_id:
                     category = Category.get_by_id(item.category_id)
                     if category:
-                        category_name = category.name
-                self.inventory_table.setItem(row, 1, QTableWidgetItem(category_name))
+                        category_display = category.name
+                        # Try to get category type for enhanced display
+                        if category.category_type_id:
+                            category_type = CategoryType.get_by_id(category.category_type_id)
+                            if category_type:
+                                category_display = f"{category_type.name}: {category.name}"
+                self.inventory_table.setItem(row, 1, QTableWidgetItem(category_display))
 
-                # Brand
-                self.inventory_table.setItem(row, 2, QTableWidgetItem(item.brand or ""))
+                # Column 2: Size
+                self.inventory_table.setItem(row, 2, QTableWidgetItem(item.size or ""))
 
-                # Expiration
+                # Column 3: Brand
+                self.inventory_table.setItem(row, 3, QTableWidgetItem(item.brand or ""))
+
+                # Column 4: Specifications
+                self.inventory_table.setItem(row, 4, QTableWidgetItem(item.other_specifications or ""))
+
+                # Column 5: Supplier
+                supplier_name = ""
+                if item.supplier_id:
+                    supplier = Supplier.get_by_id(item.supplier_id)
+                    if supplier:
+                        supplier_name = supplier.name
+                self.inventory_table.setItem(row, 5, QTableWidgetItem(supplier_name))
+
+                # Column 6: PO Number
+                self.inventory_table.setItem(row, 6, QTableWidgetItem(item.po_number or ""))
+
+                # Column 7: Expiration Date
                 exp_text = "No expiration"
                 if item.expiration_date:
                     exp_text = item.expiration_date.strftime("%Y-%m-%d")
@@ -145,20 +183,35 @@ class InventoryPage(QWidget):
                             exp_item.setBackground(QColor(DarkTheme.ERROR_COLOR))
                         else:
                             exp_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
-                        self.inventory_table.setItem(row, 3, exp_item)
+                        self.inventory_table.setItem(row, 7, exp_item)
                     else:
-                        self.inventory_table.setItem(row, 3, QTableWidgetItem(exp_text))
+                        self.inventory_table.setItem(row, 7, QTableWidgetItem(exp_text))
                 else:
-                    self.inventory_table.setItem(row, 3, QTableWidgetItem(exp_text))
+                    self.inventory_table.setItem(row, 7, QTableWidgetItem(exp_text))
 
-                # Status
+                # Column 8: Calibration Date
+                calib_text = "No calibration"
+                if item.calibration_date:
+                    calib_text = item.calibration_date.strftime("%Y-%m-%d")
+                    # Color code calibration due dates
+                    if item.calibration_date <= warning_date:
+                        calibrating_soon += 1
+                        calib_item = QTableWidgetItem(calib_text)
+                        if item.calibration_date < today:
+                            calib_item.setBackground(QColor(DarkTheme.ERROR_COLOR))
+                        else:
+                            calib_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
+                        self.inventory_table.setItem(row, 8, calib_item)
+                    else:
+                        self.inventory_table.setItem(row, 8, QTableWidgetItem(calib_text))
+                else:
+                    self.inventory_table.setItem(row, 8, QTableWidgetItem(calib_text))
+
+                # Column 9: Status
                 status = "Consumable" if item.is_consumable else "Reusable"
-                self.inventory_table.setItem(row, 4, QTableWidgetItem(status))
+                self.inventory_table.setItem(row, 9, QTableWidgetItem(status))
 
-                # Notes
-                self.inventory_table.setItem(row, 5, QTableWidgetItem(item.other_specifications or ""))
-
-                # Available Units
+                # Column 10: Available Units
                 try:
                     available_query = """
                     SELECT COALESCE(SUM(
@@ -174,12 +227,17 @@ class InventoryPage(QWidget):
                     """
                     available_rows = db.execute_query(available_query, (item.id,))
                     available_qty = available_rows[0]['available_qty'] if available_rows else 0
+
+                    # Check for low stock (less than 10 units for consumables)
+                    if item.is_consumable and available_qty < 10 and available_qty > 0:
+                        low_stock += 1
+
                 except Exception as e:
                     logger.error(f"Failed to get available quantity for item {item.id}: {e}")
                     available_qty = 0
-                self.inventory_table.setItem(row, 6, QTableWidgetItem(str(available_qty)))
+                self.inventory_table.setItem(row, 10, QTableWidgetItem(str(available_qty)))
 
-                # Borrowed Units
+                # Column 11: Borrowed Units
                 try:
                     borrowed_query = """
                     SELECT
@@ -193,42 +251,38 @@ class InventoryPage(QWidget):
                 except Exception as e:
                     logger.error(f"Failed to get borrowed quantity for item {item.id}: {e}")
                     borrowed_qty = 0
-                self.inventory_table.setItem(row, 7, QTableWidgetItem(str(borrowed_qty)))
+                self.inventory_table.setItem(row, 11, QTableWidgetItem(str(borrowed_qty)))
 
-                # Actions button
+                # Column 12: Actions button
                 actions_btn = QPushButton("⋮")
-                actions_btn.setFixedWidth(30)
+                actions_btn.setFixedWidth(80)
                 actions_btn.clicked.connect(lambda checked, r=row: self.show_actions_menu(r))
-                self.inventory_table.setCellWidget(row, 8, actions_btn)
+                self.inventory_table.setCellWidget(row, 12, actions_btn)
 
             # Update stats
             self.total_label.setText(f"📊 Total Items: {total_items}")
-            self.expired_label.setText(f"⚠️ Expiring Soon: {expiring_soon}")
+            self.expired_label.setText(f"⚠️ Alerts: {expiring_soon + calibrating_soon}")
+            self.low_stock_label.setText(f"🔴 Low Stock: {low_stock}")
 
         except Exception as e:
             logger.error(f"Failed to refresh inventory: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load inventory: {str(e)}")
 
     def search_items(self):
-        """Search items based on input."""
+        """Search items based on input across all relevant columns."""
         search_text = self.search_input.text().lower()
 
         for row in range(self.inventory_table.rowCount()):
             show_row = True
 
             if search_text:
-                # Search in name, brand, and notes columns
-                name = self.inventory_table.item(row, 0)
-                brand = self.inventory_table.item(row, 2)
-                notes = self.inventory_table.item(row, 5)
-
                 found = False
-                if name and search_text in name.text().lower():
-                    found = True
-                if brand and search_text in brand.text().lower():
-                    found = True
-                if notes and search_text in notes.text().lower():
-                    found = True
+                # Search across multiple columns: Name (0), Category (1), Size (2), Brand (3), Specifications (4), Supplier (5), PO Number (6)
+                for col in [0, 1, 2, 3, 4, 5, 6]:
+                    cell_item = self.inventory_table.item(row, col)
+                    if cell_item and search_text in cell_item.text().lower():
+                        found = True
+                        break
 
                 if not found:
                     show_row = False
@@ -236,291 +290,16 @@ class InventoryPage(QWidget):
             self.inventory_table.setRowHidden(row, not show_row)
 
     def add_item_dialog(self):
-        """Show dialog to add new item."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Add New Laboratory Item")
-        dialog.setModal(True)
-        dialog.resize(400, 500)
-
-        layout = QVBoxLayout(dialog)
-
-        # Form fields
-        name_edit = QLineEdit()
-        name_edit.setPlaceholderText("Item name (required)")
-
-        category_combo = QComboBox()
-        categories = Category.get_all()
-        if categories:
-            category_combo.addItem("-- Select Category --", None)
-            for cat in categories:
-                category_combo.addItem(cat.name, cat.id)
-        else:
-            category_combo.addItem("No categories available", None)
-
-        brand_edit = QLineEdit()
-        brand_edit.setPlaceholderText("Brand/Manufacturer")
-
-        specs_edit = QTextEdit()
-        specs_edit.setPlaceholderText("Specifications, size, etc.")
-        specs_edit.setMaximumHeight(60)
-
-        supplier_combo = QComboBox()
-        supplier_combo.setEditable(True)
-        suppliers = Supplier.get_all()
-        for sup in suppliers:
-            supplier_combo.addItem(sup.name, sup.id)
-
-        po_edit = QLineEdit()
-        po_edit.setPlaceholderText("Purchase Order number")
-
-        quantity_edit = QSpinBox()
-        quantity_edit.setRange(1, 10000)
-        quantity_edit.setValue(1)
-        quantity_edit.setSuffix(" units")
-
-        exp_edit = QDateEdit()
-        exp_edit.setCalendarPopup(True)
-        exp_edit.setDate(QDate.currentDate().addMonths(12))
-
-        consumable_check = QCheckBox("Consumable item")
-        consumable_check.setChecked(True)
-
-        # Add to form
-        form_layout = QVBoxLayout()
-        form_layout.addWidget(QLabel("Name:"))
-        form_layout.addWidget(name_edit)
-        form_layout.addWidget(QLabel("Category:"))
-        form_layout.addWidget(category_combo)
-        form_layout.addWidget(QLabel("Brand:"))
-        form_layout.addWidget(brand_edit)
-        form_layout.addWidget(QLabel("Specifications:"))
-        form_layout.addWidget(specs_edit)
-        form_layout.addWidget(QLabel("Supplier:"))
-        form_layout.addWidget(supplier_combo)
-        form_layout.addWidget(QLabel("PO Number:"))
-        form_layout.addWidget(po_edit)
-        form_layout.addWidget(QLabel("Initial Quantity:"))
-        form_layout.addWidget(quantity_edit)
-        form_layout.addWidget(QLabel("Expiration Date:"))
-        form_layout.addWidget(exp_edit)
-        form_layout.addWidget(consumable_check)
-
-        layout.addLayout(form_layout)
-
-        # Buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-
-        def save_item():
-            try:
-                if not name_edit.text().strip():
-                    QMessageBox.warning(dialog, "Error", "Item name is required")
-                    return
-
-                category_id = category_combo.currentData()
-                if category_id is None:
-                    QMessageBox.warning(dialog, "Error", "Please select a category")
-                    return
-
-                item = Item(
-                    name=name_edit.text().strip(),
-                    category_id=category_id,
-                    brand=brand_edit.text().strip(),
-                    other_specifications=specs_edit.toPlainText().strip(),
-                    supplier_id=supplier_combo.currentData(),
-                    po_number=po_edit.text().strip(),
-                    expiration_date=exp_edit.date().toPyDate(),
-                    is_consumable=1 if consumable_check.isChecked() else 0
-                )
-
-                if item.save("System"):
-                    # Create initial batch and stock movement
-                    try:
-                        quantity = quantity_edit.value()
-
-                        # Create initial batch
-                        batch_query = """
-                        INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received)
-                        VALUES (?, 1, ?, ?)
-                        """
-                        current_date = QDate.currentDate().toString("yyyy-MM-dd")
-                        db.execute_update(batch_query, (item.id, current_date, quantity))
-
-                        # Create initial stock movement
-                        movement_query = """
-                        INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, note)
-                        VALUES (?, ?, 'RECEIPT', ?, ?, 'Initial stock entry')
-                        """
-                        # Get the batch ID we just created
-                        batch_id_rows = db.execute_query("SELECT last_insert_rowid() as batch_id")
-                        batch_id = batch_id_rows[0]['batch_id'] if batch_id_rows else None
-
-                        if batch_id:
-                            db.execute_update(movement_query, (item.id, batch_id, quantity, current_date))
-
-                        QMessageBox.information(dialog, "Success", "Item added successfully!")
-                        dialog.accept()
-                        self.refresh_inventory()
-
-                    except Exception as batch_error:
-                        logger.error(f"Failed to create initial batch: {batch_error}")
-                        QMessageBox.warning(dialog, "Warning",
-                                          "Item saved but initial quantity setup failed. You may need to add stock manually.")
-                        dialog.accept()
-                        self.refresh_inventory()
-                else:
-                    QMessageBox.critical(dialog, "Error", "Failed to save item")
-
-            except Exception as e:
-                logger.error(f"Failed to save item: {e}")
-                QMessageBox.critical(dialog, "Error", f"Failed to save item: {str(e)}")
-
-        button_box.accepted.connect(save_item)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-
-        dialog.exec()
+        """Show dialog to add new item using composition pattern."""
+        result = ItemDialog.add_item(self)
+        if result == QDialog.DialogCode.Accepted:
+            self.refresh_inventory()
 
     def show_edit_item_dialog(self, item):
-        """Show dialog to edit an existing item."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Edit Item: {item.name}")
-        dialog.setModal(True)
-        dialog.resize(400, 500)
-
-        layout = QVBoxLayout(dialog)
-
-        # Form fields
-        name_edit = QLineEdit()
-        name_edit.setText(item.name or "")
-        name_edit.setPlaceholderText("Item name (required)")
-
-        category_combo = QComboBox()
-        categories = Category.get_all()
-        current_category_index = 0
-        if categories:
-            category_combo.addItem("-- Select Category --", None)
-            for idx, cat in enumerate(categories, 1):
-                category_combo.addItem(cat.name, cat.id)
-                if cat.id == item.category_id:
-                    current_category_index = idx
-        else:
-            category_combo.addItem("No categories available", None)
-        category_combo.setCurrentIndex(current_category_index)
-
-        brand_edit = QLineEdit()
-        brand_edit.setText(item.brand or "")
-        brand_edit.setPlaceholderText("Brand/Manufacturer")
-
-        specs_edit = QTextEdit()
-        specs_edit.setPlainText(item.other_specifications or "")
-        specs_edit.setPlaceholderText("Specifications, size, etc.")
-        specs_edit.setMaximumHeight(60)
-
-        supplier_combo = QComboBox()
-        supplier_combo.setEditable(True)
-        suppliers = Supplier.get_all()
-        current_supplier_index = 0
-        for idx, sup in enumerate(suppliers):
-            supplier_combo.addItem(sup.name, sup.id)
-            if sup.id == item.supplier_id:
-                current_supplier_index = idx
-        supplier_combo.setCurrentIndex(current_supplier_index)
-
-        po_edit = QLineEdit()
-        po_edit.setText(item.po_number or "")
-        po_edit.setPlaceholderText("Purchase Order number")
-
-        # Get current quantity from stock
-        current_quantity = 0
-        try:
-            qty_rows = db.execute_query("""
-                SELECT COALESCE(SUM(quantity_received), 0) as total_qty
-                FROM Item_Batches
-                WHERE item_id = ?
-            """, (item.id,))
-            if qty_rows:
-                current_quantity = qty_rows[0]['total_qty'] or 0
-        except Exception as e:
-            logger.error(f"Failed to get current quantity: {e}")
-
-        quantity_label = QLabel(f"Current Quantity: {current_quantity} units")
-        quantity_label.setStyleSheet("font-weight: bold; color: #666;")
-
-        exp_edit = QDateEdit()
-        exp_edit.setCalendarPopup(True)
-        if item.expiration_date:
-            exp_edit.setDate(QDate(item.expiration_date))
-        else:
-            exp_edit.setDate(QDate.currentDate().addMonths(12))
-
-        consumable_check = QCheckBox("Consumable item")
-        consumable_check.setChecked(item.is_consumable == 1)
-
-        # Add to form
-        form_layout = QVBoxLayout()
-        form_layout.addWidget(QLabel("Name:"))
-        form_layout.addWidget(name_edit)
-        form_layout.addWidget(QLabel("Category:"))
-        form_layout.addWidget(category_combo)
-        form_layout.addWidget(QLabel("Brand:"))
-        form_layout.addWidget(brand_edit)
-        form_layout.addWidget(QLabel("Specifications:"))
-        form_layout.addWidget(specs_edit)
-        form_layout.addWidget(QLabel("Supplier:"))
-        form_layout.addWidget(supplier_combo)
-        form_layout.addWidget(QLabel("PO Number:"))
-        form_layout.addWidget(po_edit)
-        form_layout.addWidget(quantity_label)
-        form_layout.addWidget(QLabel("Expiration Date:"))
-        form_layout.addWidget(exp_edit)
-        form_layout.addWidget(consumable_check)
-
-        layout.addLayout(form_layout)
-
-        # Buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-
-        def save_item():
-            try:
-                if not name_edit.text().strip():
-                    QMessageBox.warning(dialog, "Error", "Item name is required")
-                    return
-
-                category_id = category_combo.currentData()
-                if category_id is None:
-                    QMessageBox.warning(dialog, "Error", "Please select a category")
-                    return
-
-                # Update item properties
-                item.name = name_edit.text().strip()
-                item.category_id = category_id
-                item.brand = brand_edit.text().strip()
-                item.other_specifications = specs_edit.toPlainText().strip()
-                item.supplier_id = supplier_combo.currentData()
-                item.po_number = po_edit.text().strip()
-                item.expiration_date = exp_edit.date().toPyDate()
-                item.is_consumable = 1 if consumable_check.isChecked() else 0
-
-                if item.save("System"):
-                    QMessageBox.information(dialog, "Success", "Item updated successfully!")
-                    dialog.accept()
-                    self.refresh_inventory()
-                else:
-                    QMessageBox.critical(dialog, "Error", "Failed to update item")
-
-            except Exception as e:
-                logger.error(f"Failed to update item: {e}")
-                QMessageBox.critical(dialog, "Error", f"Failed to update item: {str(e)}")
-
-        button_box.accepted.connect(save_item)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-
-        dialog.exec()
+        """Show dialog to edit an existing item using composition pattern."""
+        result = ItemDialog.edit_item(self, item)
+        if result == QDialog.DialogCode.Accepted:
+            self.refresh_inventory()
 
     def show_actions_menu(self, row):
         """Show actions menu for item."""

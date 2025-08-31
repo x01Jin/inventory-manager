@@ -3,7 +3,7 @@ Dashboard page component for the laboratory inventory application.
 Focused on key metrics and quick access to main functions.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
@@ -127,6 +127,23 @@ class DashboardPage(QWidget):
         self.alerts_table.setColumnCount(3)
         self.alerts_table.setHorizontalHeaderLabels(["Alert Type", "Item", "Urgency"])
         self.alerts_table.setMaximumHeight(150)
+
+        # Configure responsive column sizing
+        header = self.alerts_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(60)  # Minimum width for any column
+
+            # Set specific minimum widths for key columns
+            self.alerts_table.setColumnWidth(0, 100)  # Alert Type minimum
+            self.alerts_table.setColumnWidth(2, 80)   # Urgency minimum
+
+            # Make Item column stretch
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Item column stretches
+            # Set other columns to resize to contents
+            for i in range(self.alerts_table.columnCount()):
+                if i != 1:  # Skip Item column
+                    header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
         alerts_layout.addWidget(self.alerts_table)
         parent_layout.addWidget(alerts_group)

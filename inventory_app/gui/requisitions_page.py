@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTableWidget, QTableWidgetItem,
     QLineEdit, QComboBox, QGroupBox, QMessageBox,
     QDateEdit, QSpinBox, QDialog, QDialogButtonBox,
-    QTabWidget
+    QTabWidget, QHeaderView
 )
 from PyQt6.QtCore import QDate
 from datetime import date
@@ -96,11 +96,19 @@ class RequisitionsPage(QWidget):
             "Name", "Affiliation", "Group", "Actions"
         ])
 
-        # Set reasonable column widths
-        self.borrowers_table.setColumnWidth(0, 200)  # Name
-        self.borrowers_table.setColumnWidth(1, 150)  # Affiliation
-        self.borrowers_table.setColumnWidth(2, 150)  # Group
-        self.borrowers_table.setColumnWidth(3, 80)   # Actions
+        # Configure responsive column sizing
+        header = self.borrowers_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(60)  # Minimum width for any column
+
+            # Set specific minimum widths for key columns
+            self.borrowers_table.setColumnWidth(0, 150)  # Name minimum
+            self.borrowers_table.setColumnWidth(1, 120)  # Affiliation minimum
+            self.borrowers_table.setColumnWidth(2, 100)  # Group minimum
+
+            # Make columns responsive
+            for i in range(self.borrowers_table.columnCount()):
+                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
         self.borrowers_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.borrowers_table)
@@ -155,14 +163,22 @@ class RequisitionsPage(QWidget):
             "Borrower", "Borrow Date", "Activity", "Activity Date", "Students", "Groups", "Actions"
         ])
 
-        # Set reasonable column widths
-        self.requisitions_table.setColumnWidth(0, 150)  # Borrower
-        self.requisitions_table.setColumnWidth(1, 100)  # Borrow Date
-        self.requisitions_table.setColumnWidth(2, 200)  # Activity
-        self.requisitions_table.setColumnWidth(3, 100)  # Activity Date
-        self.requisitions_table.setColumnWidth(4, 80)   # Students
-        self.requisitions_table.setColumnWidth(5, 80)   # Groups
-        self.requisitions_table.setColumnWidth(6, 100)  # Actions
+        # Configure responsive column sizing
+        header = self.requisitions_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(60)  # Minimum width for any column
+
+            # Set specific minimum widths for key columns
+            self.requisitions_table.setColumnWidth(0, 120)  # Borrower minimum
+            self.requisitions_table.setColumnWidth(2, 150)  # Activity minimum
+
+            # Make columns responsive - Activity column stretches, others resize to content
+            header.setStretchLastSection(False)  # Don't stretch last column
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Activity column stretches
+            # Set other columns to resize to contents
+            for i in range(self.requisitions_table.columnCount()):
+                if i != 2:  # Skip activity column
+                    header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
         self.requisitions_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.requisitions_table)
@@ -910,11 +926,26 @@ class RequisitionDialog(QDialog):
                 remove_btn.clicked.connect(lambda checked, r=row: self.remove_item(r))
                 self.items_table.setCellWidget(row, 4, remove_btn)
 
-        # Update column count if needed
+        # Configure responsive column sizing for items table
         if self.items_table.columnCount() < 5:
             self.items_table.setColumnCount(5)
             self.items_table.setHorizontalHeaderLabels(["Item", "Category", "Size/Brand", "Quantity", "Actions"])
-            self.items_table.setColumnWidth(4, 60)
+
+        header = self.items_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(40)  # Minimum width for any column
+
+            # Set minimum widths for key columns
+            self.items_table.setColumnWidth(0, 120)  # Item minimum
+            self.items_table.setColumnWidth(2, 120)  # Size/Brand minimum
+
+            # Make Size/Brand column stretch
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Size/Brand stretches
+            # Set other columns to resize to contents
+            for i in range(self.items_table.columnCount()):
+                if i != 2:  # Skip Size/Brand column
+                    header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
     def remove_item(self, row):
         """Remove an item from the selected items list."""
@@ -956,12 +987,19 @@ class ItemSelectionDialog(QDialog):
         self.items_table.setHorizontalHeaderLabels(["Item", "Category", "Size", "Brand", "Quantity"])
         self.items_table.setAlternatingRowColors(True)
 
-        # Set column widths
-        self.items_table.setColumnWidth(0, 150)  # Item
-        self.items_table.setColumnWidth(1, 120)  # Category
-        self.items_table.setColumnWidth(2, 80)   # Size
-        self.items_table.setColumnWidth(3, 100)  # Brand
-        self.items_table.setColumnWidth(4, 80)   # Quantity
+        # Configure responsive column sizing
+        header = self.items_table.horizontalHeader()
+        if header:
+            header.setMinimumSectionSize(60)  # Minimum width for any column
+
+            # Set specific minimum widths for key columns
+            self.items_table.setColumnWidth(0, 120)  # Item minimum
+            self.items_table.setColumnWidth(1, 100)  # Category minimum
+            self.items_table.setColumnWidth(3, 100)  # Brand minimum
+
+            # Make columns responsive
+            for i in range(self.items_table.columnCount()):
+                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
         layout.addWidget(self.items_table)
 
