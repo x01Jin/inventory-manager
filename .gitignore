@@ -1,0 +1,6 @@
+.clinerules/
+.venv/
+logs/
+__pycache__/
+plan/
+inventory.db
