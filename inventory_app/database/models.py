@@ -393,28 +393,47 @@ class Item:
                 logger.warning(f"Cannot delete item {self.id}: item is currently borrowed")
                 return False
 
-            # Log to disposal history
+            # Log to disposal history FIRST (before deleting related records)
             disposal_query = """
             INSERT INTO Disposal_History (item_id, reason, editor_name)
             VALUES (?, ?, ?)
             """
             db.execute_update(disposal_query, (self.id, reason, editor_name))
+            logger.info(f"Logged disposal history for item {self.id}")
 
-            # Cascade delete all related records in proper order
+            # Import time for delays
+            import time
 
-            # 1. Delete stock movements first (may reference batches)
-            db.execute_update("DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,))
+            # Cascade delete all related records in DEPENDENCY ORDER with delays
+            # Order: dependencies first, then main tables
 
-            # 2. Delete item batches
-            db.execute_update("DELETE FROM Item_Batches WHERE item_id = ?", (self.id,))
-
-            # 3. Delete requisition items
+            # 1. Delete requisition items first (has dual dependencies: item + requisition)
+            logger.info(f"Deleting Requisition_Items for item {self.id}")
             db.execute_update("DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,))
+            time.sleep(0.5)  # 0.5s delay to prevent constraint timing issues
 
-            # 4. Delete update history
+            # 2. Delete stock movements (references both items and batches)
+            logger.info(f"Deleting Stock_Movements for item {self.id}")
+            db.execute_update("DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,))
+            time.sleep(0.5)  # 0.5s delay
+
+            # 3. Delete item batches (only depends on items, safe after movements deleted)
+            logger.info(f"Deleting Item_Batches for item {self.id}")
+            db.execute_update("DELETE FROM Item_Batches WHERE item_id = ?", (self.id,))
+            time.sleep(0.5)  # 0.5s delay
+
+            # 4. Delete update history (only depends on items)
+            logger.info(f"Deleting Update_History for item {self.id}")
             db.execute_update("DELETE FROM Update_History WHERE item_id = ?", (self.id,))
+            time.sleep(0.5)  # 0.5s delay
 
-            # 5. Finally delete the item itself
+            # 5. Delete disposal history (only depends on items)
+            logger.info(f"Deleting Disposal_History for item {self.id}")
+            db.execute_update("DELETE FROM Disposal_History WHERE item_id = ?", (self.id,))
+            time.sleep(0.5)  # 0.5s delay
+
+            # 6. Finally delete the item itself (no dependencies remain)
+            logger.info(f"Deleting main Items record {self.id}")
             db.execute_update("DELETE FROM Items WHERE id = ?", (self.id,))
 
             logger.info(f"Successfully deleted item {self.id} and all related records")
@@ -422,6 +441,7 @@ class Item:
 
         except Exception as e:
             logger.error(f"Failed to delete item {self.id}: {e}")
+            logger.error(f"Error details: {str(e)}")
             return False
 
     @classmethod
