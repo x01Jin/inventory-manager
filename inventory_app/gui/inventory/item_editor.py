@@ -162,8 +162,8 @@ class ItemEditor(QDialog):
 
         layout.addLayout(button_layout)
 
-        self.setMinimumWidth(600)
-        self.setMinimumHeight(500)
+        self.setMinimumWidth(1000)
+        self.setMinimumHeight(700)
 
     def load_dropdown_data(self):
         """Load data for dropdown lists."""
