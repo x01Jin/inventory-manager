@@ -69,9 +69,9 @@ class InventoryPage(QWidget):
         table_layout = QVBoxLayout(table_group)
 
         self.inventory_table = QTableWidget()
-        self.inventory_table.setColumnCount(6)
+        self.inventory_table.setColumnCount(9)
         self.inventory_table.setHorizontalHeaderLabels([
-            "Name", "Category", "Brand", "Expiration", "Status", "Actions"
+            "Name", "Category", "Brand", "Expiration", "Status", "Notes", "Available", "Borrowed", "Actions"
         ])
 
         # Set reasonable column widths
@@ -80,7 +80,10 @@ class InventoryPage(QWidget):
         self.inventory_table.setColumnWidth(2, 120)  # Brand
         self.inventory_table.setColumnWidth(3, 100)  # Expiration
         self.inventory_table.setColumnWidth(4, 100)  # Status
-        self.inventory_table.setColumnWidth(5, 80)   # Actions
+        self.inventory_table.setColumnWidth(5, 200)  # Notes
+        self.inventory_table.setColumnWidth(6, 80)   # Available
+        self.inventory_table.setColumnWidth(7, 80)   # Borrowed
+        self.inventory_table.setColumnWidth(8, 80)   # Actions
 
         self.inventory_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.inventory_table)
@@ -152,11 +155,51 @@ class InventoryPage(QWidget):
                 status = "Consumable" if item.is_consumable else "Reusable"
                 self.inventory_table.setItem(row, 4, QTableWidgetItem(status))
 
+                # Notes
+                self.inventory_table.setItem(row, 5, QTableWidgetItem(item.other_specifications or ""))
+
+                # Available Units
+                try:
+                    available_query = """
+                    SELECT COALESCE(SUM(
+                      CASE
+                        WHEN movement_type = 'RECEIPT' THEN quantity
+                        WHEN movement_type IN ('CONSUMPTION', 'DISPOSAL') THEN -quantity
+                        WHEN movement_type = 'RETURN' THEN quantity
+                        ELSE 0
+                      END
+                    ), 0) as available_qty
+                    FROM Stock_Movements
+                    WHERE item_id = ?
+                    """
+                    available_rows = db.execute_query(available_query, (item.id,))
+                    available_qty = available_rows[0]['available_qty'] if available_rows else 0
+                except Exception as e:
+                    logger.error(f"Failed to get available quantity for item {item.id}: {e}")
+                    available_qty = 0
+                self.inventory_table.setItem(row, 6, QTableWidgetItem(str(available_qty)))
+
+                # Borrowed Units
+                try:
+                    borrowed_query = """
+                    SELECT
+                      COALESCE((SELECT SUM(ri.quantity_borrowed) FROM Requisition_Items ri WHERE ri.item_id = ?), 0) -
+                      COALESCE((SELECT SUM(sm.quantity) FROM Stock_Movements sm WHERE sm.item_id = ? AND sm.movement_type = 'RETURN'), 0)
+                    as borrowed_qty
+                    """
+                    borrowed_rows = db.execute_query(borrowed_query, (item.id, item.id))
+                    borrowed_qty = borrowed_rows[0]['borrowed_qty'] if borrowed_rows else 0
+                    borrowed_qty = max(0, borrowed_qty)  # Ensure non-negative
+                except Exception as e:
+                    logger.error(f"Failed to get borrowed quantity for item {item.id}: {e}")
+                    borrowed_qty = 0
+                self.inventory_table.setItem(row, 7, QTableWidgetItem(str(borrowed_qty)))
+
                 # Actions button
                 actions_btn = QPushButton("⋮")
                 actions_btn.setFixedWidth(30)
                 actions_btn.clicked.connect(lambda checked, r=row: self.show_actions_menu(r))
-                self.inventory_table.setCellWidget(row, 5, actions_btn)
+                self.inventory_table.setCellWidget(row, 8, actions_btn)
 
             # Update stats
             self.total_label.setText(f"📊 Total Items: {total_items}")
@@ -174,16 +217,21 @@ class InventoryPage(QWidget):
             show_row = True
 
             if search_text:
-                # Search in name and brand columns
+                # Search in name, brand, and notes columns
                 name = self.inventory_table.item(row, 0)
                 brand = self.inventory_table.item(row, 2)
+                notes = self.inventory_table.item(row, 5)
 
-                if name and brand:
-                    name_text = name.text().lower()
-                    brand_text = brand.text().lower()
+                found = False
+                if name and search_text in name.text().lower():
+                    found = True
+                if brand and search_text in brand.text().lower():
+                    found = True
+                if notes and search_text in notes.text().lower():
+                    found = True
 
-                    if search_text not in name_text and search_text not in brand_text:
-                        show_row = False
+                if not found:
+                    show_row = False
 
             self.inventory_table.setRowHidden(row, not show_row)
 
