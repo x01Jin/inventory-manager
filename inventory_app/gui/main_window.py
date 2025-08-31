@@ -10,7 +10,7 @@ from inventory_app.gui.styles import DarkTheme
 from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
-from inventory_app.gui.requisitions_page import RequisitionsPage
+from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
 from inventory_app.gui.settings.settings_page import SettingsPage
 
 
