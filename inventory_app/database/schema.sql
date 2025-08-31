@@ -58,6 +58,24 @@ CREATE TABLE Suppliers (
 -- Insert initial suppliers
 INSERT INTO Suppliers (name) VALUES ('Malcor Chemicals'), ('ATR Trading System'), ('Brightway Trading School');
 
+-- Sizes: Size options for dropdown
+CREATE TABLE Sizes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Insert initial sizes
+INSERT INTO Sizes (name) VALUES ('250mL');
+
+-- Brands: Brand options for dropdown
+CREATE TABLE Brands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Insert initial brands
+INSERT INTO Brands (name) VALUES ('LabCorp');
+
 -- 5. Items: Core inventory table
 CREATE TABLE Items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

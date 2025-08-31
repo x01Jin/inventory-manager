@@ -88,6 +88,24 @@ class Category:
             logger.error(f"Failed to get categories: {e}")
             return []
 
+    def delete(self) -> bool:
+        """Delete the category."""
+        try:
+            if not self.id:
+                return False
+
+            # Check if category is being used by any items
+            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE category_id = ?", (self.id,))
+            if usage_check and usage_check[0]['count'] > 0:
+                logger.warning(f"Cannot delete category {self.id}: category is being used by items")
+                return False
+
+            db.execute_update("DELETE FROM Categories WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete category {self.id}: {e}")
+            return False
+
     @classmethod
     def get_by_id(cls, category_id: int) -> Optional['Category']:
         """Get category by ID."""
@@ -130,6 +148,24 @@ class Supplier:
             logger.error(f"Failed to get suppliers: {e}")
             return []
 
+    def delete(self) -> bool:
+        """Delete the supplier."""
+        try:
+            if not self.id:
+                return False
+
+            # Check if supplier is being used by any items
+            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE supplier_id = ?", (self.id,))
+            if usage_check and usage_check[0]['count'] > 0:
+                logger.warning(f"Cannot delete supplier {self.id}: supplier is being used by items")
+                return False
+
+            db.execute_update("DELETE FROM Suppliers WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete supplier {self.id}: {e}")
+            return False
+
     @classmethod
     def get_by_id(cls, supplier_id: int) -> Optional['Supplier']:
         """Get supplier by ID."""
@@ -138,6 +174,126 @@ class Supplier:
             return cls(**dict(rows[0])) if rows else None
         except Exception as e:
             logger.error(f"Failed to get supplier {supplier_id}: {e}")
+            return None
+
+
+@dataclass
+class Size:
+    """Represents a size option."""
+    id: Optional[int] = None
+    name: str = ""
+
+    def save(self) -> bool:
+        """Save or update the size."""
+        try:
+            if self.id:
+                query = "UPDATE Sizes SET name = ? WHERE id = ?"
+                db.execute_update(query, (self.name, self.id))
+            else:
+                query = "INSERT INTO Sizes (name) VALUES (?)"
+                db.execute_update(query, (self.name,))
+                self.id = db.get_last_insert_id()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save size: {e}")
+            return False
+
+    @classmethod
+    def get_all(cls) -> List['Size']:
+        """Get all sizes."""
+        try:
+            rows = db.execute_query("SELECT * FROM Sizes ORDER BY name")
+            return [cls(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get sizes: {e}")
+            return []
+
+    def delete(self) -> bool:
+        """Delete the size."""
+        try:
+            if not self.id:
+                return False
+
+            # Check if size is being used by any items
+            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE size = ?", (self.name,))
+            if usage_check and usage_check[0]['count'] > 0:
+                logger.warning(f"Cannot delete size {self.id}: size is being used by items")
+                return False
+
+            db.execute_update("DELETE FROM Sizes WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete size {self.id}: {e}")
+            return False
+
+    @classmethod
+    def get_by_id(cls, size_id: int) -> Optional['Size']:
+        """Get size by ID."""
+        try:
+            rows = db.execute_query("SELECT * FROM Sizes WHERE id = ?", (size_id,))
+            return cls(**dict(rows[0])) if rows else None
+        except Exception as e:
+            logger.error(f"Failed to get size {size_id}: {e}")
+            return None
+
+
+@dataclass
+class Brand:
+    """Represents a brand option."""
+    id: Optional[int] = None
+    name: str = ""
+
+    def save(self) -> bool:
+        """Save or update the brand."""
+        try:
+            if self.id:
+                query = "UPDATE Brands SET name = ? WHERE id = ?"
+                db.execute_update(query, (self.name, self.id))
+            else:
+                query = "INSERT INTO Brands (name) VALUES (?)"
+                db.execute_update(query, (self.name,))
+                self.id = db.get_last_insert_id()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save brand: {e}")
+            return False
+
+    @classmethod
+    def get_all(cls) -> List['Brand']:
+        """Get all brands."""
+        try:
+            rows = db.execute_query("SELECT * FROM Brands ORDER BY name")
+            return [cls(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get brands: {e}")
+            return []
+
+    def delete(self) -> bool:
+        """Delete the brand."""
+        try:
+            if not self.id:
+                return False
+
+            # Check if brand is being used by any items
+            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE brand = ?", (self.name,))
+            if usage_check and usage_check[0]['count'] > 0:
+                logger.warning(f"Cannot delete brand {self.id}: brand is being used by items")
+                return False
+
+            db.execute_update("DELETE FROM Brands WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete brand {self.id}: {e}")
+            return False
+
+    @classmethod
+    def get_by_id(cls, brand_id: int) -> Optional['Brand']:
+        """Get brand by ID."""
+        try:
+            rows = db.execute_query("SELECT * FROM Brands WHERE id = ?", (brand_id,))
+            return cls(**dict(rows[0])) if rows else None
+        except Exception as e:
+            logger.error(f"Failed to get brand {brand_id}: {e}")
             return None
 
 
@@ -527,6 +683,18 @@ class Lifecycle_Rules:
             return True
         except Exception as e:
             logger.error(f"Failed to save lifecycle rules: {e}")
+            return False
+
+    def delete(self) -> bool:
+        """Delete the lifecycle rules."""
+        try:
+            if not self.id:
+                return False
+
+            db.execute_update("DELETE FROM Lifecycle_Rules WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete lifecycle rules {self.id}: {e}")
             return False
 
     @classmethod

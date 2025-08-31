@@ -12,7 +12,6 @@ sys.path.insert(0, parent_dir)
 
 from inventory_app.database.connection import db  # noqa: E402
 from inventory_app.utils.logger import logger  # noqa: E402
-from inventory_app.database.models import CategoryType, Category, Lifecycle_Rules  # noqa: E402
 from inventory_app.business_logic.alert_engine import alert_engine  # noqa: E402
 from inventory_app.business_logic.report_generator import report_generator  # noqa: E402
 
@@ -42,83 +41,15 @@ def initialize_laboratory_database():
 
 
 def seed_laboratory_data():
-    """Seed database with initial laboratory categories and suppliers."""
+    """Seed database with initial laboratory data."""
     try:
         logger.info("Seeding laboratory inventory data...")
 
-        # Check if category types already exist (from schema.sql)
-        existing_types = CategoryType.get_all()
-        existing_type_names = [ct.name for ct in existing_types]
+        # Category types are already seeded in schema.sql
+        # Lifecycle rules are already seeded in schema.sql
+        # Users can now add their own categories through the settings interface
 
-        created_types = {}
-        for ct in existing_types:
-            created_types[ct.name] = ct.id
-
-        # Create category types only if they don't exist
-        category_types = ["Chemical", "Glassware", "Equipment", "Apparatus", "Material"]
-
-        for name in category_types:
-            if name not in existing_type_names:
-                cat_type = CategoryType(name=name)
-                if cat_type.save():
-                    created_types[name] = cat_type.id
-                    logger.debug(f"Created category type: {name}")
-                else:
-                    logger.error(f"Failed to create category type: {name}")
-            else:
-                logger.debug(f"Category type already exists: {name}")
-
-        # Create lifecycle rules (check if they already exist from schema.sql)
-        lifecycle_data = [
-            (created_types["Chemical"], 6, None, None, None),  # 6 months expiration
-            (created_types["Glassware"], None, 3, None, None), # 3 years lifespan
-            (created_types["Equipment"], None, 5, 12, 3),      # 5 years + yearly calibration
-            (created_types["Apparatus"], None, 5, None, None),  # 5 years lifespan
-            (created_types["Material"], None, 2, None, None)    # 2 years lifespan
-        ]
-
-        for type_id, exp, life, cal_int, cal_lead in lifecycle_data:
-            if type_id:
-                # Check if rule already exists for this category type
-                existing_rule = Lifecycle_Rules.get_by_category_type(type_id)
-                if existing_rule:
-                    logger.debug(f"Lifecycle rule already exists for category type {type_id}")
-                else:
-                    rule = Lifecycle_Rules(
-                        category_type_id=type_id,
-                        expiry_lead_months=exp,
-                        lifespan_years=life,
-                        calibration_interval_months=cal_int,
-                        calibration_lead_months=cal_lead
-                    )
-                    if rule.save():
-                        logger.debug(f"Created lifecycle rule for category type {type_id}")
-                    else:
-                        logger.error(f"Failed to create lifecycle rule for category type {type_id}")
-
-        # Create default categories (check if they already exist)
-        categories = [
-            ("Chemicals", created_types["Chemical"]),
-            ("Beakers", created_types["Glassware"]),
-            ("Flasks", created_types["Glassware"]),
-            ("Microscopes", created_types["Equipment"]),
-            ("Pipettes", created_types["Apparatus"])
-        ]
-
-        existing_categories = Category.get_all()
-        existing_names = [c.name for c in existing_categories]
-
-        for name, type_id in categories:
-            if type_id and name not in existing_names:
-                category = Category(name=name, category_type_id=type_id)
-                if category.save():
-                    logger.debug(f"Created category: {name}")
-                else:
-                    logger.error(f"Failed to create category: {name}")
-            elif name in existing_names:
-                logger.debug(f"Category already exists: {name}")
-
-        logger.info("Laboratory data seeding complete")
+        logger.info("Laboratory data seeding complete - using schema defaults")
 
     except Exception as e:
         logger.error(f"Failed to seed laboratory data: {e}")

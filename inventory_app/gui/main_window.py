@@ -9,8 +9,9 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSt
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard import DashboardPage
-from inventory_app.gui.inventory_page import InventoryPage
+from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.requisitions_page import RequisitionsPage
+from inventory_app.gui.settings.settings_page import SettingsPage
 
 
 class MainWindow(QMainWindow):
@@ -50,7 +51,7 @@ class MainWindow(QMainWindow):
         self.inventory_page = InventoryPage()
         self.requisitions_page = RequisitionsPage()
         self.reports_page = self.create_placeholder("Reports", "📊 Generate usage reports")
-        self.settings_page = self.create_placeholder("Settings", "⚙️ Configure preferences")
+        self.settings_page = SettingsPage()
 
         # Add pages to stack
         self.content_stack.addWidget(self.dashboard_page)    # Index 0

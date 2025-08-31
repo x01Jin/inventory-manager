@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QDate
 
-from inventory_app.database.models import Item, Category, CategoryType, Supplier
+from inventory_app.database.models import Item, Category, CategoryType, Supplier, Size, Brand
 
 
 class ItemDialog(QDialog):
@@ -68,13 +68,15 @@ class ItemDialog(QDialog):
         self.populate_category_combo()
         left_form.addRow("Category:", self.category_combo)
 
-        self.size_edit = QLineEdit()
-        self.size_edit.setPlaceholderText("Size (e.g., 250mL, 5kg)")
-        left_form.addRow("Size:", self.size_edit)
+        self.size_combo = QComboBox()
+        self.size_combo.setEditable(True)
+        self.populate_size_combo()
+        left_form.addRow("Size:", self.size_combo)
 
-        self.brand_edit = QLineEdit()
-        self.brand_edit.setPlaceholderText("Brand/Manufacturer")
-        left_form.addRow("Brand:", self.brand_edit)
+        self.brand_combo = QComboBox()
+        self.brand_combo.setEditable(True)
+        self.populate_brand_combo()
+        left_form.addRow("Brand:", self.brand_combo)
 
         # Right column
         right_form = QFormLayout()
@@ -176,14 +178,26 @@ class ItemDialog(QDialog):
         for sup in suppliers:
             self.supplier_combo.addItem(sup.name, sup.id)
 
+    def populate_size_combo(self):
+        """Populate the size combo box."""
+        sizes = Size.get_all()
+        for s in sizes:
+            self.size_combo.addItem(s.name)
+
+    def populate_brand_combo(self):
+        """Populate the brand combo box."""
+        brands = Brand.get_all()
+        for b in brands:
+            self.brand_combo.addItem(b.name)
+
     def load_item_data(self):
         """Load existing item data for editing."""
         if not self.item:
             return
 
         self.name_edit.setText(self.item.name or "")
-        self.size_edit.setText(self.item.size or "")
-        self.brand_edit.setText(self.item.brand or "")
+        self.size_combo.setCurrentText(self.item.size or "")
+        self.brand_combo.setCurrentText(self.item.brand or "")
         self.specs_edit.setPlainText(self.item.other_specifications or "")
         self.po_edit.setText(self.item.po_number or "")
         self.consumable_check.setChecked(self.item.is_consumable == 1)
@@ -231,8 +245,8 @@ class ItemDialog(QDialog):
                 # Update existing
                 self.item.name = self.name_edit.text().strip()
                 self.item.category_id = category_id
-                self.item.size = self.size_edit.text().strip()
-                self.item.brand = self.brand_edit.text().strip()
+                self.item.size = self.size_combo.currentText().strip()
+                self.item.brand = self.brand_combo.currentText().strip()
                 self.item.other_specifications = self.specs_edit.toPlainText().strip()
                 self.item.supplier_id = self.supplier_combo.currentData()
                 self.item.po_number = self.po_edit.text().strip()
@@ -250,8 +264,8 @@ class ItemDialog(QDialog):
                 new_item = Item(
                     name=self.name_edit.text().strip(),
                     category_id=category_id,
-                    size=self.size_edit.text().strip(),
-                    brand=self.brand_edit.text().strip(),
+                    size=self.size_combo.currentText().strip(),
+                    brand=self.brand_combo.currentText().strip(),
                     other_specifications=self.specs_edit.toPlainText().strip(),
                     supplier_id=self.supplier_combo.currentData(),
                     po_number=self.po_edit.text().strip(),
