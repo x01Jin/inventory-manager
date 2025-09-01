@@ -342,6 +342,29 @@ class RequisitionsController:
             logger.error(f"Failed to get borrowers: {e}")
             return []
 
+    def get_borrowers_with_requisitions(self) -> List[Borrower]:
+        """
+        Get only borrowers that have created requisitions.
+
+        Returns:
+            List of borrowers who have active requisitions
+        """
+        try:
+            query = """
+            SELECT DISTINCT b.* FROM Borrowers b
+            JOIN Requisitions r ON b.id = r.borrower_id
+            ORDER BY b.name
+            """
+            rows = db.execute_query(query)
+            borrowers = []
+            for row in rows:
+                borrowers.append(Borrower(**dict(row)))
+            logger.info(f"Retrieved {len(borrowers)} borrowers with requisitions")
+            return borrowers
+        except Exception as e:
+            logger.error(f"Failed to get borrowers with requisitions: {e}")
+            return []
+
     def get_inventory_items(self) -> List[Dict]:
         """
         Get all inventory items for selection in requisitions.

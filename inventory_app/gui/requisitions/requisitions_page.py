@@ -115,12 +115,12 @@ class RequisitionsPage(QWidget):
         self.table.requisition_selected.connect(self._on_requisition_selected)
         self.table.requisition_double_clicked.connect(self._on_requisition_double_clicked)
 
-        # Filter signals
-        self.filters.search_changed.connect(self.model.filter_by_search)
-        self.filters.borrower_filter_changed.connect(self.model.filter_by_borrower)
-        self.filters.activity_filter_changed.connect(self.model.filter_by_activity)
-        self.filters.status_filter_changed.connect(self.model.filter_by_status)
-        self.filters.date_range_changed.connect(self.model.filter_by_date_range)
+        # Filter signals - connect to both model and refresh
+        self.filters.search_changed.connect(self._on_filter_changed)
+        self.filters.borrower_filter_changed.connect(self._on_filter_changed)
+        self.filters.activity_filter_changed.connect(self._on_filter_changed)
+        self.filters.status_filter_changed.connect(self._on_filter_changed)
+        self.filters.date_range_changed.connect(self._on_filter_changed)
         self.filters.clear_filters_requested.connect(self._on_filters_cleared)
 
     def refresh_data(self):
@@ -134,6 +134,9 @@ class RequisitionsPage(QWidget):
                 QMessageBox.warning(self, "Data Load Error",
                                   "Failed to load requisition data from database.")
                 return
+
+            # Reload borrower options (in case new borrowers have requisitions)
+            self.filters._load_borrower_options()
 
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
@@ -386,6 +389,41 @@ class RequisitionsPage(QWidget):
     def _on_requisition_double_clicked(self, requisition_id: int):
         """Handle double-click on requisition (edit action)."""
         self.edit_selected_requisition()
+
+    def _on_filter_changed(self):
+        """Handle any filter change - apply filters and refresh table."""
+        try:
+            # Apply all current filters from the filter widget
+            current_filters = self.filters.get_current_filters()
+
+            # Apply filters to model
+            if 'search_term' in current_filters:
+                self.model.filter_by_search(current_filters['search_term'])
+            if 'borrower_filter' in current_filters:
+                self.model.filter_by_borrower(current_filters['borrower_filter'])
+            if 'activity_filter' in current_filters:
+                self.model.filter_by_activity(current_filters['activity_filter'])
+            if 'status_filter' in current_filters:
+                self.model.filter_by_status(current_filters['status_filter'])
+            if 'date_from' in current_filters or 'date_to' in current_filters:
+                self.model.filter_by_date_range(
+                    current_filters.get('date_from'),
+                    current_filters.get('date_to')
+                )
+
+            # Refresh table with filtered data
+            rows = self.model.get_filtered_rows()
+            self.table.populate_table(rows)
+
+            # Update filter summary
+            total_count = len(self.model.all_requisitions)
+            filtered_count = len(rows)
+            self.filters.update_summary(total_count, filtered_count)
+
+            logger.debug(f"Applied filters: {filtered_count} of {total_count} requisitions shown")
+
+        except Exception as e:
+            logger.error(f"Failed to apply filters: {e}")
 
     def _on_filters_cleared(self):
         """Handle filters cleared event."""
