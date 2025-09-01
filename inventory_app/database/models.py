@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.utils.activity_logger import activity_logger
 
 
 @dataclass
@@ -344,6 +345,15 @@ class Item:
                     current_time.isoformat(), self.id
                 )
                 db.execute_update(query, params)
+
+                # Log activity
+                activity_logger.log_activity(
+                    activity_logger.ITEM_EDITED,
+                    f"Updated item: {self.name}",
+                    self.id,
+                    "item",
+                    editor_name
+                )
             else:
                 # Insert new
                 query = """
@@ -363,6 +373,15 @@ class Item:
                 db.execute_update(query, params)
                 self.id = db.get_last_insert_id()
                 self.last_modified = current_time
+
+                # Log activity
+                activity_logger.log_activity(
+                    activity_logger.ITEM_ADDED,
+                    f"Added new item: {self.name}",
+                    self.id,
+                    "item",
+                    editor_name
+                )
 
             return True
         except Exception as e:

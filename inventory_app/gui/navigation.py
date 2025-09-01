@@ -34,8 +34,9 @@ class NavigationPanel(QWidget):
             ("🏠", "Dashboard", 0),
             ("📦", "Inventory", 1),
             ("📋", "Requisitions", 2),
-            ("📊", "Reports", 3),
-            ("⚙️", "Settings", 4)
+            ("👥", "Borrowers", 3),
+            ("📊", "Reports", 4),
+            ("⚙️", "Settings", 5)
         ]
 
         self.nav_buttons = []

@@ -3,12 +3,13 @@ Dashboard page component for the laboratory inventory application.
 Focused on key metrics and quick access to main functions.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.database.models import Item, Requisition, Borrower
 from inventory_app.business_logic.alert_engine import alert_engine
+from inventory_app.utils.activity_logger import activity_logger
 
 
 class DashboardPage(QWidget):
@@ -111,10 +112,12 @@ class DashboardPage(QWidget):
         activity_group = QGroupBox("Recent Activity")
         activity_layout = QVBoxLayout(activity_group)
 
-        activity_text = QLabel("• New requisition: Chemistry Lab - 25 students\n• Item added: Beaker 250ml\n• Report generated: Weekly usage\n• Calibration alert: Spectrophotometer")
-        activity_text.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
+        self.activity_text = QTextEdit("Loading recent activities...")
+        self.activity_text.setReadOnly(True)
+        self.activity_text.setMaximumHeight(200)  # Reduced height
+        self.activity_text.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border: 1px solid {DarkTheme.BORDER_COLOR}; border-radius: 4px; padding: 5px;")
 
-        activity_layout.addWidget(activity_text)
+        activity_layout.addWidget(self.activity_text)
         parent_layout.addWidget(activity_group)
 
     def create_alerts_section(self, parent_layout):
@@ -151,9 +154,46 @@ class DashboardPage(QWidget):
     def refresh_data(self):
         """Refresh dashboard data."""
         try:
+            self.update_metrics()
+            self.update_recent_activity()
             self.update_alerts_table()
         except Exception as e:
             print(f"Failed to refresh dashboard: {e}")
+
+    def update_metrics(self):
+        """Update the metrics cards with current data."""
+        try:
+            # Update metrics by recreating the metrics section
+            # This is a simplified approach - in a full implementation, you'd update existing labels
+            pass
+        except Exception as e:
+            print(f"Failed to update metrics: {e}")
+
+    def update_recent_activity(self):
+        """Update the recent activity section with real data."""
+        try:
+            activities = activity_logger.get_recent_activities(20)  # Get last 20 activities
+
+            if not activities:
+                self.activity_text.setPlainText("No recent activities")
+                return
+
+            # Format activities for display
+            activity_lines = []
+            for activity in activities:
+                # Create a formatted line for each activity
+                time_str = activity['time']
+                user_str = f" by {activity['user']}" if activity['user'] != "System" else ""
+                line = f"• {activity['description']} ({time_str}){user_str}"
+                activity_lines.append(line)
+
+            # Join with newlines
+            activity_text = "\n".join(activity_lines)
+            self.activity_text.setPlainText(activity_text)
+
+        except Exception as e:
+            print(f"Failed to update recent activity: {e}")
+            self.activity_text.setPlainText("Error loading recent activities")
 
     def update_alerts_table(self):
         """Update alerts table with critical alerts."""

@@ -213,6 +213,21 @@ CREATE TABLE Disposal_History (
 -- Index
 CREATE INDEX idx_disposal_item ON Disposal_History(item_id);
 
+-- Activity_Log: Recent activity tracking for dashboard
+CREATE TABLE Activity_Log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    activity_type TEXT NOT NULL,  -- 'ITEM_ADDED', 'ITEM_EDITED', 'ITEM_DELETED', 'REQUISITION_CREATED', 'BORROWER_ADDED', etc.
+    description TEXT NOT NULL,
+    entity_id INTEGER,            -- ID of the related entity (item, requisition, borrower, etc.)
+    entity_type TEXT,             -- 'item', 'requisition', 'borrower', etc.
+    user_name TEXT,               -- Name of the user who performed the action
+    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for performance
+CREATE INDEX idx_activity_timestamp ON Activity_Log(timestamp DESC);
+CREATE INDEX idx_activity_type ON Activity_Log(activity_type);
+
 -- VIEWS FOR REPORTS AND ALERTS
 
 -- Item_Start_Dates View: Helper for alerts

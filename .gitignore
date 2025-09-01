@@ -4,3 +4,4 @@ logs/
 __pycache__/
 plan/
 inventory.db
+inventory_app/populate_sample_data.py

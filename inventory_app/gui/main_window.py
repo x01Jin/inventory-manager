@@ -11,6 +11,7 @@ from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
+from inventory_app.gui.borrowers.borrowers_page import BorrowersPage
 from inventory_app.gui.settings.settings_page import SettingsPage
 
 
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         self.inventory_page = InventoryPage()
         self.requisitions_page = RequisitionsPage()
+        self.borrowers_page = BorrowersPage()
         self.reports_page = self.create_placeholder("Reports", "📊 Generate usage reports")
         self.settings_page = SettingsPage()
 
@@ -57,13 +59,37 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.dashboard_page)    # Index 0
         self.content_stack.addWidget(self.inventory_page)    # Index 1
         self.content_stack.addWidget(self.requisitions_page) # Index 2
-        self.content_stack.addWidget(self.reports_page)      # Index 3
-        self.content_stack.addWidget(self.settings_page)     # Index 4
+        self.content_stack.addWidget(self.borrowers_page)    # Index 3
+        self.content_stack.addWidget(self.reports_page)      # Index 4
+        self.content_stack.addWidget(self.settings_page)     # Index 5
 
         # Connect navigation
-        self.nav_panel.page_changed.connect(self.content_stack.setCurrentIndex)
+        self.nav_panel.page_changed.connect(self.on_page_changed)
 
         print("Laboratory Inventory Application ready")
+
+    def on_page_changed(self, page_index: int):
+        """Handle page changes and refresh page data."""
+        try:
+            # Switch to the requested page
+            self.content_stack.setCurrentIndex(page_index)
+
+            # Refresh the page data when switching
+            if page_index == 0 and hasattr(self.dashboard_page, 'refresh_data'):  # Dashboard
+                self.dashboard_page.refresh_data()
+                print("Refreshed dashboard data")
+            elif page_index == 1 and hasattr(self.inventory_page, 'refresh_data'):  # Inventory
+                self.inventory_page.refresh_data()
+                print("Refreshed inventory data")
+            elif page_index == 2 and hasattr(self.requisitions_page, 'refresh_data'):  # Requisitions
+                self.requisitions_page.refresh_data()
+                print("Refreshed requisitions data")
+            elif page_index == 3 and hasattr(self.borrowers_page, 'refresh_data'):  # Borrowers
+                self.borrowers_page.refresh_data()
+                print("Refreshed borrowers data")
+
+        except Exception as e:
+            print(f"Failed to change page to {page_index}: {e}")
 
     def create_placeholder(self, title: str, description: str):
         """Create placeholder page."""
