@@ -236,31 +236,83 @@ class RequisitionsPage(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to add requisition: {str(e)}")
 
     def edit_selected_requisition(self):
-        """Edit the currently selected requisition."""
+        """Edit the items in the currently selected requisition."""
         requisition_id = self.table.get_selected_requisition_id()
         if not requisition_id:
             QMessageBox.warning(self, "No Selection", "Please select a requisition to edit.")
             return
 
         try:
-            # Get the requisition summary to access borrower information
+            # Get the requisition summary to access current items
             requisition_summary = self.model.get_requisition_by_id(requisition_id)
             if not requisition_summary:
                 QMessageBox.warning(self, "Error", "Could not find requisition details.")
                 return
 
-            # Open borrower editor for editing existing borrower
-            borrower_dialog = BorrowerEditor(self, requisition_summary.borrower.id)
-            result = borrower_dialog.exec()
+            # Format current items for ItemSelector (pre-selected items)
+            current_items = []
+            for item in requisition_summary.items:
+                current_items.append({
+                    'item_id': item['item_id'],
+                    'name': item['name'],  # This will be the display name with LAB code
+                    'quantity_borrowed': item['quantity_borrowed']
+                })
 
-            if result == BorrowerEditor.DialogCode.Accepted:
-                logger.info(f"Borrower {requisition_summary.borrower.id} updated successfully")
+            logger.info(f"Pre-selecting {len(current_items)} items for editing")
+
+            # Open item selector with current items pre-selected
+            item_dialog = ItemSelector(self, current_items, requisition_id)
+            item_result = item_dialog.exec()
+
+            if item_result != ItemSelector.DialogCode.Accepted:
+                logger.debug("Item editing cancelled")
+                return
+
+            selected_items = item_dialog.get_selected_items()
+            if not selected_items:
+                QMessageBox.warning(self, "No Items", "Please select at least one item for the requisition.")
+                return
+
+            logger.info(f"Selected {len(selected_items)} items for requisition update")
+
+            # Get editor name (Spec #14)
+            editor_name, ok = QInputDialog.getText(self, "Editor Information",
+                                                  "Enter your name/initials (required):")
+            if not ok or not editor_name.strip():
+                QMessageBox.warning(self, "Required", "Editor name is required.")
+                return
+
+            # Prepare borrower data (unchanged)
+            borrower_data = {
+                'name': requisition_summary.borrower.name,
+                'affiliation': requisition_summary.borrower.affiliation,
+                'group_name': requisition_summary.borrower.group_name
+            }
+
+            # Prepare requisition data (unchanged)
+            requisition_data = {
+                'borrower_id': requisition_summary.borrower.id,
+                'date_borrowed': requisition_summary.requisition.date_borrowed,
+                'lab_activity_name': requisition_summary.requisition.lab_activity_name,
+                'lab_activity_date': requisition_summary.requisition.lab_activity_date,
+                'num_students': requisition_summary.requisition.num_students,
+                'num_groups': requisition_summary.requisition.num_groups
+            }
+
+            # Update the requisition with new items
+            success = self.model.update_requisition(
+                requisition_id, borrower_data, requisition_data, selected_items, editor_name.strip()
+            )
+
+            if success:
+                logger.info(f"Requisition {requisition_id} items updated successfully")
                 QMessageBox.information(self, "Success",
-                                      "Borrower updated successfully!\n\n"
-                                      "Next step: Full requisition editing will be available soon.")
-                # TODO: Continue to full requisition editing with updated borrower
+                                      "Requisition items updated successfully!\n\n"
+                                      "The borrower information remains unchanged.")
+                self.refresh_data()
+                self.data_changed.emit()
             else:
-                logger.debug("Borrower editing cancelled")
+                QMessageBox.critical(self, "Error", "Failed to update requisition items.")
 
         except Exception as e:
             logger.error(f"Failed to edit requisition {requisition_id}: {e}")

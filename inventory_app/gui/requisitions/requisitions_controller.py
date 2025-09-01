@@ -397,6 +397,57 @@ class RequisitionsController:
             logger.error(f"Failed to get inventory items: {e}")
             return []
 
+    def get_inventory_items_for_editing(self, current_requisition_id: int) -> List[Dict]:
+        """
+        Get all inventory items for editing a requisition.
+        Includes items borrowed by the current requisition, excludes items borrowed by others.
+
+        Args:
+            current_requisition_id: ID of the requisition being edited
+
+        Returns:
+            List of item dictionaries with relevant fields
+        """
+        try:
+            items = Item.get_all()
+
+            # Get IDs of items borrowed by OTHER requisitions (exclude current one)
+            borrowed_item_ids = self._get_borrowed_item_ids(exclude_requisition_id=current_requisition_id)
+
+            result = []
+
+            for item in items:
+                if not item.id:
+                    continue
+
+                # Skip items that are currently borrowed by OTHER requisitions
+                if item.id in borrowed_item_ids:
+                    continue
+
+                # Get category and supplier names
+                category_name = self._get_category_name(item.category_id)
+                supplier_name = self._get_supplier_name(item.supplier_id) if item.supplier_id else None
+
+                item_dict = {
+                    'id': item.id,
+                    'unique_code': item.unique_code,
+                    'name': item.name,
+                    'category_name': category_name,
+                    'supplier_name': supplier_name,
+                    'size': item.size,
+                    'brand': item.brand,
+                    'other_specifications': item.other_specifications,
+                    'is_consumable': item.is_consumable,
+                    'available_quantity': self._get_available_quantity(item.id)
+                }
+                result.append(item_dict)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get inventory items for editing: {e}")
+            return []
+
     def search_items(self, search_term: str) -> List[Dict]:
         """
         Search inventory items by name.
@@ -646,9 +697,12 @@ class RequisitionsController:
             logger.error(f"Failed to get available quantity for item {item_id}: {e}")
             return 0
 
-    def _get_borrowed_item_ids(self) -> set:
+    def _get_borrowed_item_ids(self, exclude_requisition_id: Optional[int] = None) -> set:
         """
         Get IDs of items that are currently borrowed (have unreturned requisitions).
+
+        Args:
+            exclude_requisition_id: Optional requisition ID to exclude from results
 
         Returns:
             Set of item IDs that are currently borrowed
@@ -666,7 +720,14 @@ class RequisitionsController:
                 AND sm.source_id = r.id
             )
             """
-            rows = db.execute_query(query)
+            params = []
+
+            # Add exclusion condition if specified
+            if exclude_requisition_id is not None:
+                query += " AND r.id != ?"
+                params.append(exclude_requisition_id)
+
+            rows = db.execute_query(query, tuple(params))
             return {row['item_id'] for row in rows}
         except Exception as e:
             logger.error(f"Failed to get borrowed item IDs: {e}")

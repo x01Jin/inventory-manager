@@ -20,11 +20,13 @@ from inventory_app.utils.logger import logger
 class ItemSelector(QDialog):
     """Dialog for selecting items and quantities for requisitions."""
 
-    def __init__(self, parent=None, pre_selected_items: Optional[List[Dict]] = None):
+    def __init__(self, parent=None, pre_selected_items: Optional[List[Dict]] = None,
+                 current_requisition_id: Optional[int] = None):
         super().__init__(parent)
         self.controller = RequisitionsController()
         self.selected_items: List[Dict] = pre_selected_items or []
         self.all_items: List[Dict] = []
+        self.current_requisition_id = current_requisition_id
 
         self.setWindowTitle("Select Items for Requisition")
         self.setup_ui()
@@ -113,11 +115,18 @@ class ItemSelector(QDialog):
     def load_items(self):
         """Load all available inventory items."""
         try:
-            self.all_items = self.controller.get_inventory_items()
+            if self.current_requisition_id is not None:
+                # Editing mode: include items borrowed by current requisition
+                self.all_items = self.controller.get_inventory_items_for_editing(self.current_requisition_id)
+                logger.info(f"Loaded {len(self.all_items)} inventory items for editing requisition {self.current_requisition_id}")
+            else:
+                # New requisition mode: exclude all borrowed items
+                self.all_items = self.controller.get_inventory_items()
+                logger.info(f"Loaded {len(self.all_items)} inventory items for new requisition")
+
             self.populate_table(self.all_items)
             # Unblock signals after initial setup
             self.items_table.blockSignals(False)
-            logger.info(f"Loaded {len(self.all_items)} inventory items")
         except Exception as e:
             logger.error(f"Failed to load items: {e}")
             QMessageBox.critical(self, "Error", "Failed to load inventory items.")
