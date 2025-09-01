@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
-from inventory_app.utils.code_generator import generate_unique_lab_code
+
 
 
 @dataclass
@@ -30,8 +30,11 @@ class CategoryType:
             else:
                 # Insert new
                 query = "INSERT INTO Category_Types (name) VALUES (?)"
-                db.execute_update(query, (self.name,))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, (self.name,), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    self.id = db.get_last_insert_id()
             return True
         except Exception as e:
             logger.error(f"Failed to save category type: {e}")
@@ -303,7 +306,6 @@ class Brand:
 class Item:
     """Represents an inventory item."""
     id: Optional[int] = None
-    unique_code: Optional[str] = None
     name: str = ""
     category_id: int = 0
     size: Optional[str] = None
@@ -317,8 +319,8 @@ class Item:
     acquisition_date: Optional[date] = None
     last_modified: Optional[datetime] = None
 
-    def save(self, editor_name: str) -> bool:
-        """Save or update the item with history tracking."""
+    def save(self, editor_name: str, batch_quantity: int = 0) -> bool:
+        """Save or update the item with history tracking and batch creation."""
         try:
             current_time = datetime.now()
 
@@ -332,13 +334,13 @@ class Item:
 
                 # Update item
                 query = """
-                UPDATE Items SET unique_code = ?, name = ?, category_id = ?, size = ?, brand = ?,
+                UPDATE Items SET name = ?, category_id = ?, size = ?, brand = ?,
                 other_specifications = ?, po_number = ?, supplier_id = ?,
                 expiration_date = ?, calibration_date = ?, is_consumable = ?,
                 acquisition_date = ?, last_modified = ? WHERE id = ?
                 """
                 params = (
-                    self.unique_code, self.name, self.category_id, self.size, self.brand,
+                    self.name, self.category_id, self.size, self.brand,
                     self.other_specifications, self.po_number, self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
                     self.calibration_date.isoformat() if self.calibration_date else None,
@@ -357,19 +359,14 @@ class Item:
                     editor_name
                 )
             else:
-                # Generate unique code if not provided
-                if not self.unique_code:
-                    self.unique_code = generate_unique_lab_code()
-                    logger.debug(f"Generated unique code {self.unique_code} for new item")
-
-                # Insert new
+                # Insert new item
                 query = """
-                INSERT INTO Items (unique_code, name, category_id, size, brand, other_specifications,
+                INSERT INTO Items (name, category_id, size, brand, other_specifications,
                 po_number, supplier_id, expiration_date, calibration_date, is_consumable,
-                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 params = (
-                    self.unique_code, self.name, self.category_id, self.size, self.brand,
+                    self.name, self.category_id, self.size, self.brand,
                     self.other_specifications, self.po_number, self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
                     self.calibration_date.isoformat() if self.calibration_date else None,
@@ -377,14 +374,22 @@ class Item:
                     self.acquisition_date.isoformat() if self.acquisition_date else None,
                     current_time.isoformat()
                 )
-                db.execute_update(query, params)
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, params, return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    # Fallback if return_last_id doesn't work as expected
+                    self.id = db.get_last_insert_id()
                 self.last_modified = current_time
+
+                # Create batches if batch_quantity is specified
+                if batch_quantity > 0 and self.id:
+                    self._create_batches(batch_quantity)
 
                 # Log activity
                 activity_logger.log_activity(
                     activity_logger.ITEM_ADDED,
-                    f"Added new item: {self.name} (Code: {self.unique_code})",
+                    f"Added new item: {self.name} ({batch_quantity} batches)",
                     self.id,
                     "item",
                     editor_name
@@ -394,6 +399,45 @@ class Item:
         except Exception as e:
             logger.error(f"Failed to save item: {e}")
             return False
+
+    def _create_batches(self, quantity: int) -> None:
+        """Create a single batch with the specified total quantity for this item."""
+        try:
+            if not self.id:
+                logger.error("Cannot create batch: item ID is None")
+                return
+
+            logger.info(f"Creating batch with {quantity} total units for item {self.id} ({self.name})")
+            current_time = datetime.now().date().isoformat()
+
+            # Create ONE batch with the total quantity
+            query = """
+            INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received)
+            VALUES (?, ?, ?, ?)
+            """
+            result = db.execute_update(query, (self.id, 1, current_time, quantity))
+            if result is None:
+                logger.error(f"Failed to insert batch for item {self.id}")
+            else:
+                logger.debug(f"Inserted batch with {quantity} units for item {self.id}")
+
+            # Verify batch was created with correct quantity
+            verify_query = """
+            SELECT quantity_received FROM Item_Batches
+            WHERE item_id = ? AND batch_number = 1
+            """
+            verify_result = db.execute_query(verify_query, (self.id,))
+            if verify_result:
+                actual_quantity = verify_result[0]['quantity_received']
+                logger.info(f"Verification: Created batch with {actual_quantity} units for item {self.id}")
+                if actual_quantity != quantity:
+                    logger.error(f"Batch quantity mismatch: expected {quantity}, got {actual_quantity}")
+            else:
+                logger.error(f"Could not verify batch creation for item {self.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to create batch for item {self.id}: {e}")
+            logger.error(f"Error details: {str(e)}")
 
     def delete(self, editor_name: str, reason: str) -> bool:
         """Delete the item and all related records if not currently borrowed."""

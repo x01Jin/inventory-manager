@@ -49,7 +49,7 @@ class InventoryTable(QTableWidget):
 
     # Column definitions
     COLUMNS = [
-        "Status", "Name", "Category", "Size", "Brand", "Supplier",
+        "Stock/Available", "Name", "Category", "Size", "Brand", "Supplier",
         "Expiration Date", "Calibration Date", "Acquisition Date",
         "Consumable", "Last Modified", "Alert Status"
     ]
@@ -154,12 +154,14 @@ class InventoryTable(QTableWidget):
             last_modified = self.format_datetime(item.get('last_modified'))
             alert_status = item.get('alert_status', '')
 
-            # Determine status (borrowed or available)
-            status = "Borrowed" if item.get('is_borrowed', False) else "Available"
+            # Calculate stock/available format
+            total_stock = item.get('total_stock', 0)
+            available_stock = item.get('available_stock', 0)
+            stock_display = f"{total_stock}/{available_stock}"
 
             # Create table items
-            status_item = QTableWidgetItem(status)
-            self.setItem(row, 0, status_item)  # Status
+            status_item = QTableWidgetItem(stock_display)
+            self.setItem(row, 0, status_item)  # Stock/Available
 
             name_item = QTableWidgetItem(name)
             self.setItem(row, 1, name_item)  # Name
@@ -174,8 +176,8 @@ class InventoryTable(QTableWidget):
             self.setItem(row, 10, QTableWidgetItem(last_modified))  # Last Modified
             self.setItem(row, 11, QTableWidgetItem(alert_status or "None"))  # Alert Status
 
-            # Apply status styling
-            self.apply_status_styling(row, status)
+            # Apply status styling based on stock availability
+            self.apply_stock_styling(row, total_stock, available_stock)
 
             # Apply alert styling
             self.apply_alert_styling(row, alert_status)
@@ -187,21 +189,30 @@ class InventoryTable(QTableWidget):
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")
 
-    def apply_status_styling(self, row: int, status: str):
-        """Apply styling based on item status."""
-        if status == "Borrowed":
-            # Set background color for borrowed items
+    def apply_stock_styling(self, row: int, total_stock: int, available_stock: int):
+        """Apply styling based on stock availability."""
+        # Determine status based on stock levels
+        if available_stock == 0:
+            # Out of stock - red/warning styling
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if item:
+                    item.setBackground(QColor(DarkTheme.ERROR_COLOR).lighter(180))
+                    if col == 0:  # Stock/Available column
+                        item.setForeground(QColor(DarkTheme.ERROR_COLOR))
+        elif available_stock < total_stock:
+            # Partially available - yellow/warning styling
             for col in range(self.columnCount()):
                 item = self.item(row, col)
                 if item:
                     item.setBackground(QColor(DarkTheme.WARNING_COLOR).lighter(180))
-                    if col == 0:  # Status column
+                    if col == 0:  # Stock/Available column
                         item.setForeground(QColor(DarkTheme.WARNING_COLOR))
-        elif status == "Available":
-            # Set background color for available items
+        else:
+            # Fully available - green/success styling
             for col in range(self.columnCount()):
                 item = self.item(row, col)
-                if item and col == 0:  # Status column
+                if item and col == 0:  # Stock/Available column
                     item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
 
     def apply_alert_styling(self, row: int, alert_status: str):

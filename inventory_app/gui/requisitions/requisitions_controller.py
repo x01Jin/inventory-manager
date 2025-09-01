@@ -142,11 +142,14 @@ class RequisitionsController:
                 time.sleep(0.5)  # Allow requisition item save to complete
 
                 # Step 3: Record stock movement (consumption) using StockMovementService
+                # For now, record at item level (batch_id will be passed when batch selection is implemented)
+                batch_id = item_data.get('batch_id')  # Will be None until batch selection is implemented
                 self.stock_service.record_consumption(
                     item_data['item_id'],
                     item_data['quantity_borrowed'],
                     requisition.id,
-                    f"Borrowed for activity: {requisition.lab_activity_name}"
+                    f"Borrowed for activity: {requisition.lab_activity_name}",
+                    batch_id
                 )
                 time.sleep(0.5)  # Allow stock movement to complete
 
@@ -219,11 +222,14 @@ class RequisitionsController:
                 time.sleep(0.5)  # Allow requisition item save to complete
 
                 # Record stock movement (consumption) using StockMovementService
+                # For now, record at item level (batch_id will be passed when batch selection is implemented)
+                batch_id = item_data.get('batch_id')  # Will be None until batch selection is implemented
                 self.stock_service.record_consumption(
                     item_data['item_id'],
                     item_data['quantity_borrowed'],
                     requisition.id,
-                    f"Borrowed for activity: {requisition.lab_activity_name}"
+                    f"Borrowed for activity: {requisition.lab_activity_name}",
+                    batch_id
                 )
                 time.sleep(0.5)  # Allow stock movement to complete
 
@@ -391,6 +397,96 @@ class RequisitionsController:
             exclude_requisition_id=current_requisition_id
         )
 
+    def get_inventory_batches_for_selection(self, search_term: Optional[str] = None,
+                                          exclude_borrowed: bool = True,
+                                          exclude_requisition_id: Optional[int] = None) -> List[Dict]:
+        """
+        Get inventory batches for selection in requisitions.
+        Shows individual batches with their specific available stock.
+
+        Args:
+            search_term: Optional search term to filter batches
+            exclude_borrowed: Whether to exclude batches with no available stock
+            exclude_requisition_id: Requisition ID to exclude from borrowed check
+
+        Returns:
+            List of batch dictionaries
+        """
+        return self.item_service.get_inventory_batches_for_selection(
+            search_term=search_term,
+            exclude_borrowed=exclude_borrowed,
+            exclude_requisition_id=exclude_requisition_id
+        )
+
+    def get_inventory_batches_for_editing(self, current_requisition_id: int) -> List[Dict]:
+        """
+        Get inventory batches for editing a requisition.
+        Includes batches borrowed by the current requisition.
+
+        Args:
+            current_requisition_id: ID of the requisition being edited
+
+        Returns:
+            List of batch dictionaries
+        """
+        return self.item_service.get_inventory_batches_for_selection(
+            exclude_borrowed=True,
+            exclude_requisition_id=current_requisition_id
+        )
+
+    def get_current_borrower_batches(self, requisition_id: int) -> List[Dict]:
+        """
+        Get batches currently borrowed by a specific requisition.
+        Used when editing a requisition to show what the borrower currently has.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            List of batch dictionaries with borrowed quantities
+        """
+        try:
+            query = """
+            SELECT
+                ib.id as batch_id,
+                ib.item_id,
+                ib.batch_number,
+                ib.date_received,
+                ib.quantity_received,
+                i.name as item_name,
+                ri.quantity_borrowed,
+                c.name as category_name,
+                s.name as supplier_name,
+                i.size,
+                i.brand,
+                i.other_specifications
+            FROM Requisition_Items ri
+            JOIN Items i ON ri.item_id = i.id
+            JOIN Item_Batches ib ON i.id = ib.item_id
+            LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            WHERE ri.requisition_id = ?
+            ORDER BY i.name, ib.batch_number
+            """
+
+            rows = db.execute_query(query, (requisition_id,))
+
+            result = []
+            for row in rows:
+                batch_dict = dict(row)
+                batch_dict.update({
+                    'batch_display_name': f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})",
+                    'available_stock': batch_dict['quantity_received'],  # Full quantity since they're borrowing it
+                    'total_stock': batch_dict['quantity_received']
+                })
+                result.append(batch_dict)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get current borrower batches for requisition {requisition_id}: {e}")
+            return []
+
     def search_items(self, search_term: str) -> List[Dict]:
         """
         Search inventory items by name.
@@ -509,8 +605,21 @@ class RequisitionsController:
                 # Past due date and not fully returned
                 return "Overdue"
             else:
-                # Not past due and not fully returned
-                return "Active"
+                # Check if partially returned
+                any_returned = False
+                for item in items:
+                    item_id = item['item_id']
+                    borrowed_qty = item['quantity_borrowed']
+                    returned_qty = self._get_returned_quantity_for_item(item_id, requisition.id)
+                    if returned_qty > 0 and returned_qty < borrowed_qty:
+                        any_returned = True
+                        break
+
+                if any_returned:
+                    return "Partially Returned"
+                else:
+                    # Not past due and not fully returned
+                    return "Active"
 
         except Exception as e:
             logger.error(f"Failed to determine requisition status: {e}")

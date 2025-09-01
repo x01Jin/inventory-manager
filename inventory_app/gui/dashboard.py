@@ -10,6 +10,7 @@ from inventory_app.gui.styles import DarkTheme
 from inventory_app.database.models import Item, Requisition, Borrower
 from inventory_app.business_logic.alert_engine import alert_engine
 from inventory_app.utils.activity_logger import activity_logger
+from inventory_app.database.connection import db
 
 
 class DashboardPage(QWidget):
@@ -67,9 +68,14 @@ class DashboardPage(QWidget):
         """Create key metrics display."""
         metrics_layout = QHBoxLayout()
 
-        # Total inventory
-        total_items = len(Item.get_all())
-        inventory_metric = self.create_metric_card("📦 Total Inventory", str(total_items), "Items in laboratory")
+        # Get batch statistics
+        batch_stats = self.get_batch_statistics()
+
+        # Total inventory (batches)
+        inventory_metric = self.create_metric_card("📦 Total Inventory", str(batch_stats['total_batches']), "Batches in laboratory")
+
+        # Total stock across all batches
+        stock_metric = self.create_metric_card("🔄 Total Stock", str(batch_stats['total_stock']), "Units across all batches")
 
         # Active requisitions
         active_reqs = len(Requisition.get_all())
@@ -80,6 +86,7 @@ class DashboardPage(QWidget):
         borrowers_metric = self.create_metric_card("👥 Registered Borrowers", str(total_borrowers), "Students/Staff")
 
         metrics_layout.addWidget(inventory_metric)
+        metrics_layout.addWidget(stock_metric)
         metrics_layout.addWidget(reqs_metric)
         metrics_layout.addWidget(borrowers_metric)
 
@@ -154,20 +161,11 @@ class DashboardPage(QWidget):
     def refresh_data(self):
         """Refresh dashboard data."""
         try:
-            self.update_metrics()
             self.update_recent_activity()
             self.update_alerts_table()
         except Exception as e:
             print(f"Failed to refresh dashboard: {e}")
 
-    def update_metrics(self):
-        """Update the metrics cards with current data."""
-        try:
-            # Update metrics by recreating the metrics section
-            # This is a simplified approach - in a full implementation, you'd update existing labels
-            pass
-        except Exception as e:
-            print(f"Failed to update metrics: {e}")
 
     def update_recent_activity(self):
         """Update the recent activity section with real data."""
@@ -194,6 +192,30 @@ class DashboardPage(QWidget):
         except Exception as e:
             print(f"Failed to update recent activity: {e}")
             self.activity_text.setPlainText("Error loading recent activities")
+
+    def get_batch_statistics(self):
+        """Get statistics about batches and total stock."""
+        try:
+            # Query to get batch count and total stock
+            query = """
+            SELECT
+                COUNT(*) as total_batches,
+                COALESCE(SUM(quantity_received), 0) as total_stock
+            FROM Item_Batches
+            WHERE disposal_date IS NULL
+            """
+            rows = db.execute_query(query)
+
+            if rows:
+                return {
+                    'total_batches': rows[0]['total_batches'] or 0,
+                    'total_stock': rows[0]['total_stock'] or 0
+                }
+            return {'total_batches': 0, 'total_stock': 0}
+
+        except Exception as e:
+            print(f"Failed to get batch statistics: {e}")
+            return {'total_batches': 0, 'total_stock': 0}
 
     def update_alerts_table(self):
         """Update alerts table with critical alerts."""

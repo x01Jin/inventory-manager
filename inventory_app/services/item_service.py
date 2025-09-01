@@ -3,7 +3,7 @@ Item service - handles item-related business logic operations.
 Provides centralized item management with composition pattern.
 """
 
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional
 from inventory_app.database.connection import db
 from inventory_app.database.models import Item, Category, Supplier
 from inventory_app.utils.logger import logger
@@ -19,55 +19,14 @@ class ItemService:
         """Initialize the item service."""
         logger.info("Item service initialized")
 
-    def build_item_dict(self, item: Item, exclude_borrowed: bool = True,
-                       exclude_requisition_id: Optional[int] = None) -> Dict:
-        """
-        Build a standardized item dictionary for display/selection.
-
-        Args:
-            item: Item model instance
-            exclude_borrowed: Whether to exclude currently borrowed items
-            exclude_requisition_id: Requisition ID to exclude from borrowed check
-
-        Returns:
-            Dictionary with item details
-        """
-        try:
-            if not item.id:
-                return {}
-
-            # Check if item is currently borrowed (if exclusion requested)
-            if exclude_borrowed:
-                borrowed_ids = self._get_borrowed_item_ids(exclude_requisition_id)
-                if item.id in borrowed_ids:
-                    return {}
-
-            # Get category and supplier names
-            category_name = self._get_category_name(item.category_id)
-            supplier_name = self._get_supplier_name(item.supplier_id)
-
-            return {
-                'id': item.id,
-                'unique_code': item.unique_code,
-                'name': item.name,
-                'category_name': category_name,
-                'supplier_name': supplier_name,
-                'size': item.size,
-                'brand': item.brand,
-                'other_specifications': item.other_specifications,
-                'is_consumable': item.is_consumable,
-                'available_quantity': self._get_available_quantity(item.id)
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to build item dict for item {item.id}: {e}")
-            return {}
+    # Removed redundant build_item_dict method - using batch-centric approach now
 
     def get_inventory_items_for_selection(self, search_term: Optional[str] = None,
                                        exclude_borrowed: bool = True,
                                        exclude_requisition_id: Optional[int] = None) -> List[Dict]:
         """
         Get inventory items formatted for selection in requisitions.
+        LEGACY METHOD: Now delegates to batch-centric method for backward compatibility.
 
         Args:
             search_term: Optional search term to filter items
@@ -77,23 +36,124 @@ class ItemService:
         Returns:
             List of item dictionaries
         """
+        # For backward compatibility, convert batch data to item format
+        batch_data = self.get_inventory_batches_for_selection(search_term, exclude_borrowed, exclude_requisition_id)
+        return self._convert_batch_data_to_item_format(batch_data)
+
+    def get_inventory_batches_for_selection(self, search_term: Optional[str] = None,
+                                          exclude_borrowed: bool = True,
+                                          exclude_requisition_id: Optional[int] = None) -> List[Dict]:
+        """
+        Get inventory batches formatted for selection in requisitions.
+        Shows individual batches with their specific available stock.
+
+        Args:
+            search_term: Optional search term to filter batches
+            exclude_borrowed: Whether to exclude batches with no available stock
+            exclude_requisition_id: Requisition ID to exclude from borrowed check
+
+        Returns:
+            List of batch dictionaries with availability info
+        """
         try:
-            # Get items (search or all)
+            # Build query to get batches with item details
+            base_query = """
+            SELECT
+                ib.id as batch_id,
+                ib.item_id,
+                ib.batch_number,
+                ib.date_received,
+                ib.quantity_received,
+                i.name as item_name,
+                i.category_id,
+                i.size,
+                i.brand,
+                i.other_specifications,
+                c.name as category_name,
+                s.name as supplier_name,
+                i.is_consumable
+            FROM Item_Batches ib
+            JOIN Items i ON ib.item_id = i.id
+            LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            WHERE ib.disposal_date IS NULL
+            """
+
+            params = ()
             if search_term:
-                items = Item.search(search_term)
-            else:
-                items = Item.get_all()
+                base_query += " AND i.name LIKE ?"
+                params = (f"%{search_term}%",)
+
+            base_query += " ORDER BY i.name, ib.date_received DESC"
+
+            rows = db.execute_query(base_query, params)
 
             result = []
-            for item in items:
-                item_dict = self.build_item_dict(item, exclude_borrowed, exclude_requisition_id)
-                if item_dict:  # Only add if not empty (not excluded)
-                    result.append(item_dict)
+            for row in rows:
+                batch_dict = dict(row)
+
+                # Calculate available stock for this specific batch
+                available_stock = self._get_available_stock_for_batch(batch_dict['batch_id'], exclude_requisition_id)
+
+                # Skip batches with no available stock if exclude_borrowed is True
+                if exclude_borrowed and available_stock <= 0:
+                    continue
+
+                # Add availability information
+                batch_dict.update({
+                    'available_stock': available_stock,
+                    'total_stock': batch_dict['quantity_received'],
+                    'batch_display_name': f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})"
+                })
+
+                result.append(batch_dict)
 
             return result
 
         except Exception as e:
-            logger.error(f"Failed to get inventory items: {e}")
+            logger.error(f"Failed to get inventory batches: {e}")
+            return []
+
+    def _convert_batch_data_to_item_format(self, batch_data: List[Dict]) -> List[Dict]:
+        """
+        Convert batch data to item format for backward compatibility.
+        Aggregates batch information into item-level data.
+
+        Args:
+            batch_data: List of batch dictionaries
+
+        Returns:
+            List of item dictionaries
+        """
+        try:
+            # Group batches by item
+            item_groups = {}
+            for batch in batch_data:
+                item_id = batch['item_id']
+                if item_id not in item_groups:
+                    item_groups[item_id] = {
+                        'id': item_id,
+                        'name': batch['item_name'],
+                        'category_name': batch['category_name'],
+                        'supplier_name': batch['supplier_name'],
+                        'size': batch['size'],
+                        'brand': batch['brand'],
+                        'other_specifications': batch['other_specifications'],
+                        'is_consumable': batch['is_consumable'],
+                        'total_stock': 0,
+                        'available_stock': 0,
+                        'batches': []
+                    }
+
+                # Aggregate stock information
+                item_groups[item_id]['total_stock'] += batch['total_stock']
+                item_groups[item_id]['available_stock'] += batch['available_stock']
+                item_groups[item_id]['batches'].append(batch)
+
+            return list(item_groups.values())
+
+        except Exception as e:
+            logger.error(f"Failed to convert batch data to item format: {e}")
             return []
 
     def get_requisition_items_with_details(self, requisition_id: int) -> List[Dict]:
@@ -122,39 +182,7 @@ class ItemService:
             logger.error(f"Failed to get requisition items for {requisition_id}: {e}")
             return []
 
-    def _get_borrowed_item_ids(self, exclude_requisition_id: Optional[int] = None) -> Set[int]:
-        """
-        Get IDs of items that are currently borrowed.
 
-        Args:
-            exclude_requisition_id: Optional requisition ID to exclude
-
-        Returns:
-            Set of borrowed item IDs
-        """
-        try:
-            query = """
-            SELECT DISTINCT ri.item_id
-            FROM Requisition_Items ri
-            JOIN Requisitions r ON ri.requisition_id = r.id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM Stock_Movements sm
-                WHERE sm.item_id = ri.item_id
-                AND sm.movement_type = 'RETURN'
-                AND sm.source_id = r.id
-            )
-            """
-            params = []
-
-            if exclude_requisition_id is not None:
-                query += " AND r.id != ?"
-                params.append(exclude_requisition_id)
-
-            rows = db.execute_query(query, tuple(params))
-            return {row['item_id'] for row in rows}
-        except Exception as e:
-            logger.error(f"Failed to get borrowed item IDs: {e}")
-            return set()
 
     def _get_category_name(self, category_id: int) -> str:
         """Get category name by ID."""
@@ -174,16 +202,71 @@ class ItemService:
         except Exception:
             return "Unknown"
 
-    def _get_available_quantity(self, item_id: int) -> int:
-        """Get available quantity for an item."""
+    def _get_total_stock(self, item_id: int) -> int:
+        """Get total stock for an item (all batches)."""
         try:
             query = """
-            SELECT COALESCE(SUM(quantity_received), 0) as total_received
+            SELECT COALESCE(SUM(quantity_received), 0) as total_stock
             FROM Item_Batches
             WHERE item_id = ?
             """
             rows = db.execute_query(query, (item_id,))
-            return rows[0]['total_received'] if rows else 0
+            return rows[0]['total_stock'] if rows else 0
         except Exception as e:
-            logger.error(f"Failed to get available quantity for item {item_id}: {e}")
+            logger.error(f"Failed to get total stock for item {item_id}: {e}")
             return 0
+
+    def _get_available_stock_for_batch(self, batch_id: int, exclude_requisition_id: Optional[int] = None) -> int:
+        """
+        Get available stock for a specific batch.
+
+        Args:
+            batch_id: ID of the batch
+            exclude_requisition_id: Requisition ID to exclude from borrowed calculation (for editing)
+
+        Returns:
+            Available stock for the batch
+        """
+        try:
+            # Get the total quantity for this batch
+            query = "SELECT quantity_received FROM Item_Batches WHERE id = ?"
+            rows = db.execute_query(query, (batch_id,))
+            if not rows:
+                return 0
+
+            total_quantity = rows[0]['quantity_received']
+
+            # Get currently borrowed quantity from this batch
+            # This is more complex as we need to track which specific batches are borrowed
+            # For now, we'll use a simplified approach based on stock movements
+            borrowed_query = """
+            SELECT COALESCE(SUM(sm.quantity), 0) as borrowed_qty
+            FROM Stock_Movements sm
+            WHERE sm.batch_id = ?
+            AND sm.movement_type = 'CONSUMPTION'
+            """
+
+            params = (batch_id,)
+            if exclude_requisition_id:
+                borrowed_query += " AND sm.source_id != ?"
+                params = (batch_id, exclude_requisition_id)
+
+            # Check if there are any unreturned movements for this batch
+            borrowed_query += """
+            AND NOT EXISTS (
+                SELECT 1 FROM Stock_Movements sm_return
+                WHERE sm_return.batch_id = sm.batch_id
+                AND sm_return.movement_type = 'RETURN'
+                AND sm_return.source_id = sm.source_id
+            )
+            """
+
+            borrowed_rows = db.execute_query(borrowed_query, params)
+            borrowed_qty = borrowed_rows[0]['borrowed_qty'] if borrowed_rows else 0
+
+            return max(0, total_quantity - borrowed_qty)
+
+        except Exception as e:
+            logger.error(f"Failed to get available stock for batch {batch_id}: {e}")
+            return 0
+

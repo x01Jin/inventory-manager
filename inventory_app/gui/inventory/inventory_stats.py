@@ -28,17 +28,17 @@ class InventoryStats(QWidget):
         stats_layout.setContentsMargins(10, 10, 10, 10)
         stats_layout.setSpacing(20)
 
-        # Total items
-        self.total_label = QLabel("📦 Total Items: 0")
+        # Total batches
+        self.total_label = QLabel("📦 Total Batches: 0")
         stats_layout.addWidget(self.total_label)
 
-        # Consumable items
-        self.consumable_label = QLabel("🔄 Consumable: 0")
-        stats_layout.addWidget(self.consumable_label)
+        # Total stock
+        self.total_stock_label = QLabel("🔄 Total Stock: 0")
+        stats_layout.addWidget(self.total_stock_label)
 
-        # Non-consumable items
-        self.non_consumable_label = QLabel("🔧 Equipment: 0")
-        stats_layout.addWidget(self.non_consumable_label)
+        # Available stock
+        self.available_stock_label = QLabel("✅ Available Stock: 0")
+        stats_layout.addWidget(self.available_stock_label)
 
         # Alerts
         self.alerts_label = QLabel("⚠️ Alerts: 0")
@@ -58,9 +58,9 @@ class InventoryStats(QWidget):
     def update_statistics(self, stats: Dict[str, Any]):
         """Update the statistics display."""
         try:
-            self.total_label.setText(f"📦 Total Items: {stats.get('total_items', 0)}")
-            self.consumable_label.setText(f"🔄 Consumable: {stats.get('consumable_items', 0)}")
-            self.non_consumable_label.setText(f"🔧 Equipment: {stats.get('non_consumable_items', 0)}")
+            self.total_label.setText(f"📦 Total Batches: {stats.get('total_batches', 0)}")
+            self.total_stock_label.setText(f"🔄 Total Stock: {stats.get('total_stock', 0)}")
+            self.available_stock_label.setText(f"✅ Available Stock: {stats.get('available_stock', 0)}")
             self.alerts_label.setText(f"⚠️ Alerts: {stats.get('total_alerts', 0)}")
             self.expiration_label.setText(f"⏰ Expiring: {stats.get('expiring_alerts', 0)}")
             self.calibration_label.setText(f"🔧 Calibration: {stats.get('calibration_alerts', 0)}")
@@ -73,9 +73,9 @@ class InventoryStats(QWidget):
     def clear_statistics(self):
         """Clear all statistics to default values."""
         default_stats = {
-            "total_items": 0,
-            "consumable_items": 0,
-            "non_consumable_items": 0,
+            "total_batches": 0,
+            "total_stock": 0,
+            "available_stock": 0,
             "total_alerts": 0,
             "expiring_alerts": 0,
             "calibration_alerts": 0

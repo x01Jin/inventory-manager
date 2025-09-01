@@ -94,6 +94,16 @@ class ItemEditor(QDialog):
         po_layout.addWidget(self.po_input)
         spec_layout.addLayout(po_layout)
 
+        # Batch Quantity (only for new items)
+        if not self.item_id:  # Only show for new items
+            batch_layout = QHBoxLayout()
+            batch_layout.addWidget(QLabel("Batch Quantity:"))
+            self.batch_quantity_input = QLineEdit()
+            self.batch_quantity_input.setPlaceholderText("Total units (e.g., 25)")
+            self.batch_quantity_input.setText("1")  # Default to 1
+            batch_layout.addWidget(self.batch_quantity_input)
+            spec_layout.addLayout(batch_layout)
+
         # Other Specifications
         spec_layout.addWidget(QLabel("Other Specifications:"))
         self.spec_input = QTextEdit()
@@ -306,13 +316,26 @@ class ItemEditor(QDialog):
             # Status
             item.is_consumable = 1 if self.consumable_check.isChecked() else 0
 
+            # Get batch quantity for new items
+            batch_quantity = 0
+            if not self.item_id and hasattr(self, 'batch_quantity_input'):
+                try:
+                    batch_quantity = int(self.batch_quantity_input.text().strip())
+                    if batch_quantity <= 0:
+                        QMessageBox.warning(self, "Validation Error", "Batch quantity must be a positive number.")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Validation Error", "Batch quantity must be a valid number.")
+                    return
+
             # Save
             editor_name = self.editor_input.text().strip()
-            success = item.save(editor_name)
+            success = item.save(editor_name, batch_quantity)
 
             if success:
-                logger.info(f"Successfully saved item: {item.name}")
-                QMessageBox.information(self, "Success", "Item saved successfully!")
+                batch_msg = f" with {batch_quantity} batches" if batch_quantity > 0 else ""
+                logger.info(f"Successfully saved item: {item.name}{batch_msg}")
+                QMessageBox.information(self, "Success", f"Item saved successfully{batch_msg}!")
                 self.accept()
             else:
                 QMessageBox.critical(self, "Error", "Failed to save item. Please try again.")

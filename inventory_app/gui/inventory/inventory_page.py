@@ -94,8 +94,8 @@ class InventoryPage(QWidget):
         top_layout.addWidget(self.stats)
         splitter.addWidget(top_widget)
 
-        # Bottom section: Inventory table
-        table_group = QGroupBox("Inventory Items")
+        # Bottom section: Inventory table (now shows batches)
+        table_group = QGroupBox("Inventory Batches")
         table_layout = QVBoxLayout(table_group)
         table_layout.addWidget(self.table)
         splitter.addWidget(table_group)
@@ -253,9 +253,6 @@ class InventoryPage(QWidget):
             logger.error(f"Failed to delete item {item_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to delete item: {str(e)}")
 
-    def get_alert_summary(self):
-        """Get summary of current alerts."""
-        return self.alert_system.get_alert_summary()
 
     def _on_table_selection_changed(self):
         """Handle table selection changes."""

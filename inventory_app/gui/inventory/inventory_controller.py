@@ -39,6 +39,8 @@ class InventoryController:
                 lr.calibration_interval_months,
                 lr.calibration_lead_months,
                 ib.date_received as first_batch_date,
+                COALESCE(stock.total_stock, 0) as total_stock,
+                COALESCE(stock.total_stock, 0) - COALESCE(borrowed.borrowed_qty, 0) as available_stock,
                 CASE
                     WHEN i.expiration_date IS NOT NULL AND lr.expiry_lead_months IS NOT NULL
                          AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
@@ -75,6 +77,23 @@ class InventoryController:
                 FROM Item_Batches
                 GROUP BY item_id
             ) ib ON i.id = ib.item_id
+            LEFT JOIN (
+                SELECT item_id, SUM(quantity_received) as total_stock
+                FROM Item_Batches
+                GROUP BY item_id
+            ) stock ON i.id = stock.item_id
+            LEFT JOIN (
+                SELECT ri.item_id, SUM(ri.quantity_borrowed) as borrowed_qty
+                FROM Requisition_Items ri
+                JOIN Requisitions r ON ri.requisition_id = r.id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM Stock_Movements sm
+                    WHERE sm.item_id = ri.item_id
+                    AND sm.movement_type = 'RETURN'
+                    AND sm.source_id = r.id
+                )
+                GROUP BY ri.item_id
+            ) borrowed ON i.id = borrowed.item_id
             ORDER BY c.name, i.name
             """
 
@@ -98,6 +117,8 @@ class InventoryController:
                 s.name as supplier_name, i.other_specifications, i.po_number,
                 i.expiration_date, i.calibration_date, i.is_consumable,
                 i.acquisition_date, i.last_modified,
+                COALESCE(stock.total_stock, 0) as total_stock,
+                COALESCE(stock.total_stock, 0) - COALESCE(borrowed.borrowed_qty, 0) as available_stock,
                 CASE
                     WHEN EXISTS (
                         SELECT 1 FROM Requisition_Items ri
@@ -115,6 +136,23 @@ class InventoryController:
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            LEFT JOIN (
+                SELECT item_id, SUM(quantity_received) as total_stock
+                FROM Item_Batches
+                GROUP BY item_id
+            ) stock ON i.id = stock.item_id
+            LEFT JOIN (
+                SELECT ri.item_id, SUM(ri.quantity_borrowed) as borrowed_qty
+                FROM Requisition_Items ri
+                JOIN Requisitions r ON ri.requisition_id = r.id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM Stock_Movements sm
+                    WHERE sm.item_id = ri.item_id
+                    AND sm.movement_type = 'RETURN'
+                    AND sm.source_id = r.id
+                )
+                GROUP BY ri.item_id
+            ) borrowed ON i.id = borrowed.item_id
             WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ?
             ORDER BY c.name, i.name
             """
@@ -176,6 +214,55 @@ class InventoryController:
                 "first_used": None,
                 "last_used": None
             }
+
+    def get_batch_statistics(self) -> Dict[str, int]:
+        """Get overall batch statistics for the inventory."""
+        try:
+            # Query to get batch count and total stock across all batches
+            query = """
+            SELECT
+                COUNT(*) as total_batches,
+                COALESCE(SUM(quantity_received), 0) as total_stock,
+                COALESCE(SUM(
+                    CASE
+                        WHEN ib.disposal_date IS NULL THEN quantity_received
+                        ELSE 0
+                    END
+                ), 0) as active_total_stock
+            FROM Item_Batches ib
+            """
+
+            rows = db.execute_query(query)
+            if not rows:
+                return {'total_batches': 0, 'total_stock': 0, 'available_stock': 0}
+
+            batch_stats = rows[0]
+
+            # Calculate available stock (total - currently borrowed)
+            available_query = """
+            SELECT COALESCE(SUM(ri.quantity_borrowed), 0) as total_borrowed
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON ri.requisition_id = r.id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM Stock_Movements sm
+                WHERE sm.item_id = ri.item_id
+                AND sm.movement_type = 'RETURN'
+                AND sm.source_id = r.id
+            )
+            """
+
+            borrowed_rows = db.execute_query(available_query)
+            total_borrowed = borrowed_rows[0]['total_borrowed'] if borrowed_rows else 0
+
+            return {
+                'total_batches': batch_stats['total_batches'] or 0,
+                'total_stock': batch_stats['active_total_stock'] or 0,
+                'available_stock': max(0, (batch_stats['active_total_stock'] or 0) - total_borrowed)
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get batch statistics: {e}")
+            return {'total_batches': 0, 'total_stock': 0, 'available_stock': 0}
 
     def get_categories(self) -> List[str]:
         """Get list of unique categories."""

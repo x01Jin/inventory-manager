@@ -257,16 +257,20 @@ class RequisitionsPage(QWidget):
                 QMessageBox.warning(self, "Error", "Could not find requisition details.")
                 return
 
-            # Format current items for ItemSelector (pre-selected items)
+            # Get current batches for the borrower in this requisition
+            current_batches = self.model.controller.get_current_borrower_batches(requisition_id)
+
+            # Format current batches for ItemSelector (pre-selected items)
             current_items = []
-            for item in requisition_summary.items:
+            for batch in current_batches:
                 current_items.append({
-                    'item_id': item['item_id'],
-                    'name': item['name'],  # This will be the display name with LAB code
-                    'quantity_borrowed': item['quantity_borrowed']
+                    'batch_id': batch['batch_id'],
+                    'item_id': batch['item_id'],
+                    'name': batch['batch_display_name'],
+                    'quantity_borrowed': batch['quantity_borrowed']
                 })
 
-            logger.info(f"Pre-selecting {len(current_items)} items for editing")
+            logger.info(f"Pre-selecting {len(current_items)} batches for editing")
 
             # Open item selector with current items pre-selected
             item_dialog = ItemSelector(self, current_items, requisition_id)

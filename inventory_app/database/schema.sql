@@ -91,7 +91,6 @@ INSERT INTO Brands (name) VALUES ('LabCorp');
 -- 5. Items: Core inventory table
 CREATE TABLE Items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    unique_code TEXT UNIQUE,                    -- LAB-XXXX format for unique identification
     name TEXT NOT NULL,
     category_id INTEGER NOT NULL,
     size TEXT,

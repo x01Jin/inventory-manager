@@ -140,16 +140,22 @@ class InventoryModel:
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get basic statistics about the inventory."""
-        total_items = len(self.items)
-        consumable_count = sum(1 for item in self.items if item.is_consumable)
+
+        from inventory_app.gui.inventory.inventory_controller import InventoryController
+
+        controller = InventoryController()
+        batch_stats = controller.get_batch_statistics()
+
+        # Calculate alerts from current items
         expiring_count = sum(1 for item in self.items if item.alert_status == "expiration")
         calibration_count = sum(1 for item in self.items if item.alert_status == "calibration")
         lifecycle_count = sum(1 for item in self.items if item.alert_status == "lifecycle")
 
+        # Combine batch statistics with alert statistics
         return {
-            "total_items": total_items,
-            "consumable_items": consumable_count,
-            "non_consumable_items": total_items - consumable_count,
+            "total_batches": batch_stats['total_batches'],
+            "total_stock": batch_stats['total_stock'],
+            "available_stock": batch_stats['available_stock'],
             "expiring_alerts": expiring_count,
             "calibration_alerts": calibration_count,
             "lifecycle_alerts": lifecycle_count,

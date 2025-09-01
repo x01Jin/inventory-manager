@@ -3,7 +3,7 @@ Stock movement service - handles stock movement operations.
 Provides centralized stock tracking and movement recording.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
@@ -19,7 +19,7 @@ class StockMovementService:
         """Initialize the stock movement service."""
         logger.info("Stock movement service initialized")
 
-    def record_consumption(self, item_id: int, quantity: int, source_id: int, note: str) -> None:
+    def record_consumption(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
         """
         Record item consumption (borrowing).
 
@@ -28,10 +28,11 @@ class StockMovementService:
             quantity: Quantity consumed
             source_id: Requisition ID
             note: Description/note for the movement
+            batch_id: Specific batch being consumed (optional)
         """
-        self._record_movement(item_id, 'CONSUMPTION', quantity, source_id, note)
+        self._record_movement(item_id, 'CONSUMPTION', quantity, source_id, note, batch_id)
 
-    def record_return(self, item_id: int, quantity: int, source_id: int, note: str) -> None:
+    def record_return(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
         """
         Record item return.
 
@@ -40,8 +41,9 @@ class StockMovementService:
             quantity: Quantity returned
             source_id: Requisition ID
             note: Description/note for the movement
+            batch_id: Specific batch being returned (optional)
         """
-        self._record_movement(item_id, 'RETURN', quantity, source_id, note)
+        self._record_movement(item_id, 'RETURN', quantity, source_id, note, batch_id)
 
     def process_return(self, requisition_id: int, return_data: List[Dict], editor_name: str) -> bool:
         """
@@ -73,7 +75,7 @@ class StockMovementService:
             return False
 
     def _record_movement(self, item_id: int, movement_type: str, quantity: int,
-                        source_id: int, note: str) -> None:
+                        source_id: int, note: str, batch_id: Optional[int] = None) -> None:
         """
         Record a stock movement in the database.
 
@@ -83,21 +85,40 @@ class StockMovementService:
             quantity: Quantity moved
             source_id: Source identifier (requisition ID)
             note: Descriptive note
+            batch_id: Specific batch ID (optional)
         """
         try:
-            query = """
-            INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """
-            db.execute_update(query, (
-                item_id,
-                movement_type,
-                quantity,
-                date.today().isoformat(),
-                source_id,
-                note
-            ))
-            logger.debug(f"Recorded {movement_type} movement for item {item_id}: {quantity} units")
+            if batch_id is not None:
+                query = """
+                INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """
+                params = (
+                    item_id,
+                    batch_id,
+                    movement_type,
+                    quantity,
+                    date.today().isoformat(),
+                    source_id,
+                    note
+                )
+            else:
+                query = """
+                INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """
+                params = (
+                    item_id,
+                    movement_type,
+                    quantity,
+                    date.today().isoformat(),
+                    source_id,
+                    note
+                )
+
+            db.execute_update(query, params)
+            batch_info = f" (batch {batch_id})" if batch_id else ""
+            logger.debug(f"Recorded {movement_type} movement for item {item_id}{batch_info}: {quantity} units")
         except Exception as e:
             logger.error(f"Failed to record stock movement: {e}")
 

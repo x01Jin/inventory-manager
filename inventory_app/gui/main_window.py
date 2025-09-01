@@ -23,7 +23,7 @@ class MainWindow(QMainWindow):
         print("Initializing Laboratory Inventory Application...")
 
         self.setWindowTitle("Laboratory Inventory Monitor")
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1280, 720)
 
         # Apply dark theme
         app_instance = QApplication.instance()
