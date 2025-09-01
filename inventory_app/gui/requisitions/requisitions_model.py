@@ -219,13 +219,13 @@ class RequisitionsModel:
                 'unique_borrowers': 0
             }
 
-    def add_requisition(self, borrower_data: Dict, requisition_data: Dict,
+    def add_requisition(self, borrower_id: int, requisition_data: Dict,
                        items_data: List[Dict], editor_name: str) -> bool:
         """
         Add a new requisition.
 
         Args:
-            borrower_data: Borrower information
+            borrower_id: ID of existing borrower (selected via BorrowerSelector)
             requisition_data: Requisition details
             items_data: Items to borrow
             editor_name: Name of person creating requisition
@@ -233,12 +233,12 @@ class RequisitionsModel:
         Returns:
             bool: True if successful
         """
-        if self.controller.create_requisition(borrower_data, requisition_data, items_data, editor_name):
+        if self.controller.create_requisition(borrower_id, requisition_data, items_data, editor_name):
             self.load_data()  # Refresh data
             return True
         return False
 
-    def update_requisition(self, requisition_id: int, borrower_data: Dict,
+    def update_requisition(self, requisition_id: int, borrower_id: int,
                           requisition_data: Dict, items_data: List[Dict],
                           editor_name: str) -> bool:
         """
@@ -246,7 +246,7 @@ class RequisitionsModel:
 
         Args:
             requisition_id: ID of requisition to update
-            borrower_data: Updated borrower information
+            borrower_id: ID of borrower (borrower changes should be handled via BorrowerEditor)
             requisition_data: Updated requisition details
             items_data: Updated items
             editor_name: Name of person making changes
@@ -254,7 +254,7 @@ class RequisitionsModel:
         Returns:
             bool: True if successful
         """
-        if self.controller.update_requisition(requisition_id, borrower_data, requisition_data, items_data, editor_name):
+        if self.controller.update_requisition(requisition_id, borrower_id, requisition_data, items_data, editor_name):
             self.load_data()  # Refresh data
             return True
         return False

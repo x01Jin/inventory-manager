@@ -282,16 +282,15 @@ class RequisitionsPage(QWidget):
                 QMessageBox.warning(self, "Required", "Editor name is required.")
                 return
 
-            # Prepare borrower data (unchanged)
-            borrower_data = {
-                'name': requisition_summary.borrower.name,
-                'affiliation': requisition_summary.borrower.affiliation,
-                'group_name': requisition_summary.borrower.group_name
-            }
+            # Use existing borrower_id (borrower changes should be handled via BorrowerEditor)
+            borrower_id = requisition_summary.borrower.id
+            if not borrower_id:
+                QMessageBox.critical(self, "Error", "Invalid borrower information.")
+                return
 
             # Prepare requisition data (unchanged)
             requisition_data = {
-                'borrower_id': requisition_summary.borrower.id,
+                'borrower_id': borrower_id,
                 'date_borrowed': requisition_summary.requisition.date_borrowed,
                 'lab_activity_name': requisition_summary.requisition.lab_activity_name,
                 'lab_activity_date': requisition_summary.requisition.lab_activity_date,
@@ -301,7 +300,7 @@ class RequisitionsPage(QWidget):
 
             # Update the requisition with new items
             success = self.model.update_requisition(
-                requisition_id, borrower_data, requisition_data, selected_items, editor_name.strip()
+                requisition_id, borrower_id, requisition_data, selected_items, editor_name.strip()
             )
 
             if success:

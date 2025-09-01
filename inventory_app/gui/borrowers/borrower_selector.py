@@ -191,13 +191,13 @@ class BorrowerSelector(QDialog):
     def on_row_selected(self):
         """Handle table row selection."""
         try:
-            selected_items = self.borrowers_table.selectedItems()
-            if selected_items:
-                # Get the borrower ID from the first column of the selected row
-                name_item = selected_items[0]
-                borrower_id = name_item.data(Qt.ItemDataRole.UserRole)
-                if borrower_id is not None:
-                    self.on_borrower_selected(borrower_id)
+            current_row = self.borrowers_table.currentRow()
+            if current_row >= 0:
+                name_item = self.borrowers_table.item(current_row, 1)  # Column 1 = Name
+                if name_item is not None:
+                    borrower_id = name_item.data(Qt.ItemDataRole.UserRole)
+                    if borrower_id is not None:
+                        self.on_borrower_selected(borrower_id)
         except Exception as e:
             logger.error(f"Failed to handle row selection: {e}")
 

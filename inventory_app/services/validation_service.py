@@ -1,0 +1,138 @@
+"""
+Validation service - handles data validation operations.
+Provides centralized validation logic for requisitions and items.
+"""
+
+from typing import List, Dict
+from inventory_app.utils.logger import logger
+
+
+class ValidationService:
+    """
+    Service for validation operations.
+    Handles validation of requisition data, borrower data, and items.
+    """
+
+    def __init__(self):
+        """Initialize the validation service."""
+        logger.info("Validation service initialized")
+
+    def validate_requisition_data(self, borrower_data: Dict, requisition_data: Dict,
+                                 items_data: List[Dict]) -> bool:
+        """
+        Validate complete requisition data.
+
+        Args:
+            borrower_data: Borrower information
+            requisition_data: Requisition details
+            items_data: List of items with quantities
+
+        Returns:
+            bool: True if all data is valid
+        """
+        # Validate borrower data
+        if not self._validate_borrower_data(borrower_data):
+            return False
+
+        # Validate requisition data
+        if not self._validate_requisition_details(requisition_data):
+            return False
+
+        # Validate items data
+        if not self._validate_items_data(items_data):
+            return False
+
+        return True
+
+    def validate_requisition_creation(self, borrower_id: int, requisition_data: Dict,
+                                     items_data: List[Dict]) -> bool:
+        """
+        Validate requisition creation with existing borrower.
+
+        Args:
+            borrower_id: ID of existing borrower
+            requisition_data: Requisition details
+            items_data: List of items with quantities
+
+        Returns:
+            bool: True if valid
+        """
+        # Validate borrower exists (basic check)
+        if not borrower_id:
+            logger.error("Borrower ID is required")
+            return False
+
+        # Validate requisition data
+        if not self._validate_requisition_details(requisition_data):
+            return False
+
+        # Validate items data
+        if not self._validate_items_data(items_data):
+            return False
+
+        return True
+
+    def _validate_borrower_data(self, borrower_data: Dict) -> bool:
+        """Validate borrower information."""
+        required_fields = ['name', 'affiliation', 'group_name']
+
+        for field in required_fields:
+            value = borrower_data.get(field, '').strip()
+            if not value:
+                logger.error(f"Missing required borrower field: {field}")
+                return False
+
+        return True
+
+    def _validate_requisition_details(self, requisition_data: Dict) -> bool:
+        """Validate requisition details."""
+        required_fields = ['date_borrowed', 'lab_activity_name', 'lab_activity_date']
+
+        for field in required_fields:
+            if not requisition_data.get(field):
+                logger.error(f"Missing required requisition field: {field}")
+                return False
+
+        return True
+
+    def _validate_items_data(self, items_data: List[Dict]) -> bool:
+        """Validate items data."""
+        if not items_data:
+            logger.error("No items specified for requisition")
+            return False
+
+        for item in items_data:
+            if not item.get('item_id') or not item.get('quantity_borrowed'):
+                logger.error(f"Invalid item data: {item}")
+                return False
+
+            if item['quantity_borrowed'] <= 0:
+                logger.error(f"Invalid quantity for item {item['item_id']}: {item['quantity_borrowed']}")
+                return False
+
+        return True
+
+    def validate_return_data(self, return_data: List[Dict]) -> bool:
+        """
+        Validate return data.
+
+        Args:
+            return_data: List of items being returned
+
+        Returns:
+            bool: True if valid
+        """
+        if not return_data:
+            logger.error("No items specified for return")
+            return False
+
+        for return_item in return_data:
+            if not return_item.get('item_id') or not return_item.get('quantity_returned'):
+                logger.error(f"Invalid return data: {return_item}")
+                return False
+
+            if return_item['quantity_returned'] <= 0:
+                logger.error(f"Invalid return quantity for item {return_item['item_id']}: {return_item['quantity_returned']}")
+                return False
+
+        return True
