@@ -26,6 +26,18 @@ CREATE TABLE Categories (
     FOREIGN KEY (category_type_id) REFERENCES Category_Types(id)
 );
 
+INSERT INTO Categories (name, category_type_id) VALUES
+('Hydrochloric Acid', 1),
+('Sodium Hydroxide', 1),
+('Beaker', 2),
+('Volumetric Flask', 2),
+('Microscope', 3),
+('Centrifuge', 3),
+('Bunsen Burner', 4),
+('Pipette', 4),
+('Plastic Tubes', 5),
+('Filter Paper', 5);
+
 -- Index for performance
 CREATE INDEX idx_categories_type ON Categories(category_type_id);
 

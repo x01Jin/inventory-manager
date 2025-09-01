@@ -62,12 +62,9 @@ def main():
     """Main application entry point."""
     try:
         # Application header
-        print("\n" + "="*60)
-        print("🏥 LABORATORY INVENTORY MONITORING SYSTEM")
-        print("="*60)
-        print("Features: Equipment tracking, usage monitoring, alerts, Excel reports")
-        print("Based on laboratory inventory specifications")
-        print("="*60 + "\n")
+        logger.info("🏥 LABORATORY INVENTORY MONITORING SYSTEM")
+        logger.info("Features: Equipment tracking, usage monitoring, alerts, Excel reports")
+        logger.info("Based on laboratory inventory specifications")
 
         logger.info("Starting Laboratory Inventory Application...")
 
@@ -86,7 +83,7 @@ def main():
             return gui_main()
         except ImportError as e:
             logger.error(f"❌ GUI import failed: {e}")
-            print("❌ GUI components not available. Please ensure PyQt6 is installed.")
+            logger.error("❌ GUI components not available. Please ensure PyQt6 is installed.")
             return 1
 
     except KeyboardInterrupt:
@@ -94,7 +91,7 @@ def main():
         return 0
     except Exception as e:
         logger.error(f"💥 Application failed: {e}")
-        print(f"💥 Application error: {e}")
+        logger.error(f"💥 Application error: {e}")
         return 1
     finally:
         logger.info("🏁 Laboratory inventory system shutdown complete")

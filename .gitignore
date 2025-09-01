@@ -3,5 +3,8 @@
 logs/
 __pycache__/
 plan/
+build/
+dist/
+*.spec
 inventory.db
 inventory_app/populate_sample_data.py

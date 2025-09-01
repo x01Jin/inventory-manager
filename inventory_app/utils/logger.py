@@ -42,7 +42,12 @@ def setup_logger():
 
     # Add handlers
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+
+    # Only add console handler if not in executable mode
+    # This prevents console window from appearing in standalone exe
+    import sys
+    if not getattr(sys, 'frozen', False):
+        logger.addHandler(console_handler)
 
     return logger
 
