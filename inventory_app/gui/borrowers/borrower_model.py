@@ -9,6 +9,7 @@ from datetime import date
 from dataclasses import dataclass
 
 from inventory_app.database.models import Borrower as BorrowerDB
+from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 
 
@@ -20,6 +21,7 @@ class BorrowerRow:
     affiliation: str = ""
     group_name: str = ""
     created_date: Optional[date] = None
+    requisitions_count: int = 0
 
 
 class BorrowerModel:
@@ -60,6 +62,9 @@ class BorrowerModel:
             List of BorrowerRow objects for display
         """
         try:
+            # Get requisition counts for all borrowers
+            requisition_counts = self._get_requisition_counts()
+
             rows = []
             for borrower in self.filtered_borrowers:
                 row = BorrowerRow(
@@ -67,7 +72,8 @@ class BorrowerModel:
                     name=borrower.name,
                     affiliation=borrower.affiliation,
                     group_name=borrower.group_name,
-                    created_date=None  # We don't have this field in the current Borrower model
+                    created_date=None,  # We don't have this field in the current Borrower model
+                    requisitions_count=requisition_counts.get(borrower.id, 0)
                 )
                 rows.append(row)
 
@@ -243,3 +249,22 @@ class BorrowerModel:
                 continue
 
         return filtered
+
+    def _get_requisition_counts(self) -> dict:
+        """
+        Get the number of requisitions for each borrower.
+
+        Returns:
+            Dictionary mapping borrower_id to requisition count
+        """
+        try:
+            query = """
+            SELECT borrower_id, COUNT(*) as requisition_count
+            FROM Requisitions
+            GROUP BY borrower_id
+            """
+            rows = db.execute_query(query)
+            return {row['borrower_id']: row['requisition_count'] for row in rows}
+        except Exception as e:
+            logger.error(f"Failed to get requisition counts: {e}")
+            return {}

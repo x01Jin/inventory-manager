@@ -7,6 +7,7 @@ Uses composition pattern with DatabaseConnection.
 from typing import List, Dict, Optional
 from datetime import date
 from dataclasses import dataclass
+import time
 
 from inventory_app.database.connection import db
 from inventory_app.database.models import Borrower, Requisition, RequisitionItem, Item, Category, Supplier
@@ -96,13 +97,14 @@ class RequisitionsController:
             if not self._validate_requisition_data(borrower_data, requisition_data, items_data):
                 return False
 
-            # Handle borrower (create if new)
+            # Step 1: Handle borrower (create if new)
             borrower = self._get_or_create_borrower(borrower_data)
             if not borrower or not borrower.id:
                 logger.error("Failed to create/retrieve borrower")
                 return False
+            time.sleep(0.5)  # Allow borrower operation to complete
 
-            # Create requisition
+            # Step 2: Create requisition
             requisition = Requisition(
                 borrower_id=borrower.id,
                 date_borrowed=requisition_data['date_borrowed'],
@@ -115,8 +117,9 @@ class RequisitionsController:
             if not requisition.save(editor_name):
                 logger.error("Failed to save requisition")
                 return False
+            time.sleep(0.5)  # Allow requisition save to complete
 
-            # Add items to requisition and update stock
+            # Step 3: Add items to requisition and update stock
             for item_data in items_data:
                 if not requisition.id:
                     logger.error("Requisition ID is None after save")
@@ -131,8 +134,9 @@ class RequisitionsController:
                 if not req_item.save():
                     logger.error(f"Failed to save requisition item: {item_data}")
                     return False
+                time.sleep(0.5)  # Allow requisition item save to complete
 
-                # Record stock movement (consumption)
+                # Step 4: Record stock movement (consumption)
                 self._record_stock_movement(
                     item_data['item_id'],
                     'CONSUMPTION',
@@ -140,6 +144,7 @@ class RequisitionsController:
                     requisition.id,
                     f"Borrowed for activity: {requisition.lab_activity_name}"
                 )
+                time.sleep(0.5)  # Allow stock movement to complete
 
             logger.info(f"Created requisition {requisition.id} for borrower {borrower.name}")
             return True
@@ -198,6 +203,7 @@ class RequisitionsController:
             if not requisition.save(editor_name):
                 logger.error("Failed to save requisition")
                 return False
+            time.sleep(0.5)  # Allow requisition save to complete
 
             # Add items to requisition and update stock
             for item_data in items_data:
@@ -214,6 +220,7 @@ class RequisitionsController:
                 if not req_item.save():
                     logger.error(f"Failed to save requisition item: {item_data}")
                     return False
+                time.sleep(0.5)  # Allow requisition item save to complete
 
                 # Record stock movement (consumption)
                 self._record_stock_movement(
@@ -223,6 +230,7 @@ class RequisitionsController:
                     requisition.id,
                     f"Borrowed for activity: {requisition.lab_activity_name}"
                 )
+                time.sleep(0.5)  # Allow stock movement to complete
 
             logger.info(f"Created requisition {requisition.id} for existing borrower {borrower.name}")
             return True
@@ -344,16 +352,25 @@ class RequisitionsController:
     def get_inventory_items(self) -> List[Dict]:
         """
         Get all inventory items for selection in requisitions.
+        Excludes items that are currently borrowed (have unreturned requisitions).
 
         Returns:
             List of item dictionaries with relevant fields
         """
         try:
             items = Item.get_all()
+
+            # Get IDs of currently borrowed items
+            borrowed_item_ids = self._get_borrowed_item_ids()
+
             result = []
 
             for item in items:
                 if not item.id:
+                    continue
+
+                # Skip items that are currently borrowed
+                if item.id in borrowed_item_ids:
                     continue
 
                 # Get category and supplier names
@@ -362,6 +379,7 @@ class RequisitionsController:
 
                 item_dict = {
                     'id': item.id,
+                    'unique_code': item.unique_code,
                     'name': item.name,
                     'category_name': category_name,
                     'supplier_name': supplier_name,
@@ -382,6 +400,7 @@ class RequisitionsController:
     def search_items(self, search_term: str) -> List[Dict]:
         """
         Search inventory items by name.
+        Excludes items that are currently borrowed (have unreturned requisitions).
 
         Args:
             search_term: Term to search for
@@ -391,10 +410,18 @@ class RequisitionsController:
         """
         try:
             items = Item.search(search_term)
+
+            # Get IDs of currently borrowed items
+            borrowed_item_ids = self._get_borrowed_item_ids()
+
             result = []
 
             for item in items:
                 if not item.id:
+                    continue
+
+                # Skip items that are currently borrowed
+                if item.id in borrowed_item_ids:
                     continue
 
                 category_name = self._get_category_name(item.category_id)
@@ -402,6 +429,7 @@ class RequisitionsController:
 
                 item_dict = {
                     'id': item.id,
+                    'unique_code': item.unique_code,
                     'name': item.name,
                     'category_name': category_name,
                     'supplier_name': supplier_name,
@@ -617,6 +645,32 @@ class RequisitionsController:
         except Exception as e:
             logger.error(f"Failed to get available quantity for item {item_id}: {e}")
             return 0
+
+    def _get_borrowed_item_ids(self) -> set:
+        """
+        Get IDs of items that are currently borrowed (have unreturned requisitions).
+
+        Returns:
+            Set of item IDs that are currently borrowed
+        """
+        try:
+            # Query for items that have requisition items but no corresponding RETURN stock movements
+            query = """
+            SELECT DISTINCT ri.item_id
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON ri.requisition_id = r.id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM Stock_Movements sm
+                WHERE sm.item_id = ri.item_id
+                AND sm.movement_type = 'RETURN'
+                AND sm.source_id = r.id
+            )
+            """
+            rows = db.execute_query(query)
+            return {row['item_id'] for row in rows}
+        except Exception as e:
+            logger.error(f"Failed to get borrowed item IDs: {e}")
+            return set()
 
     def _get_requisition_by_id(self, requisition_id: int) -> Optional[Requisition]:
         """Get a single requisition by ID."""

@@ -1,14 +1,14 @@
 """
 Item selector dialog for choosing items in laboratory requisitions.
-Provides searchable interface for selecting items and quantities.
+Provides searchable interface for selecting items using row highlighting.
 """
 
 from typing import List, Dict, Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QSpinBox, QGroupBox, QMessageBox, QHeaderView,
-    QAbstractItemView
+    QGroupBox, QMessageBox, QHeaderView,
+    QAbstractItemView, QWidget
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -56,9 +56,9 @@ class ItemSelector(QDialog):
         table_layout = QVBoxLayout(table_group)
 
         self.items_table = QTableWidget()
-        self.items_table.setColumnCount(6)
+        self.items_table.setColumnCount(4)
         self.items_table.setHorizontalHeaderLabels([
-            "Item Name", "Category", "Size", "Brand", "Available", "Quantity"
+            "Item Name", "Category", "Size", "Brand"
         ])
 
         # Configure table
@@ -67,39 +67,26 @@ class ItemSelector(QDialog):
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.items_table.setAlternatingRowColors(True)
         self.items_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.items_table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+
+        # Connect selection change signal
+        self.items_table.itemSelectionChanged.connect(self._on_selection_changed)
+
+        # Block signals initially to prevent unwanted updates during setup
+        self.items_table.blockSignals(True)
 
         # Set column widths
-        self.items_table.setColumnWidth(0, 200)  # Item Name
+        self.items_table.setColumnWidth(0, 250)  # Item Name (with LAB code)
         self.items_table.setColumnWidth(1, 120)  # Category
         self.items_table.setColumnWidth(2, 80)   # Size
         self.items_table.setColumnWidth(3, 100)  # Brand
-        self.items_table.setColumnWidth(4, 80)   # Available
-        self.items_table.setColumnWidth(5, 80)   # Quantity
 
         table_layout.addWidget(self.items_table)
         layout.addWidget(table_group)
 
-        # Selected items summary
-        summary_group = QGroupBox("Selected Items")
-        summary_layout = QVBoxLayout(summary_group)
-
-        self.summary_label = QLabel("No items selected")
-        self.summary_label.setStyleSheet("font-weight: bold;")
-        summary_layout.addWidget(self.summary_label)
-
-        layout.addWidget(summary_group)
-
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-
-        self.add_selected_button = QPushButton("➕ Add Selected Item")
-        self.add_selected_button.clicked.connect(self.add_selected_item)
-        button_layout.addWidget(self.add_selected_button)
-
-        self.view_selected_button = QPushButton("📋 View Selected")
-        self.view_selected_button.clicked.connect(self.view_selected_items)
-        button_layout.addWidget(self.view_selected_button)
 
         self.clear_button = QPushButton("🗑️ Clear All")
         self.clear_button.clicked.connect(self.clear_selection)
@@ -112,7 +99,7 @@ class ItemSelector(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         self.done_button = QPushButton("✅ Done")
-        self.done_button.clicked.connect(self.accept)
+        self.done_button.clicked.connect(self.confirm_selection)
         self.done_button.setDefault(True)
         button_layout.addWidget(self.done_button)
 
@@ -128,6 +115,8 @@ class ItemSelector(QDialog):
         try:
             self.all_items = self.controller.get_inventory_items()
             self.populate_table(self.all_items)
+            # Unblock signals after initial setup
+            self.items_table.blockSignals(False)
             logger.info(f"Loaded {len(self.all_items)} inventory items")
         except Exception as e:
             logger.error(f"Failed to load items: {e}")
@@ -142,8 +131,11 @@ class ItemSelector(QDialog):
                 row_position = self.items_table.rowCount()
                 self.items_table.insertRow(row_position)
 
-                # Item Name
-                name_item = QTableWidgetItem(item.get('name', ''))
+                # Item Name with LAB code
+                unique_code = item.get('unique_code', 'NO-CODE')
+                item_name = item.get('name', '')
+                display_name = f"{unique_code}: {item_name}"
+                name_item = QTableWidgetItem(display_name)
                 name_item.setData(Qt.ItemDataRole.UserRole, item.get('id'))
                 self.items_table.setItem(row_position, 0, name_item)
 
@@ -156,26 +148,52 @@ class ItemSelector(QDialog):
                 # Brand
                 self.items_table.setItem(row_position, 3, QTableWidgetItem(item.get('brand') or ''))
 
-                # Available Quantity
-                available = item.get('available_quantity', 0)
-                available_item = QTableWidgetItem(str(available))
-                if available <= 0:
-                    available_item.setBackground(QColor("#F8D7DA"))  # Light red for unavailable
-                elif available <= 5:
-                    available_item.setBackground(QColor("#FFF3CD"))  # Light yellow for low stock
-                self.items_table.setItem(row_position, 4, available_item)
-
-                # Quantity SpinBox
-                quantity_spin = QSpinBox()
-                quantity_spin.setMinimum(0)
-                quantity_spin.setMaximum(available)
-                quantity_spin.setValue(0)
-                self.items_table.setCellWidget(row_position, 5, quantity_spin)
+                # Select row if item is already selected
+                if self._is_item_selected(item.get('id')):
+                    self.items_table.selectRow(row_position)
 
             logger.debug(f"Populated table with {len(items)} items")
 
         except Exception as e:
             logger.error(f"Failed to populate table: {e}")
+
+    def _is_item_selected(self, item_id: Optional[int]) -> bool:
+        """Check if an item is already selected."""
+        if item_id is None:
+            return False
+        return any(item['item_id'] == item_id for item in self.selected_items)
+
+    def _on_selection_changed(self):
+        """Handle table selection changes."""
+        try:
+            # Get currently selected rows
+            selected_rows = set()
+            for item in self.items_table.selectedItems():
+                selected_rows.add(item.row())
+
+            # Update selected_items based on current selection
+            new_selected_items = []
+
+            for row in selected_rows:
+                name_item = self.items_table.item(row, 0)
+                if name_item:
+                    item_id = name_item.data(Qt.ItemDataRole.UserRole)
+                    item_name = name_item.text()
+
+                    if item_id is not None:
+                        selected_item = {
+                            'item_id': item_id,
+                            'name': item_name,
+                            'quantity_borrowed': 1
+                        }
+                        new_selected_items.append(selected_item)
+
+            # Update the selection list
+            self.selected_items = new_selected_items
+            logger.debug(f"Updated selection to {len(self.selected_items)} items")
+
+        except Exception as e:
+            logger.error(f"Failed to handle selection change: {e}")
 
     def filter_items(self):
         """Filter items based on search term."""
@@ -196,92 +214,14 @@ class ItemSelector(QDialog):
             if not filtered_items:
                 filtered_items = self.controller.search_items(search_term)
 
+            # Block signals while populating to prevent unwanted selection updates
+            self.items_table.blockSignals(True)
             self.populate_table(filtered_items)
+            self.items_table.blockSignals(False)
             logger.debug(f"Filtered to {len(filtered_items)} items matching '{search_term}'")
 
         except Exception as e:
             logger.error(f"Failed to filter items: {e}")
-
-    def add_selected_item(self):
-        """Add the currently selected item to the selection."""
-        current_row = self.items_table.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "No Selection", "Please select an item to add.")
-            return
-
-        try:
-            # Get item data
-            name_item = self.items_table.item(current_row, 0)
-            if not name_item:
-                return
-
-            item_id = name_item.data(Qt.ItemDataRole.UserRole)
-            item_name = name_item.text()
-
-            # Get quantity
-            quantity_widget = self.items_table.cellWidget(current_row, 5)
-            if not isinstance(quantity_widget, QSpinBox):
-                return
-
-            quantity = quantity_widget.value()
-            if quantity <= 0:
-                QMessageBox.warning(self, "Invalid Quantity", "Please enter a quantity greater than 0.")
-                return
-
-            # Check if item already selected
-            existing_index = None
-            for i, selected in enumerate(self.selected_items):
-                if selected['item_id'] == item_id:
-                    existing_index = i
-                    break
-
-            if existing_index is not None:
-                # Update existing quantity
-                self.selected_items[existing_index]['quantity_borrowed'] += quantity
-                QMessageBox.information(self, "Updated",
-                                      f"Updated quantity for {item_name} to {self.selected_items[existing_index]['quantity_borrowed']}.")
-            else:
-                # Add new item
-                selected_item = {
-                    'item_id': item_id,
-                    'name': item_name,
-                    'quantity_borrowed': quantity
-                }
-                self.selected_items.append(selected_item)
-                QMessageBox.information(self, "Added", f"Added {item_name} (x{quantity}) to selection.")
-
-            # Update summary
-            self.update_summary()
-            logger.info(f"Added item {item_id} with quantity {quantity}")
-
-        except Exception as e:
-            logger.error(f"Failed to add selected item: {e}")
-            QMessageBox.critical(self, "Error", "Failed to add item to selection.")
-
-    def view_selected_items(self):
-        """Show dialog with currently selected items."""
-        if not self.selected_items:
-            QMessageBox.information(self, "No Items", "No items have been selected yet.")
-            return
-
-        try:
-            # Create summary message
-            summary_lines = []
-            total_items = 0
-
-            for item in self.selected_items:
-                name = item.get('name', 'Unknown')
-                quantity = item.get('quantity_borrowed', 0)
-                summary_lines.append(f"• {name}: {quantity}")
-                total_items += quantity
-
-            summary_text = "\n".join(summary_lines)
-            summary_text += f"\n\nTotal Items: {total_items}"
-
-            QMessageBox.information(self, "Selected Items", summary_text)
-
-        except Exception as e:
-            logger.error(f"Failed to show selected items: {e}")
 
     def clear_selection(self):
         """Clear all selected items."""
@@ -298,27 +238,38 @@ class ItemSelector(QDialog):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.selected_items.clear()
-            self.update_summary()
+            self.items_table.clearSelection()  # Clear table selection
             logger.info("Cleared all selected items")
 
-    def update_summary(self):
-        """Update the summary label with selected items count."""
+    def confirm_selection(self):
+        """Show confirmation dialog with selected items before finalizing."""
+        if not self.selected_items:
+            QMessageBox.warning(self, "No Items Selected", "Please select at least one item before proceeding.")
+            return
+
         try:
-            if not self.selected_items:
-                self.summary_label.setText("No items selected")
-                return
+            # Create summary message
+            summary_lines = []
 
-            total_items = sum(item.get('quantity_borrowed', 0) for item in self.selected_items)
-            item_count = len(self.selected_items)
+            for item in self.selected_items:
+                name = item.get('name', 'Unknown')
+                summary_lines.append(f"• {name}")
 
-            if item_count == 1:
-                self.summary_label.setText(f"1 item selected ({total_items} total units)")
-            else:
-                self.summary_label.setText(f"{item_count} items selected ({total_items} total units)")
+            summary_text = "\n".join(summary_lines)
+
+            reply = QMessageBox.question(
+                self, "Confirm Selection",
+                f"You have selected the following items:\n\n{summary_text}\n\nDo you want to finalize this selection?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                self.accept()
+                logger.info("Selection confirmed and dialog accepted")
 
         except Exception as e:
-            logger.error(f"Failed to update summary: {e}")
-            self.summary_label.setText("Error updating summary")
+            logger.error(f"Failed to confirm selection: {e}")
 
     def get_selected_items(self) -> List[Dict]:
         """Get the list of selected items."""

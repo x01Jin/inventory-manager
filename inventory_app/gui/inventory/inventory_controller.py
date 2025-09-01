@@ -50,7 +50,21 @@ class InventoryController:
                          AND DATE('now') >= DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
                     THEN 'lifecycle'
                     ELSE ''
-                END as alert_status
+                END as alert_status,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM Requisition_Items ri
+                        JOIN Requisitions r ON ri.requisition_id = r.id
+                        WHERE ri.item_id = i.id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM Stock_Movements sm
+                            WHERE sm.item_id = ri.item_id
+                            AND sm.movement_type = 'RETURN'
+                            AND sm.source_id = r.id
+                        )
+                    ) THEN 1
+                    ELSE 0
+                END as is_borrowed
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
@@ -83,7 +97,21 @@ class InventoryController:
                 i.id, i.name, c.name as category_name, i.size, i.brand,
                 s.name as supplier_name, i.other_specifications, i.po_number,
                 i.expiration_date, i.calibration_date, i.is_consumable,
-                i.acquisition_date, i.last_modified
+                i.acquisition_date, i.last_modified,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM Requisition_Items ri
+                        JOIN Requisitions r ON ri.requisition_id = r.id
+                        WHERE ri.item_id = i.id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM Stock_Movements sm
+                            WHERE sm.item_id = ri.item_id
+                            AND sm.movement_type = 'RETURN'
+                            AND sm.source_id = r.id
+                        )
+                    ) THEN 1
+                    ELSE 0
+                END as is_borrowed
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id

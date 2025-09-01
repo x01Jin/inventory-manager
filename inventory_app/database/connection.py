@@ -5,7 +5,7 @@ Handles SQLite database creation, connection, and basic operations.
 
 import sqlite3
 from pathlib import Path
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Union
 from contextlib import contextmanager
 
 from inventory_app.utils.logger import logger
@@ -106,16 +106,17 @@ class DatabaseConnection:
             logger.error(f"Params: {params}")
             raise
 
-    def execute_update(self, query: str, params: tuple = ()) -> int:
+    def execute_update(self, query: str, params: tuple = (), return_last_id: bool = False) -> Union[int, tuple[int, int]]:
         """
         Execute an INSERT, UPDATE, or DELETE query.
 
         Args:
             query: SQL query string
             params: Query parameters
+            return_last_id: If True, also return the last insert rowid
 
         Returns:
-            Number of affected rows
+            Number of affected rows, or (affected_rows, last_insert_id) if return_last_id is True
         """
         try:
             with self.get_connection() as conn:
@@ -123,8 +124,14 @@ class DatabaseConnection:
                 conn.commit()
                 affected_rows = cursor.rowcount
 
-                logger.debug(f"Executed update: {query[:50]}... Affected {affected_rows} rows")
-                return affected_rows
+                if return_last_id:
+                    last_id_cursor = conn.execute("SELECT last_insert_rowid()")
+                    last_insert_id = last_id_cursor.fetchone()[0]
+                    logger.debug(f"Executed update: {query[:50]}... Affected {affected_rows} rows, Last ID: {last_insert_id}")
+                    return affected_rows, last_insert_id
+                else:
+                    logger.debug(f"Executed update: {query[:50]}... Affected {affected_rows} rows")
+                    return affected_rows
 
         except Exception as e:
             logger.error(f"Update execution failed: {e}")

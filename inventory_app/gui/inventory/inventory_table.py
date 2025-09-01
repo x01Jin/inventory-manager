@@ -49,7 +49,7 @@ class InventoryTable(QTableWidget):
 
     # Column definitions
     COLUMNS = [
-        "Name", "Category", "Size", "Brand", "Supplier",
+        "Status", "Name", "Category", "Size", "Brand", "Supplier",
         "Expiration Date", "Calibration Date", "Acquisition Date",
         "Consumable", "Last Modified", "Alert Status"
     ]
@@ -78,17 +78,18 @@ class InventoryTable(QTableWidget):
             header.setStretchLastSection(True)
 
             # Set column widths
-            self.setColumnWidth(0, 200)  # Name
-            self.setColumnWidth(1, 120)  # Category
-            self.setColumnWidth(2, 80)   # Size
-            self.setColumnWidth(3, 100)  # Brand
-            self.setColumnWidth(4, 120)  # Supplier
-            self.setColumnWidth(5, 100)  # Expiration Date
-            self.setColumnWidth(6, 100)  # Calibration Date
-            self.setColumnWidth(7, 100)  # Acquisition Date
-            self.setColumnWidth(8, 80)   # Consumable
-            self.setColumnWidth(9, 120)  # Last Modified
-            self.setColumnWidth(10, 100) # Alert Status
+            self.setColumnWidth(0, 100)  # Status
+            self.setColumnWidth(1, 200)  # Name
+            self.setColumnWidth(2, 120)  # Category
+            self.setColumnWidth(3, 80)   # Size
+            self.setColumnWidth(4, 100)  # Brand
+            self.setColumnWidth(5, 120)  # Supplier
+            self.setColumnWidth(6, 100)  # Expiration Date
+            self.setColumnWidth(7, 100)  # Calibration Date
+            self.setColumnWidth(8, 100)  # Acquisition Date
+            self.setColumnWidth(9, 80)   # Consumable
+            self.setColumnWidth(10, 120) # Last Modified
+            self.setColumnWidth(11, 100) # Alert Status
 
         # Configure vertical header
         v_header = self.verticalHeader()
@@ -153,30 +154,55 @@ class InventoryTable(QTableWidget):
             last_modified = self.format_datetime(item.get('last_modified'))
             alert_status = item.get('alert_status', '')
 
+            # Determine status (borrowed or available)
+            status = "Borrowed" if item.get('is_borrowed', False) else "Available"
+
             # Create table items
-            self.setItem(row, 0, QTableWidgetItem(name))  # Name
-            self.setItem(row, 1, QTableWidgetItem(category_name))  # Category
-            self.setItem(row, 2, QTableWidgetItem(size or "N/A"))  # Size
-            self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))  # Brand
-            self.setItem(row, 4, QTableWidgetItem(supplier_name or "N/A"))  # Supplier
-            self.setItem(row, 5, QTableWidgetItem(expiration_date))  # Expiration Date
-            self.setItem(row, 6, QTableWidgetItem(calibration_date))  # Calibration Date
-            self.setItem(row, 7, QTableWidgetItem(acquisition_date))  # Acquisition Date
-            self.setItem(row, 8, QTableWidgetItem(is_consumable))  # Consumable
-            self.setItem(row, 9, QTableWidgetItem(last_modified))  # Last Modified
-            self.setItem(row, 10, QTableWidgetItem(alert_status or "None"))  # Alert Status
+            status_item = QTableWidgetItem(status)
+            self.setItem(row, 0, status_item)  # Status
+
+            name_item = QTableWidgetItem(name)
+            self.setItem(row, 1, name_item)  # Name
+            self.setItem(row, 2, QTableWidgetItem(category_name))  # Category
+            self.setItem(row, 3, QTableWidgetItem(size or "N/A"))  # Size
+            self.setItem(row, 4, QTableWidgetItem(brand or "N/A"))  # Brand
+            self.setItem(row, 5, QTableWidgetItem(supplier_name or "N/A"))  # Supplier
+            self.setItem(row, 6, QTableWidgetItem(expiration_date))  # Expiration Date
+            self.setItem(row, 7, QTableWidgetItem(calibration_date))  # Calibration Date
+            self.setItem(row, 8, QTableWidgetItem(acquisition_date))  # Acquisition Date
+            self.setItem(row, 9, QTableWidgetItem(is_consumable))  # Consumable
+            self.setItem(row, 10, QTableWidgetItem(last_modified))  # Last Modified
+            self.setItem(row, 11, QTableWidgetItem(alert_status or "None"))  # Alert Status
+
+            # Apply status styling
+            self.apply_status_styling(row, status)
 
             # Apply alert styling
             self.apply_alert_styling(row, alert_status)
 
             # Store item ID in row for later retrieval
             if item_id is not None:
-                name_item = self.item(row, 0)
-                if name_item:
-                    name_item.setData(Qt.ItemDataRole.UserRole, item_id)
+                name_item.setData(Qt.ItemDataRole.UserRole, item_id)
 
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")
+
+    def apply_status_styling(self, row: int, status: str):
+        """Apply styling based on item status."""
+        if status == "Borrowed":
+            # Set background color for borrowed items
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if item:
+                    item.setBackground(QColor(DarkTheme.WARNING_COLOR).lighter(180))
+                    if col == 0:  # Status column
+                        item.setForeground(QColor(DarkTheme.WARNING_COLOR))
+        elif status == "Available":
+            # Set background color for available items
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if item and col == 0:  # Status column
+                    item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
 
     def apply_alert_styling(self, row: int, alert_status: str):
         """Apply styling based on alert status."""
@@ -235,7 +261,7 @@ class InventoryTable(QTableWidget):
         """Get the ID of the currently selected item."""
         current_row = self.currentRow()
         if current_row >= 0:
-            item = self.item(current_row, 0)
+            item = self.item(current_row, 1)  # Name is in column 1
             if item:
                 return item.data(Qt.ItemDataRole.UserRole)
         return None

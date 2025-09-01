@@ -30,8 +30,9 @@ class BorrowerTable(QTableWidget):
         super().__init__(parent)
 
         # Configure table properties
-        self.setColumnCount(4)
+        self.setColumnCount(5)
         self.setHorizontalHeaderLabels([
+            "Requisitions",
             "Name",
             "Affiliation",
             "Group",
@@ -58,10 +59,11 @@ class BorrowerTable(QTableWidget):
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
 
         # Set column widths
-        self.setColumnWidth(0, 200)  # Name
-        self.setColumnWidth(1, 150)  # Affiliation
-        self.setColumnWidth(2, 150)  # Group
-        self.setColumnWidth(3, 100)  # Created
+        self.setColumnWidth(0, 100)  # Requisitions
+        self.setColumnWidth(1, 200)  # Name
+        self.setColumnWidth(2, 150)  # Affiliation
+        self.setColumnWidth(3, 150)  # Group
+        self.setColumnWidth(4, 100)  # Created
 
         # Connect signals
         self.itemSelectionChanged.connect(self._on_selection_changed)
@@ -83,20 +85,24 @@ class BorrowerTable(QTableWidget):
                 row_position = self.rowCount()
                 self.insertRow(row_position)
 
+                # Requisitions count
+                requisitions_item = QTableWidgetItem(str(row_data.requisitions_count))
+                self.setItem(row_position, 0, requisitions_item)
+
                 # Name
                 name_item = QTableWidgetItem(row_data.name)
                 name_item.setData(Qt.ItemDataRole.UserRole, row_data.id)  # Store ID for selection
-                self.setItem(row_position, 0, name_item)
+                self.setItem(row_position, 1, name_item)
 
                 # Affiliation
-                self.setItem(row_position, 1, QTableWidgetItem(row_data.affiliation))
+                self.setItem(row_position, 2, QTableWidgetItem(row_data.affiliation))
 
                 # Group
-                self.setItem(row_position, 2, QTableWidgetItem(row_data.group_name))
+                self.setItem(row_position, 3, QTableWidgetItem(row_data.group_name))
 
                 # Created date
                 created_str = row_data.created_date.strftime("%Y-%m-%d") if row_data.created_date else ""
-                self.setItem(row_position, 3, QTableWidgetItem(created_str))
+                self.setItem(row_position, 4, QTableWidgetItem(created_str))
 
             logger.info(f"Populated table with {len(borrowers)} borrowers")
 
@@ -113,7 +119,7 @@ class BorrowerTable(QTableWidget):
         """
         current_row = self.currentRow()
         if current_row >= 0:
-            name_item = self.item(current_row, 0)  # Name column has the ID
+            name_item = self.item(current_row, 1)  # Name column has the ID (column 1)
             if name_item:
                 return name_item.data(Qt.ItemDataRole.UserRole)
         return None
@@ -129,7 +135,7 @@ class BorrowerTable(QTableWidget):
             bool: True if found and selected, False otherwise
         """
         for row in range(self.rowCount()):
-            name_item = self.item(row, 0)
+            name_item = self.item(row, 1)  # Name is in column 1
             if name_item and name_item.data(Qt.ItemDataRole.UserRole) == borrower_id:
                 self.selectRow(row)
                 return True
@@ -149,12 +155,14 @@ class BorrowerTable(QTableWidget):
         data = []
         for row in range(self.rowCount()):
             # Get items for each column
-            name_item = self.item(row, 0)
-            affiliation_item = self.item(row, 1)
-            group_item = self.item(row, 2)
-            created_item = self.item(row, 3)
+            requisitions_item = self.item(row, 0)
+            name_item = self.item(row, 1)
+            affiliation_item = self.item(row, 2)
+            group_item = self.item(row, 3)
+            created_item = self.item(row, 4)
 
             row_data = {
+                'requisitions': requisitions_item.text() if requisitions_item else "",
                 'name': name_item.text() if name_item else "",
                 'affiliation': affiliation_item.text() if affiliation_item else "",
                 'group': group_item.text() if group_item else "",
@@ -181,6 +189,7 @@ class BorrowerTable(QTableWidget):
             self.resizeColumnToContents(column)
 
         # Ensure some columns have reasonable minimum widths
-        self.setColumnWidth(0, max(self.columnWidth(0), 200))  # Name
-        self.setColumnWidth(1, max(self.columnWidth(1), 150))  # Affiliation
-        self.setColumnWidth(2, max(self.columnWidth(2), 150))  # Group
+        self.setColumnWidth(0, max(self.columnWidth(0), 100))  # Requisitions
+        self.setColumnWidth(1, max(self.columnWidth(1), 200))  # Name
+        self.setColumnWidth(2, max(self.columnWidth(2), 150))  # Affiliation
+        self.setColumnWidth(3, max(self.columnWidth(3), 150))  # Group

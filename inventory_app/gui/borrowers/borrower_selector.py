@@ -7,7 +7,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
-    QGroupBox, QMessageBox, QHeaderView, QAbstractItemView
+    QGroupBox, QMessageBox, QHeaderView, QAbstractItemView, QCheckBox
 )
 from PyQt6.QtCore import Qt
 
@@ -49,14 +49,22 @@ class BorrowerSelector(QDialog):
 
         layout.addWidget(search_group)
 
+        # Filter section
+        filter_layout = QHBoxLayout()
+        self.hide_zero_requisitions = QCheckBox("Hide borrowers with no requisitions")
+        self.hide_zero_requisitions.stateChanged.connect(self.filter_borrowers)
+        filter_layout.addWidget(self.hide_zero_requisitions)
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
+
         # Borrowers table
         table_group = QGroupBox("Available Borrowers")
         table_layout = QVBoxLayout(table_group)
 
         self.borrowers_table = QTableWidget()
-        self.borrowers_table.setColumnCount(3)
+        self.borrowers_table.setColumnCount(4)
         self.borrowers_table.setHorizontalHeaderLabels([
-            "Name", "Affiliation", "Group"
+            "Requisitions", "Name", "Affiliation", "Group"
         ])
 
         # Configure table
@@ -69,9 +77,10 @@ class BorrowerSelector(QDialog):
         self.borrowers_table.itemSelectionChanged.connect(self.on_row_selected)
 
         # Set column widths
-        self.borrowers_table.setColumnWidth(0, 200)  # Name
-        self.borrowers_table.setColumnWidth(1, 150)  # Affiliation
-        self.borrowers_table.setColumnWidth(2, 150)  # Group
+        self.borrowers_table.setColumnWidth(0, 100)  # Requisitions
+        self.borrowers_table.setColumnWidth(1, 200)  # Name
+        self.borrowers_table.setColumnWidth(2, 150)  # Affiliation
+        self.borrowers_table.setColumnWidth(3, 150)  # Group
 
         table_layout.addWidget(self.borrowers_table)
         layout.addWidget(table_group)
@@ -127,20 +136,28 @@ class BorrowerSelector(QDialog):
         try:
             self.borrowers_table.setRowCount(0)
 
+            # Apply filter for zero requisitions if checkbox is checked
+            if self.hide_zero_requisitions.isChecked():
+                borrowers = [b for b in borrowers if b.requisitions_count > 0]
+
             for borrower in borrowers:
                 row_position = self.borrowers_table.rowCount()
                 self.borrowers_table.insertRow(row_position)
 
+                # Requisitions count
+                requisitions_item = QTableWidgetItem(str(borrower.requisitions_count))
+                self.borrowers_table.setItem(row_position, 0, requisitions_item)
+
                 # Name
                 name_item = QTableWidgetItem(borrower.name)
                 name_item.setData(Qt.ItemDataRole.UserRole, borrower.id)
-                self.borrowers_table.setItem(row_position, 0, name_item)
+                self.borrowers_table.setItem(row_position, 1, name_item)
 
                 # Affiliation
-                self.borrowers_table.setItem(row_position, 1, QTableWidgetItem(borrower.affiliation))
+                self.borrowers_table.setItem(row_position, 2, QTableWidgetItem(borrower.affiliation))
 
                 # Group
-                self.borrowers_table.setItem(row_position, 2, QTableWidgetItem(borrower.group_name))
+                self.borrowers_table.setItem(row_position, 3, QTableWidgetItem(borrower.group_name))
 
             logger.debug(f"Populated table with {len(borrowers)} borrowers")
 
@@ -161,7 +178,7 @@ class BorrowerSelector(QDialog):
 
                 # Highlight selected row
                 for row in range(self.borrowers_table.rowCount()):
-                    item = self.borrowers_table.item(row, 0)
+                    item = self.borrowers_table.item(row, 1)  # Name is in column 1
                     if item and item.data(Qt.ItemDataRole.UserRole) == borrower_id:
                         self.borrowers_table.selectRow(row)
                         break

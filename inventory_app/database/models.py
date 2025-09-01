@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
+from inventory_app.utils.code_generator import generate_unique_lab_code
 
 
 @dataclass
@@ -302,6 +303,7 @@ class Brand:
 class Item:
     """Represents an inventory item."""
     id: Optional[int] = None
+    unique_code: Optional[str] = None
     name: str = ""
     category_id: int = 0
     size: Optional[str] = None
@@ -330,13 +332,13 @@ class Item:
 
                 # Update item
                 query = """
-                UPDATE Items SET name = ?, category_id = ?, size = ?, brand = ?,
+                UPDATE Items SET unique_code = ?, name = ?, category_id = ?, size = ?, brand = ?,
                 other_specifications = ?, po_number = ?, supplier_id = ?,
                 expiration_date = ?, calibration_date = ?, is_consumable = ?,
                 acquisition_date = ?, last_modified = ? WHERE id = ?
                 """
                 params = (
-                    self.name, self.category_id, self.size, self.brand,
+                    self.unique_code, self.name, self.category_id, self.size, self.brand,
                     self.other_specifications, self.po_number, self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
                     self.calibration_date.isoformat() if self.calibration_date else None,
@@ -355,14 +357,19 @@ class Item:
                     editor_name
                 )
             else:
+                # Generate unique code if not provided
+                if not self.unique_code:
+                    self.unique_code = generate_unique_lab_code()
+                    logger.debug(f"Generated unique code {self.unique_code} for new item")
+
                 # Insert new
                 query = """
-                INSERT INTO Items (name, category_id, size, brand, other_specifications,
+                INSERT INTO Items (unique_code, name, category_id, size, brand, other_specifications,
                 po_number, supplier_id, expiration_date, calibration_date, is_consumable,
-                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 params = (
-                    self.name, self.category_id, self.size, self.brand,
+                    self.unique_code, self.name, self.category_id, self.size, self.brand,
                     self.other_specifications, self.po_number, self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
                     self.calibration_date.isoformat() if self.calibration_date else None,
@@ -377,7 +384,7 @@ class Item:
                 # Log activity
                 activity_logger.log_activity(
                     activity_logger.ITEM_ADDED,
-                    f"Added new item: {self.name}",
+                    f"Added new item: {self.name} (Code: {self.unique_code})",
                     self.id,
                     "item",
                     editor_name
@@ -622,15 +629,19 @@ class Requisition:
                 INSERT INTO Requisitions (borrower_id, date_borrowed, lab_activity_name,
                 lab_activity_date, num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?)
                 """
-                db.execute_update(query, (
+                result = db.execute_update(query, (
                     self.borrower_id,
                     self.date_borrowed.isoformat(),
                     self.lab_activity_name,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
                     self.num_groups
-                ))
-                self.id = db.get_last_insert_id()
+                ), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    # Fallback to separate call (shouldn't happen with return_last_id=True)
+                    self.id = db.get_last_insert_id()
 
             return True
         except Exception as e:
