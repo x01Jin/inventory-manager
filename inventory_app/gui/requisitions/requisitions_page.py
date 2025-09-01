@@ -14,7 +14,7 @@ from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
 from inventory_app.gui.borrowers.borrower_selector import BorrowerSelector
 from inventory_app.gui.requisitions.item_selector import ItemSelector
-from inventory_app.gui.borrowers.borrower_editor import BorrowerEditor
+from inventory_app.gui.requisitions.item_return import ItemReturnDialog
 from inventory_app.utils.logger import logger
 
 
@@ -328,10 +328,21 @@ class RequisitionsPage(QWidget):
             return
 
         try:
-            # For now, show a placeholder dialog
-            # TODO: Implement item return dialog
-            QMessageBox.information(self, "Coming Soon",
-                                  "Item return dialog will be implemented next.")
+            logger.info(f"Opening return dialog for requisition {requisition_id}")
+
+            # Open the return dialog
+            return_dialog = ItemReturnDialog(self, requisition_id)
+            return_dialog.return_completed.connect(self._on_return_completed)
+
+            # Show dialog
+            result = return_dialog.exec()
+
+            if result == return_dialog.DialogCode.Accepted:
+                logger.info(f"Return dialog completed successfully for requisition {requisition_id}")
+                # Dialog already handled success message and signal emission
+            else:
+                logger.debug(f"Return dialog cancelled for requisition {requisition_id}")
+
         except Exception as e:
             logger.error(f"Failed to return items for requisition {requisition_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to return items: {str(e)}")
@@ -389,6 +400,12 @@ class RequisitionsPage(QWidget):
     def _on_requisition_double_clicked(self, requisition_id: int):
         """Handle double-click on requisition (edit action)."""
         self.edit_selected_requisition()
+
+    def _on_return_completed(self):
+        """Handle successful return completion."""
+        logger.info("Return completed, refreshing data")
+        self.refresh_data()
+        self.data_changed.emit()
 
     def _on_filter_changed(self):
         """Handle any filter change - apply filters and refresh table."""

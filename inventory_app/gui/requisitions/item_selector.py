@@ -8,10 +8,9 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QGroupBox, QMessageBox, QHeaderView,
-    QAbstractItemView, QWidget
+    QAbstractItemView
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
 
 from inventory_app.gui.requisitions.requisitions_controller import RequisitionsController
 from inventory_app.utils.logger import logger

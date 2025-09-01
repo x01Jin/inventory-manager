@@ -5,7 +5,7 @@ Provides complete CRUD operations for borrowers with dedicated interface.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QMessageBox, QInputDialog, QLineEdit
+    QPushButton, QGroupBox, QMessageBox, QLineEdit
 )
 from PyQt6.QtCore import pyqtSignal
 

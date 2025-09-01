@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import time
 
 from inventory_app.database.connection import db
-from inventory_app.database.models import Borrower, Requisition, RequisitionItem, Item, Category, Supplier
+from inventory_app.database.models import Borrower, Requisition, RequisitionItem
 from inventory_app.services import ItemService, StockMovementService, ValidationService
 from inventory_app.utils.logger import logger
 
@@ -481,14 +481,51 @@ class RequisitionsController:
             logger.error(f"Failed to clear requisition items: {e}")
 
     def _determine_requisition_status(self, requisition: Requisition, items: List[Dict]) -> str:
-        """Determine the status of a requisition."""
-        # Check if all items have been returned
-        # This is a simplified check - in practice, you'd track returns more precisely
-        current_date = date.today()
+        """Determine the status of a requisition based on return records."""
+        try:
+            # Check if requisition ID exists
+            if not requisition.id:
+                logger.warning("Requisition ID is None, cannot determine status")
+                return "Active"
 
-        if requisition.lab_activity_date < current_date:
-            # Activity is in the past, assume items returned
-            return "Returned"
-        else:
-            # Activity is upcoming or today
-            return "Active"
+            # Check if all items in the requisition have been returned
+            all_returned = True
+            current_date = date.today()
+
+            for item in items:
+                item_id = item['item_id']
+                borrowed_qty = item['quantity_borrowed']
+
+                # Get total returned quantity for this item in this requisition
+                returned_qty = self._get_returned_quantity_for_item(item_id, requisition.id)
+
+                if returned_qty < borrowed_qty:
+                    all_returned = False
+                    break
+
+            if all_returned:
+                return "Returned"
+            elif requisition.lab_activity_date < current_date:
+                # Past due date and not fully returned
+                return "Overdue"
+            else:
+                # Not past due and not fully returned
+                return "Active"
+
+        except Exception as e:
+            logger.error(f"Failed to determine requisition status: {e}")
+            return "Active"  # Default fallback
+
+    def _get_returned_quantity_for_item(self, item_id: int, requisition_id: int) -> int:
+        """Get the total quantity returned for a specific item in a requisition."""
+        try:
+            query = """
+            SELECT COALESCE(SUM(quantity), 0) as returned_qty
+            FROM Stock_Movements
+            WHERE item_id = ? AND source_id = ? AND movement_type = 'RETURN'
+            """
+            rows = db.execute_query(query, (item_id, requisition_id))
+            return rows[0]['returned_qty'] if rows else 0
+        except Exception as e:
+            logger.error(f"Failed to get returned quantity for item {item_id}: {e}")
+            return 0
