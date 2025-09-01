@@ -25,8 +25,6 @@ def initialize_laboratory_database():
             logger.info("Creating new laboratory database...")
             if db.create_database():
                 logger.info("✅ Database schema created successfully")
-                seed_laboratory_data()
-                logger.info("✅ Laboratory data seeded successfully")
             else:
                 logger.error("❌ Failed to create database")
                 return False
@@ -38,21 +36,6 @@ def initialize_laboratory_database():
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         return False
-
-
-def seed_laboratory_data():
-    """Seed database with initial laboratory data."""
-    try:
-        logger.info("Seeding laboratory inventory data...")
-
-        # Category types are already seeded in schema.sql
-        # Lifecycle rules are already seeded in schema.sql
-        # Users can now add their own categories through the settings interface
-
-        logger.info("Laboratory data seeding complete - using schema defaults")
-
-    except Exception as e:
-        logger.error(f"Failed to seed laboratory data: {e}")
 
 
 def verify_components():

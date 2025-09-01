@@ -15,6 +15,7 @@ from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilt
 from inventory_app.gui.borrowers.borrower_selector import BorrowerSelector
 from inventory_app.gui.requisitions.item_selector import ItemSelector
 from inventory_app.gui.requisitions.item_return import ItemReturnDialog
+from inventory_app.gui.requisitions.requisition_details_dialog import RequisitionDetailsDialog
 from inventory_app.utils.logger import logger
 
 
@@ -200,16 +201,20 @@ class RequisitionsPage(QWidget):
 
             logger.info(f"Selected {len(selected_items)} items for requisition")
 
-            # Step 4: Gather additional requisition details
-            # For now, use basic defaults - in full implementation, this would be another dialog
+            # Step 4: Gather additional requisition details using dialog
+            accepted, activity_data = RequisitionDetailsDialog.get_details(self)
+            if not accepted or activity_data is None:
+                logger.debug("Activity details cancelled")
+                return
+
             from datetime import date
             requisition_data = {
                 'borrower_id': borrower_id,
                 'date_borrowed': date.today(),
-                'lab_activity_name': "General Laboratory Activity",  # TODO: Make this configurable
-                'lab_activity_date': date.today(),  # TODO: Make this configurable
-                'num_students': None,  # TODO: Make this configurable
-                'num_groups': None    # TODO: Make this configurable
+                'lab_activity_name': activity_data['lab_activity_name'],
+                'lab_activity_date': activity_data['lab_activity_date'],
+                'num_students': activity_data['num_students'],
+                'num_groups': activity_data['num_groups']
             }
 
             # Step 5: Get editor name (Spec #14)
@@ -291,14 +296,27 @@ class RequisitionsPage(QWidget):
                 QMessageBox.critical(self, "Error", "Invalid borrower information.")
                 return
 
-            # Prepare requisition data (unchanged)
-            requisition_data = {
-                'borrower_id': borrower_id,
-                'date_borrowed': requisition_summary.requisition.date_borrowed,
-                'lab_activity_name': requisition_summary.requisition.lab_activity_name,
+            # Step 5: Allow editing of activity details
+            current_activity_data = {
+                'lab_activity_name': requisition_summary.requisition.lab_activity_name or "",
                 'lab_activity_date': requisition_summary.requisition.lab_activity_date,
                 'num_students': requisition_summary.requisition.num_students,
                 'num_groups': requisition_summary.requisition.num_groups
+            }
+
+            accepted, activity_data = RequisitionDetailsDialog.get_details(self, current_activity_data)
+            if not accepted or activity_data is None:
+                logger.debug("Activity details editing cancelled")
+                return
+
+            # Prepare requisition data with updated activity information
+            requisition_data = {
+                'borrower_id': borrower_id,
+                'date_borrowed': requisition_summary.requisition.date_borrowed,
+                'lab_activity_name': activity_data['lab_activity_name'],
+                'lab_activity_date': activity_data['lab_activity_date'],
+                'num_students': activity_data['num_students'],
+                'num_groups': activity_data['num_groups']
             }
 
             # Update the requisition with new items
@@ -307,14 +325,14 @@ class RequisitionsPage(QWidget):
             )
 
             if success:
-                logger.info(f"Requisition {requisition_id} items updated successfully")
+                logger.info(f"Requisition {requisition_id} updated successfully")
                 QMessageBox.information(self, "Success",
-                                      "Requisition items updated successfully!\n\n"
-                                      "The borrower information remains unchanged.")
+                                      "Requisition updated successfully!\n\n"
+                                      "Activity details and items have been updated.")
                 self.refresh_data()
                 self.data_changed.emit()
             else:
-                QMessageBox.critical(self, "Error", "Failed to update requisition items.")
+                QMessageBox.critical(self, "Error", "Failed to update requisition.")
 
         except Exception as e:
             logger.error(f"Failed to edit requisition {requisition_id}: {e}")
