@@ -12,10 +12,7 @@ from PyQt6.QtCore import pyqtSignal
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
 from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
-from inventory_app.gui.borrowers.borrower_selector import BorrowerSelector
-from inventory_app.gui.requisitions.item_selector import ItemSelector
-from inventory_app.gui.requisitions.item_return import ItemReturnDialog
-from inventory_app.gui.requisitions.requisition_details_dialog import RequisitionDetailsDialog
+from inventory_app.gui.requisitions.new_requisition import NewRequisitionDialog
 from inventory_app.utils.logger import logger
 
 
@@ -73,18 +70,18 @@ class RequisitionsPage(QWidget):
         action_layout.setSpacing(10)
 
         self.add_button = QPushButton("➕ New Requisition")
-        self.add_button.clicked.connect(self.add_requisition)
+        self.add_button.clicked.connect(self.new_requisition)
 
         self.edit_button = QPushButton("✏️ Edit Requisition")
-        self.edit_button.clicked.connect(self.edit_selected_requisition)
+        self.edit_button.clicked.connect(self.edit_requisition)
         self.edit_button.setEnabled(False)
 
         self.return_button = QPushButton("↩️ Return Items")
-        self.return_button.clicked.connect(self.return_selected_items)
+        self.return_button.clicked.connect(self.return_items)
         self.return_button.setEnabled(False)
 
         self.delete_button = QPushButton("🗑️ Delete Requisition")
-        self.delete_button.clicked.connect(self.delete_selected_requisition)
+        self.delete_button.clicked.connect(self.delete_requisition)
         self.delete_button.setEnabled(False)
 
         action_layout.addWidget(self.add_button)
@@ -112,10 +109,6 @@ class RequisitionsPage(QWidget):
 
     def _setup_connections(self):
         """Setup signal connections between components."""
-        # Table signals
-        self.table.requisition_selected.connect(self._on_requisition_selected)
-        self.table.requisition_double_clicked.connect(self._on_requisition_double_clicked)
-
         # Filter signals - connect to both model and refresh
         self.filters.search_changed.connect(self._on_filter_changed)
         self.filters.borrower_filter_changed.connect(self._on_filter_changed)
@@ -165,211 +158,52 @@ class RequisitionsPage(QWidget):
             logger.error(f"Failed to refresh requisition data: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load requisition data: {str(e)}")
 
-    def add_requisition(self):
-        """Add a new requisition."""
+    def new_requisition(self):
+        """Open dialog to create a new requisition."""
         try:
-            # Step 1: Check if borrowers exist
-            borrowers = self.model.controller.get_borrowers()
-            if not borrowers:
-                QMessageBox.information(self, "No Borrowers Available",
-                                      "There are no registered borrowers in the system.\n\n"
-                                      "Please go to the Borrowers page to add borrowers first, "
-                                      "then return here to create requisitions.")
-                logger.info("Cannot create requisition: no borrowers available")
-                return
+            # Create the new requisition dialog
+            dialog = NewRequisitionDialog(parent=self)
 
-            # Step 2: Select borrower
-            borrower_id = BorrowerSelector.select_borrower(self)
-            if borrower_id is None:
-                logger.debug("Borrower selection cancelled")
-                return
+            # Connect signal to refresh data when requisition is created
+            dialog.requisition_created.connect(self._on_requisition_created)
 
-            logger.info(f"Borrower {borrower_id} selected successfully")
+            # Show the dialog
+            dialog.exec()
 
-            # Step 3: Select items for the requisition
-            item_dialog = ItemSelector(self)
-            item_result = item_dialog.exec()
+        except Exception as e:
+            logger.error(f"Failed to open new requisition dialog: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open new requisition dialog: {str(e)}")
 
-            if item_result != ItemSelector.DialogCode.Accepted:
-                logger.debug("Item selection cancelled")
-                return
+    def _on_requisition_created(self, requisition_id: int):
+        """Handle successful requisition creation."""
+        try:
+            logger.info(f"New requisition created with ID: {requisition_id}")
 
-            selected_items = item_dialog.get_selected_items()
-            if not selected_items:
-                QMessageBox.warning(self, "No Items", "Please select at least one item for the requisition.")
-                return
+            # Refresh the data to show the new requisition
+            self.refresh_data()
 
-            logger.info(f"Selected {len(selected_items)} items for requisition")
+            # Emit data changed signal for other parts of the application
+            self.data_changed.emit()
 
-            # Step 4: Gather additional requisition details using dialog
-            accepted, activity_data = RequisitionDetailsDialog.get_details(self)
-            if not accepted or activity_data is None:
-                logger.debug("Activity details cancelled")
-                return
-
-            from datetime import date
-            requisition_data = {
-                'borrower_id': borrower_id,
-                'date_borrowed': date.today(),
-                'lab_activity_name': activity_data['lab_activity_name'],
-                'lab_activity_date': activity_data['lab_activity_date'],
-                'num_students': activity_data['num_students'],
-                'num_groups': activity_data['num_groups']
-            }
-
-            # Step 5: Get editor name (Spec #14)
-            editor_name, ok = QInputDialog.getText(self, "Editor Information",
-                                                  "Enter your name/initials (required):")
-            if not ok or not editor_name.strip():
-                QMessageBox.warning(self, "Required", "Editor name is required.")
-                return
-
-            # Step 6: Create the complete requisition
-            success = self.model.controller.create_requisition_with_existing_borrower(
-                requisition_data, selected_items, editor_name.strip()
+            # Show success message
+            QMessageBox.information(
+                self, "Success",
+                f"New requisition created successfully!\nRequisition ID: {requisition_id}"
             )
 
-            if success:
-                logger.info("Complete requisition created successfully")
-                QMessageBox.information(self, "Success",
-                                      "Requisition created successfully!\n\n"
-                                      "Borrower and items have been recorded in the system.")
-                self.refresh_data()
-                self.data_changed.emit()
-            else:
-                QMessageBox.critical(self, "Error", "Failed to create requisition.")
-
         except Exception as e:
-            logger.error(f"Failed to add requisition: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to add requisition: {str(e)}")
+            logger.error(f"Failed to handle requisition creation: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to refresh data after creating requisition: {str(e)}")
 
-    def edit_selected_requisition(self):
-        """Edit the items in the currently selected requisition."""
-        requisition_id = self.table.get_selected_requisition_id()
-        if not requisition_id:
-            QMessageBox.warning(self, "No Selection", "Please select a requisition to edit.")
-            return
+    def edit_requisition(self):
+        """Open dialog to edit the currently selected requisition."""
+        pass
 
-        try:
-            # Get the requisition summary to access current items
-            requisition_summary = self.model.get_requisition_by_id(requisition_id)
-            if not requisition_summary:
-                QMessageBox.warning(self, "Error", "Could not find requisition details.")
-                return
+    def return_items(self):
+        """Open dialog to process item returns for the selected requisition."""
+        pass
 
-            # Get current batches for the borrower in this requisition
-            current_batches = self.model.controller.get_current_borrower_batches(requisition_id)
-
-            # Format current batches for ItemSelector (pre-selected items)
-            current_items = []
-            for batch in current_batches:
-                current_items.append({
-                    'batch_id': batch['batch_id'],
-                    'item_id': batch['item_id'],
-                    'name': batch['batch_display_name'],
-                    'quantity_borrowed': batch['quantity_borrowed']
-                })
-
-            logger.info(f"Pre-selecting {len(current_items)} batches for editing")
-
-            # Open item selector with current items pre-selected
-            item_dialog = ItemSelector(self, current_items, requisition_id)
-            item_result = item_dialog.exec()
-
-            if item_result != ItemSelector.DialogCode.Accepted:
-                logger.debug("Item editing cancelled")
-                return
-
-            selected_items = item_dialog.get_selected_items()
-            if not selected_items:
-                QMessageBox.warning(self, "No Items", "Please select at least one item for the requisition.")
-                return
-
-            logger.info(f"Selected {len(selected_items)} items for requisition update")
-
-            # Get editor name (Spec #14)
-            editor_name, ok = QInputDialog.getText(self, "Editor Information",
-                                                  "Enter your name/initials (required):")
-            if not ok or not editor_name.strip():
-                QMessageBox.warning(self, "Required", "Editor name is required.")
-                return
-
-            # Use existing borrower_id (borrower changes should be handled via BorrowerEditor)
-            borrower_id = requisition_summary.borrower.id
-            if not borrower_id:
-                QMessageBox.critical(self, "Error", "Invalid borrower information.")
-                return
-
-            # Step 5: Allow editing of activity details
-            current_activity_data = {
-                'lab_activity_name': requisition_summary.requisition.lab_activity_name or "",
-                'lab_activity_date': requisition_summary.requisition.lab_activity_date,
-                'num_students': requisition_summary.requisition.num_students,
-                'num_groups': requisition_summary.requisition.num_groups
-            }
-
-            accepted, activity_data = RequisitionDetailsDialog.get_details(self, current_activity_data)
-            if not accepted or activity_data is None:
-                logger.debug("Activity details editing cancelled")
-                return
-
-            # Prepare requisition data with updated activity information
-            requisition_data = {
-                'borrower_id': borrower_id,
-                'date_borrowed': requisition_summary.requisition.date_borrowed,
-                'lab_activity_name': activity_data['lab_activity_name'],
-                'lab_activity_date': activity_data['lab_activity_date'],
-                'num_students': activity_data['num_students'],
-                'num_groups': activity_data['num_groups']
-            }
-
-            # Update the requisition with new items
-            success = self.model.update_requisition(
-                requisition_id, borrower_id, requisition_data, selected_items, editor_name.strip()
-            )
-
-            if success:
-                logger.info(f"Requisition {requisition_id} updated successfully")
-                QMessageBox.information(self, "Success",
-                                      "Requisition updated successfully!\n\n"
-                                      "Activity details and items have been updated.")
-                self.refresh_data()
-                self.data_changed.emit()
-            else:
-                QMessageBox.critical(self, "Error", "Failed to update requisition.")
-
-        except Exception as e:
-            logger.error(f"Failed to edit requisition {requisition_id}: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to edit requisition: {str(e)}")
-
-    def return_selected_items(self):
-        """Process return of items for selected requisition."""
-        requisition_id = self.table.get_selected_requisition_id()
-        if not requisition_id:
-            QMessageBox.warning(self, "No Selection", "Please select a requisition to return items.")
-            return
-
-        try:
-            logger.info(f"Opening return dialog for requisition {requisition_id}")
-
-            # Open the return dialog
-            return_dialog = ItemReturnDialog(self, requisition_id)
-            return_dialog.return_completed.connect(self._on_return_completed)
-
-            # Show dialog
-            result = return_dialog.exec()
-
-            if result == return_dialog.DialogCode.Accepted:
-                logger.info(f"Return dialog completed successfully for requisition {requisition_id}")
-                # Dialog already handled success message and signal emission
-            else:
-                logger.debug(f"Return dialog cancelled for requisition {requisition_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to return items for requisition {requisition_id}: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to return items: {str(e)}")
-
-    def delete_selected_requisition(self):
+    def delete_requisition(self):
         """Delete the currently selected requisition."""
         requisition_id = self.table.get_selected_requisition_id()
         if not requisition_id:
@@ -408,26 +242,6 @@ class RequisitionsPage(QWidget):
         except Exception as e:
             logger.error(f"Failed to delete requisition {requisition_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to delete requisition: {str(e)}")
-
-    def _on_requisition_selected(self, requisition_id: int):
-        """Handle requisition selection."""
-        has_selection = requisition_id is not None
-        self.edit_button.setEnabled(has_selection)
-        self.return_button.setEnabled(has_selection)
-        self.delete_button.setEnabled(has_selection)
-
-        if has_selection:
-            self.requisition_selected.emit(requisition_id)
-
-    def _on_requisition_double_clicked(self, requisition_id: int):
-        """Handle double-click on requisition (edit action)."""
-        self.edit_selected_requisition()
-
-    def _on_return_completed(self):
-        """Handle successful return completion."""
-        logger.info("Return completed, refreshing data")
-        self.refresh_data()
-        self.data_changed.emit()
 
     def _on_filter_changed(self):
         """Handle any filter change - apply filters and refresh table."""

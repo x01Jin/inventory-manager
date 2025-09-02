@@ -10,8 +10,8 @@ from dataclasses import dataclass
 import time
 
 from inventory_app.database.connection import db
-from inventory_app.database.models import Borrower, Requisition, RequisitionItem
-from inventory_app.services import ItemService, StockMovementService, ValidationService
+from inventory_app.database.models import Borrower, Requisition
+from inventory_app.services import ItemService
 from inventory_app.utils.logger import logger
 
 
@@ -24,7 +24,6 @@ class RequisitionSummary:
     total_items: int
     status: str  # 'Active', 'Returned', 'Overdue'
 
-
 class RequisitionsController:
     """
     Controller for requisition management operations.
@@ -35,8 +34,6 @@ class RequisitionsController:
         """Initialize controller with composed services."""
         # Compose with services using composition pattern
         self.item_service = ItemService()
-        self.stock_service = StockMovementService()
-        self.validation_service = ValidationService()
 
         logger.info("Requisitions controller initialized with services")
 
@@ -83,220 +80,6 @@ class RequisitionsController:
         except Exception as e:
             logger.error(f"Failed to get requisitions: {e}")
             return []
-
-    def create_requisition(self, borrower_id: int, requisition_data: Dict,
-                          items_data: List[Dict], editor_name: str) -> bool:
-        """
-        Create a new requisition with existing borrower.
-
-        Args:
-            borrower_id: ID of existing borrower (selected via BorrowerSelector)
-            requisition_data: Dict with requisition details
-            items_data: List of dicts with item_id and quantity_borrowed
-            editor_name: Name of person creating the requisition
-
-        Returns:
-            bool: True if successful
-        """
-        try:
-            # Validate required fields using ValidationService
-            if not self.validation_service.validate_requisition_creation(borrower_id, requisition_data, items_data):
-                return False
-
-            # Verify borrower exists
-            borrower = Borrower.get_by_id(borrower_id)
-            if not borrower:
-                logger.error(f"Borrower {borrower_id} not found")
-                return False
-
-            # Step 1: Create requisition
-            requisition = Requisition(
-                borrower_id=borrower_id,
-                date_borrowed=requisition_data['date_borrowed'],
-                lab_activity_name=requisition_data['lab_activity_name'],
-                lab_activity_date=requisition_data['lab_activity_date'],
-                num_students=requisition_data.get('num_students'),
-                num_groups=requisition_data.get('num_groups')
-            )
-
-            if not requisition.save(editor_name):
-                logger.error("Failed to save requisition")
-                return False
-            time.sleep(0.1)  # Allow requisition save to complete
-
-            # Step 2: Add items to requisition and update stock
-            for item_data in items_data:
-                if not requisition.id:
-                    logger.error("Requisition ID is None after save")
-                    return False
-
-                req_item = RequisitionItem(
-                    requisition_id=requisition.id,
-                    item_id=item_data['item_id'],
-                    quantity_borrowed=item_data['quantity_borrowed']
-                )
-
-                if not req_item.save():
-                    logger.error(f"Failed to save requisition item: {item_data}")
-                    return False
-                time.sleep(0.1)  # Allow requisition item save to complete
-
-                # Step 3: Record stock movement (consumption) using StockMovementService
-                # For now, record at item level (batch_id will be passed when batch selection is implemented)
-                batch_id = item_data.get('batch_id')  # Will be None until batch selection is implemented
-                self.stock_service.record_consumption(
-                    item_data['item_id'],
-                    item_data['quantity_borrowed'],
-                    requisition.id,
-                    f"Borrowed for activity: {requisition.lab_activity_name}",
-                    batch_id
-                )
-                time.sleep(0.1)  # Allow stock movement to complete
-
-            logger.info(f"Created requisition {requisition.id} for borrower {borrower.name}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to create requisition: {e}")
-            return False
-
-    def create_requisition_with_existing_borrower(self, requisition_data: Dict,
-                                                items_data: List[Dict], editor_name: str) -> bool:
-        """
-        Create a new requisition with an existing borrower.
-
-        Args:
-            requisition_data: Dict with requisition details (must include borrower_id)
-            items_data: List of dicts with item_id and quantity_borrowed
-            editor_name: Name of person creating the requisition
-
-        Returns:
-            bool: True if successful
-        """
-        try:
-            # Validate required fields using ValidationService
-            borrower_id = requisition_data.get('borrower_id')
-            if not borrower_id:
-                logger.error("Borrower ID is required for existing borrower requisition")
-                return False
-
-            if not self.validation_service.validate_requisition_creation(borrower_id, requisition_data, items_data):
-                return False
-
-            # Verify borrower exists
-            borrower = Borrower.get_by_id(borrower_id)
-            if not borrower:
-                logger.error(f"Borrower {borrower_id} not found")
-                return False
-
-            # Create requisition
-            requisition = Requisition(
-                borrower_id=borrower_id,
-                date_borrowed=requisition_data['date_borrowed'],
-                lab_activity_name=requisition_data['lab_activity_name'],
-                lab_activity_date=requisition_data['lab_activity_date'],
-                num_students=requisition_data.get('num_students'),
-                num_groups=requisition_data.get('num_groups')
-            )
-
-            if not requisition.save(editor_name):
-                logger.error("Failed to save requisition")
-                return False
-            time.sleep(0.1)  # Allow requisition save to complete
-
-            # Add items to requisition and update stock
-            for item_data in items_data:
-                if not requisition.id:
-                    logger.error("Requisition ID is None after save")
-                    return False
-
-                req_item = RequisitionItem(
-                    requisition_id=requisition.id,
-                    item_id=item_data['item_id'],
-                    quantity_borrowed=item_data['quantity_borrowed']
-                )
-
-                if not req_item.save():
-                    logger.error(f"Failed to save requisition item: {item_data}")
-                    return False
-                time.sleep(0.1)  # Allow requisition item save to complete
-
-                # Record stock movement (consumption) using StockMovementService
-                # For now, record at item level (batch_id will be passed when batch selection is implemented)
-                batch_id = item_data.get('batch_id')  # Will be None until batch selection is implemented
-                self.stock_service.record_consumption(
-                    item_data['item_id'],
-                    item_data['quantity_borrowed'],
-                    requisition.id,
-                    f"Borrowed for activity: {requisition.lab_activity_name}",
-                    batch_id
-                )
-                time.sleep(0.1)  # Allow stock movement to complete
-
-            logger.info(f"Created requisition {requisition.id} for existing borrower {borrower.name}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to create requisition with existing borrower: {e}")
-            return False
-
-    def update_requisition(self, requisition_id: int, borrower_id: int,
-                          requisition_data: Dict, items_data: List[Dict],
-                          editor_name: str) -> bool:
-        """
-        Update an existing requisition.
-
-        Args:
-            requisition_id: ID of requisition to update
-            borrower_id: ID of borrower (borrower changes should be handled via BorrowerEditor)
-            requisition_data: Updated requisition details
-            items_data: Updated list of items
-            editor_name: Name of person making changes
-
-        Returns:
-            bool: True if successful
-        """
-        try:
-            # Get existing requisition
-            existing_req = self._get_requisition_by_id(requisition_id)
-            if not existing_req:
-                logger.error(f"Requisition {requisition_id} not found")
-                return False
-
-            # Verify borrower exists
-            borrower = Borrower.get_by_id(borrower_id)
-            if not borrower:
-                logger.error(f"Borrower {borrower_id} not found")
-                return False
-
-            # Update requisition
-            existing_req.borrower_id = borrower_id
-            existing_req.date_borrowed = requisition_data['date_borrowed']
-            existing_req.lab_activity_name = requisition_data['lab_activity_name']
-            existing_req.lab_activity_date = requisition_data['lab_activity_date']
-            existing_req.num_students = requisition_data.get('num_students')
-            existing_req.num_groups = requisition_data.get('num_groups')
-
-            if not existing_req.save(editor_name):
-                return False
-
-            # Update items (remove old, add new)
-            self._clear_requisition_items(requisition_id)
-            for item_data in items_data:
-                req_item = RequisitionItem(
-                    requisition_id=requisition_id,
-                    item_id=item_data['item_id'],
-                    quantity_borrowed=item_data['quantity_borrowed']
-                )
-                if not req_item.save():
-                    return False
-
-            logger.info(f"Updated requisition {requisition_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to update requisition {requisition_id}: {e}")
-            return False
 
     def delete_requisition(self, requisition_id: int, editor_name: str) -> bool:
         """
@@ -371,175 +154,6 @@ class RequisitionsController:
             logger.error(f"Failed to get borrowers with requisitions: {e}")
             return []
 
-    def get_inventory_items(self) -> List[Dict]:
-        """
-        Get all inventory items for selection in requisitions.
-        Excludes items that are currently borrowed (have unreturned requisitions).
-
-        Returns:
-            List of item dictionaries with relevant fields
-        """
-        return self.item_service.get_inventory_items_for_selection()
-
-    def get_inventory_items_for_editing(self, current_requisition_id: int) -> List[Dict]:
-        """
-        Get all inventory items for editing a requisition.
-        Includes items borrowed by the current requisition, excludes items borrowed by others.
-
-        Args:
-            current_requisition_id: ID of the requisition being edited
-
-        Returns:
-            List of item dictionaries with relevant fields
-        """
-        return self.item_service.get_inventory_items_for_selection(
-            exclude_borrowed=True,
-            exclude_requisition_id=current_requisition_id
-        )
-
-    def get_inventory_batches_for_selection(self, search_term: Optional[str] = None,
-                                          exclude_borrowed: bool = True,
-                                          exclude_requisition_id: Optional[int] = None) -> List[Dict]:
-        """
-        Get inventory batches for selection in requisitions.
-        Shows individual batches with their specific available stock.
-
-        Args:
-            search_term: Optional search term to filter batches
-            exclude_borrowed: Whether to exclude batches with no available stock
-            exclude_requisition_id: Requisition ID to exclude from borrowed check
-
-        Returns:
-            List of batch dictionaries
-        """
-        return self.item_service.get_inventory_batches_for_selection(
-            search_term=search_term,
-            exclude_borrowed=exclude_borrowed,
-            exclude_requisition_id=exclude_requisition_id
-        )
-
-    def get_inventory_batches_for_editing(self, current_requisition_id: int) -> List[Dict]:
-        """
-        Get inventory batches for editing a requisition.
-        Includes batches borrowed by the current requisition.
-
-        Args:
-            current_requisition_id: ID of the requisition being edited
-
-        Returns:
-            List of batch dictionaries
-        """
-        return self.item_service.get_inventory_batches_for_selection(
-            exclude_borrowed=True,
-            exclude_requisition_id=current_requisition_id
-        )
-
-    def get_current_borrower_batches(self, requisition_id: int) -> List[Dict]:
-        """
-        Get batches currently borrowed by a specific requisition.
-        Used when editing a requisition to show what the borrower currently has.
-
-        Args:
-            requisition_id: ID of the requisition
-
-        Returns:
-            List of batch dictionaries with borrowed quantities
-        """
-        try:
-            query = """
-            SELECT
-                ib.id as batch_id,
-                ib.item_id,
-                ib.batch_number,
-                ib.date_received,
-                ib.quantity_received,
-                i.name as item_name,
-                ri.quantity_borrowed,
-                c.name as category_name,
-                s.name as supplier_name,
-                i.size,
-                i.brand,
-                i.other_specifications
-            FROM Requisition_Items ri
-            JOIN Items i ON ri.item_id = i.id
-            JOIN Item_Batches ib ON i.id = ib.item_id
-            LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Suppliers s ON i.supplier_id = s.id
-            WHERE ri.requisition_id = ?
-            ORDER BY i.name, ib.batch_number
-            """
-
-            rows = db.execute_query(query, (requisition_id,))
-
-            result = []
-            for row in rows:
-                batch_dict = dict(row)
-                batch_dict.update({
-                    'batch_display_name': f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})",
-                    'available_stock': batch_dict['quantity_received'],  # Full quantity since they're borrowing it
-                    'total_stock': batch_dict['quantity_received']
-                })
-                result.append(batch_dict)
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Failed to get current borrower batches for requisition {requisition_id}: {e}")
-            return []
-
-    def search_items(self, search_term: str) -> List[Dict]:
-        """
-        Search inventory items by name.
-        Excludes items that are currently borrowed (have unreturned requisitions).
-
-        Args:
-            search_term: Term to search for
-
-        Returns:
-            List of matching items
-        """
-        return self.item_service.get_inventory_items_for_selection(
-            search_term=search_term,
-            exclude_borrowed=True
-        )
-
-    def return_items(self, requisition_id: int, return_data: List[Dict], editor_name: str) -> bool:
-        """
-        Process return of items from a requisition.
-
-        Args:
-            requisition_id: ID of requisition
-            return_data: List of dicts with item_id and quantity_returned
-            editor_name: Name of person processing return
-
-        Returns:
-            bool: True if successful
-        """
-        try:
-            # Process returns using StockMovementService
-            if not self.stock_service.process_return(requisition_id, return_data, editor_name):
-                return False
-
-            # Log the return in requisition history
-            requisition = self._get_requisition_by_id(requisition_id)
-            if requisition:
-                history_query = """
-                INSERT INTO Requisition_History (requisition_id, editor_name, reason)
-                VALUES (?, ?, ?)
-                """
-                db.execute_update(history_query, (
-                    requisition_id,
-                    editor_name,
-                    f"Items returned: {sum(r['quantity_returned'] for r in return_data)} items"
-                ))
-
-            logger.info(f"Processed return for requisition {requisition_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to process return for requisition {requisition_id}: {e}")
-            return False
-
     def _get_requisition_by_id(self, requisition_id: int) -> Optional[Requisition]:
         """Get a single requisition by ID."""
         try:
@@ -605,21 +219,8 @@ class RequisitionsController:
                 # Past due date and not fully returned
                 return "Overdue"
             else:
-                # Check if partially returned
-                any_returned = False
-                for item in items:
-                    item_id = item['item_id']
-                    borrowed_qty = item['quantity_borrowed']
-                    returned_qty = self._get_returned_quantity_for_item(item_id, requisition.id)
-                    if returned_qty > 0 and returned_qty < borrowed_qty:
-                        any_returned = True
-                        break
-
-                if any_returned:
-                    return "Partially Returned"
-                else:
-                    # Not past due and not fully returned
-                    return "Active"
+                # Not past due and not fully returned
+                return "Active"
 
         except Exception as e:
             logger.error(f"Failed to determine requisition status: {e}")

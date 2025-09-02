@@ -160,7 +160,7 @@ CREATE TABLE Borrowers (
 CREATE TABLE Requisitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     borrower_id INTEGER NOT NULL,
-    date_borrowed DATE NOT NULL,
+    datetime_borrowed DATETIME NOT NULL,
     lab_activity_name TEXT NOT NULL,
     lab_activity_date DATE NOT NULL,
     num_students INTEGER,

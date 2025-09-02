@@ -635,7 +635,7 @@ class Requisition:
     """Represents a borrowing requisition."""
     id: Optional[int] = None
     borrower_id: int = 0
-    date_borrowed: date = date.today()
+    datetime_borrowed: datetime = datetime.now()
     lab_activity_name: str = ""
     lab_activity_date: date = date.today()
     num_students: Optional[int] = None
@@ -654,13 +654,13 @@ class Requisition:
 
                 # Update requisition
                 query = """
-                UPDATE Requisitions SET borrower_id = ?, date_borrowed = ?,
+                UPDATE Requisitions SET borrower_id = ?, datetime_borrowed = ?,
                 lab_activity_name = ?, lab_activity_date = ?, num_students = ?, num_groups = ?
                 WHERE id = ?
                 """
                 db.execute_update(query, (
                     self.borrower_id,
-                    self.date_borrowed.isoformat(),
+                    self.datetime_borrowed.isoformat(),
                     self.lab_activity_name,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
@@ -670,12 +670,12 @@ class Requisition:
             else:
                 # Insert new
                 query = """
-                INSERT INTO Requisitions (borrower_id, date_borrowed, lab_activity_name,
+                INSERT INTO Requisitions (borrower_id, datetime_borrowed, lab_activity_name,
                 lab_activity_date, num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(query, (
                     self.borrower_id,
-                    self.date_borrowed.isoformat(),
+                    self.datetime_borrowed.isoformat(),
                     self.lab_activity_name,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
@@ -725,13 +725,13 @@ class Requisition:
     def get_all(cls) -> List['Requisition']:
         """Get all requisitions."""
         try:
-            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY date_borrowed DESC")
+            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY datetime_borrowed DESC")
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
                 # Convert dates
-                if req_dict.get('date_borrowed'):
-                    req_dict['date_borrowed'] = date.fromisoformat(req_dict['date_borrowed'])
+                if req_dict.get('datetime_borrowed'):
+                    req_dict['datetime_borrowed'] = datetime.fromisoformat(req_dict['datetime_borrowed'])
                 if req_dict.get('lab_activity_date'):
                     req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
                 requisitions.append(cls(**req_dict))

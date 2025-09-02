@@ -5,7 +5,7 @@ Uses composition pattern with RequisitionsController.
 """
 
 from typing import List, Dict, Optional
-from datetime import date
+from datetime import date, datetime
 from dataclasses import dataclass
 
 from inventory_app.gui.requisitions.requisitions_controller import RequisitionsController, RequisitionSummary
@@ -19,7 +19,7 @@ class RequisitionRow:
     borrower_name: str = ""
     borrower_affiliation: str = ""
     borrower_group: str = ""
-    date_borrowed: Optional[date] = None
+    datetime_borrowed: Optional[datetime] = None  # Changed from date to datetime
     lab_activity_name: str = ""
     lab_activity_date: Optional[date] = None
     num_students: Optional[int] = None
@@ -86,7 +86,7 @@ class RequisitionsModel:
                     borrower_name=summary.borrower.name,
                     borrower_affiliation=summary.borrower.affiliation,
                     borrower_group=summary.borrower.group_name,
-                    date_borrowed=summary.requisition.date_borrowed,
+                    datetime_borrowed=summary.requisition.datetime_borrowed,
                     lab_activity_name=summary.requisition.lab_activity_name,
                     lab_activity_date=summary.requisition.lab_activity_date,
                     num_students=summary.requisition.num_students,
@@ -192,6 +192,7 @@ class RequisitionsModel:
             active_count = sum(1 for r in self.filtered_requisitions if r.status == "Active")
             returned_count = sum(1 for r in self.filtered_requisitions if r.status == "Returned")
             overdue_count = sum(1 for r in self.filtered_requisitions if r.status == "Overdue")
+            # Note: "Partially Returned" status removed - requisitions are either Active, Returned, or Overdue
 
             # Calculate total items borrowed
             total_items = sum(r.total_items for r in self.filtered_requisitions)
@@ -219,46 +220,6 @@ class RequisitionsModel:
                 'unique_borrowers': 0
             }
 
-    def add_requisition(self, borrower_id: int, requisition_data: Dict,
-                       items_data: List[Dict], editor_name: str) -> bool:
-        """
-        Add a new requisition.
-
-        Args:
-            borrower_id: ID of existing borrower (selected via BorrowerSelector)
-            requisition_data: Requisition details
-            items_data: Items to borrow
-            editor_name: Name of person creating requisition
-
-        Returns:
-            bool: True if successful
-        """
-        if self.controller.create_requisition(borrower_id, requisition_data, items_data, editor_name):
-            self.load_data()  # Refresh data
-            return True
-        return False
-
-    def update_requisition(self, requisition_id: int, borrower_id: int,
-                          requisition_data: Dict, items_data: List[Dict],
-                          editor_name: str) -> bool:
-        """
-        Update an existing requisition.
-
-        Args:
-            requisition_id: ID of requisition to update
-            borrower_id: ID of borrower (borrower changes should be handled via BorrowerEditor)
-            requisition_data: Updated requisition details
-            items_data: Updated items
-            editor_name: Name of person making changes
-
-        Returns:
-            bool: True if successful
-        """
-        if self.controller.update_requisition(requisition_id, borrower_id, requisition_data, items_data, editor_name):
-            self.load_data()  # Refresh data
-            return True
-        return False
-
     def delete_requisition(self, requisition_id: int, editor_name: str) -> bool:
         """
         Delete a requisition.
@@ -274,24 +235,6 @@ class RequisitionsModel:
             self.load_data()  # Refresh data
             return True
         return False
-
-    def return_items(self, requisition_id: int, return_data: List[Dict], editor_name: str) -> bool:
-        """
-        Process return of items.
-
-        Args:
-            requisition_id: ID of requisition
-            return_data: Items being returned
-            editor_name: Name of person processing return
-
-        Returns:
-            bool: True if successful
-        """
-        if self.controller.return_items(requisition_id, return_data, editor_name):
-            self.load_data()  # Refresh data
-            return True
-        return False
-
     # Private methods
 
     def _apply_filters(self) -> None:
