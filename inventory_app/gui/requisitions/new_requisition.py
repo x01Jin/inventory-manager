@@ -10,9 +10,9 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QGroupBox, QMessageBox, QLineEdit,
     QTextEdit, QSpinBox, QDateEdit, QListWidget,
-    QListWidgetItem, QSplitter, QWidget
+    QListWidgetItem, QSplitter, QWidget, QDateTimeEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, pyqtSignal, QDate, QDateTime
 
 from inventory_app.database.models import Borrower, Requisition, RequisitionItem
 from inventory_app.services.item_service import ItemService
@@ -103,7 +103,7 @@ class NewRequisitionDialog(QDialog):
         borrower_layout = QVBoxLayout(borrower_group)
 
         self.borrower_info = QLabel("No borrower selected")
-        self.borrower_info.setStyleSheet("padding: 10px; font-weight: bold;")
+        self.borrower_info.setStyleSheet("padding: 10px; font-weight: bold; ")
         borrower_layout.addWidget(self.borrower_info)
 
         select_borrower_btn = QPushButton("Select Borrower")
@@ -122,12 +122,36 @@ class NewRequisitionDialog(QDialog):
         self.activity_name.setPlaceholderText("e.g., Chemistry Experiment 1")
         activity_layout.addWidget(self.activity_name)
 
+        # Expected borrow date/time
+        borrow_layout = QHBoxLayout()
+        borrow_layout.addWidget(QLabel("Expected Borrow:"))
+        self.expected_borrow = QDateTimeEdit()
+        self.expected_borrow.setDateTime(QDateTime.currentDateTime())
+        self.expected_borrow.setCalendarPopup(True)
+        self.expected_borrow.setDisplayFormat("MMM dd, yyyy hh:mm AP")
+        borrow_layout.addWidget(self.expected_borrow)
+        activity_layout.addLayout(borrow_layout)
+
+        # Expected return date/time
+        return_layout = QHBoxLayout()
+        return_layout.addWidget(QLabel("Expected Return:"))
+        self.expected_return = QDateTimeEdit()
+        # Set default return time to 1 hour from borrow time
+        default_return = QDateTime.currentDateTime()
+        default_return = default_return.addSecs(3600)  # Add 1 hour
+        self.expected_return.setDateTime(default_return)
+        self.expected_return.setCalendarPopup(True)
+        self.expected_return.setDisplayFormat("MMM dd, yyyy hh:mm AP")
+        return_layout.addWidget(self.expected_return)
+        activity_layout.addLayout(return_layout)
+
         # Activity date
         date_layout = QHBoxLayout()
         date_layout.addWidget(QLabel("Activity Date:"))
         self.activity_date = QDateEdit()
         self.activity_date.setDate(QDate.currentDate())
         self.activity_date.setCalendarPopup(True)
+        self.activity_date.setDisplayFormat("MMM dd, yyyy")
         date_layout.addWidget(self.activity_date)
         activity_layout.addLayout(date_layout)
 
@@ -392,10 +416,28 @@ class NewRequisitionDialog(QDialog):
             return
 
         try:
+            # Convert Qt datetime to Python datetime
+            expected_borrow_dt = self.expected_borrow.dateTime().toPyDateTime()
+            expected_return_dt = self.expected_return.dateTime().toPyDateTime()
+            current_time = datetime.now()
+
+            # Determine initial status and datetime_borrowed
+            if expected_borrow_dt > current_time:
+                # This is a reservation
+                initial_status = "requested"
+                datetime_borrowed = None  # NULL for reservations not yet picked up
+            else:
+                # This is immediate borrowing
+                initial_status = "active"
+                datetime_borrowed = current_time
+
             # Create requisition record
             requisition = Requisition(
                 borrower_id=self.selected_borrower.id,
-                datetime_borrowed=datetime.now(),
+                datetime_borrowed=datetime_borrowed,
+                expected_borrow=expected_borrow_dt,
+                expected_return=expected_return_dt,
+                status=initial_status,
                 lab_activity_name=self.activity_name.text().strip(),
                 lab_activity_date=self.activity_date.date().toPyDate(),
                 num_students=self.num_students.value(),
@@ -444,9 +486,22 @@ class NewRequisitionDialog(QDialog):
                 "System"  # TODO: Get actual user
             )
 
-            logger.info(f"Successfully created requisition {requisition.id}")
-            QMessageBox.information(self, "Success",
-                                  f"Requisition created successfully!\nID: {requisition.id}")
+            # Build detailed success message
+            message = "Requisition created successfully!\n\n"
+            message += "📋 Requisition Details:\n"
+            message += f"Activity: {requisition.lab_activity_name}\n"
+            message += f"Status: {requisition.status.title()}\n\n"
+
+            message += "👥 Borrower Information:\n"
+            message += f"Name: {self.selected_borrower.name}\n"
+            message += f"Affiliation: {self.selected_borrower.affiliation}\n"
+            message += f"Group: {self.selected_borrower.group_name}\n\n"
+
+            message += "📦 Items Borrowed:\n"
+            for item in self.selected_items:
+                message += f"• {item['item_name']} (Batch #{item['batch_number']}) - Qty: {item['quantity']} [{item['category_name']}]\n"
+
+            QMessageBox.information(self, "Success", message)
 
             self.requisition_created.emit(requisition.id)
             self.accept()
@@ -469,7 +524,16 @@ class NewRequisitionDialog(QDialog):
             QMessageBox.warning(self, "Validation Error", "Please select at least one item.")
             return False
 
-        # Validate activity date is not in the past
+        # Validate expected dates
+        expected_borrow_dt = self.expected_borrow.dateTime().toPyDateTime()
+        expected_return_dt = self.expected_return.dateTime().toPyDateTime()
+
+        if expected_return_dt <= expected_borrow_dt:
+            QMessageBox.warning(self, "Validation Error",
+                              "Expected return date/time must be after expected borrow date/time.")
+            return False
+
+        # Validate activity date is not too far in the past
         activity_date = self.activity_date.date().toPyDate()
         if activity_date < date.today():
             reply = QMessageBox.question(

@@ -5,7 +5,7 @@ Provides centralized item management with composition pattern.
 
 from typing import List, Dict, Optional
 from inventory_app.database.connection import db
-from inventory_app.database.models import Item, Category, Supplier
+from inventory_app.database.models import Category, Supplier
 from inventory_app.utils.logger import logger
 
 

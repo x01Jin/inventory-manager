@@ -156,11 +156,14 @@ CREATE TABLE Borrowers (
     group_name TEXT NOT NULL
 );
 
--- 9. Requisitions: Borrowing records
+-- 9. Requisitions: Borrowing records with reservation support
 CREATE TABLE Requisitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     borrower_id INTEGER NOT NULL,
-    datetime_borrowed DATETIME NOT NULL,
+    datetime_borrowed DATETIME,  -- NULL for reservations not yet picked up
+    expected_borrow DATETIME NOT NULL,
+    expected_return DATETIME NOT NULL,
+    status TEXT NOT NULL DEFAULT 'requested',  -- 'requested', 'active', 'returned', 'overdue'
     lab_activity_name TEXT NOT NULL,
     lab_activity_date DATE NOT NULL,
     num_students INTEGER,

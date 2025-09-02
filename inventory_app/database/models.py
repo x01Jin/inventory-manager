@@ -12,8 +12,6 @@ from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 
-
-
 @dataclass
 class CategoryType:
     """Represents a category type for lifecycle rules."""
@@ -59,7 +57,6 @@ class CategoryType:
         except Exception as e:
             logger.error(f"Failed to get category type {type_id}: {e}")
             return None
-
 
 @dataclass
 class Category:
@@ -121,7 +118,6 @@ class Category:
             logger.error(f"Failed to get category {category_id}: {e}")
             return None
 
-
 @dataclass
 class Supplier:
     """Represents a supplier."""
@@ -180,7 +176,6 @@ class Supplier:
         except Exception as e:
             logger.error(f"Failed to get supplier {supplier_id}: {e}")
             return None
-
 
 @dataclass
 class Size:
@@ -241,7 +236,6 @@ class Size:
             logger.error(f"Failed to get size {size_id}: {e}")
             return None
 
-
 @dataclass
 class Brand:
     """Represents a brand option."""
@@ -300,7 +294,6 @@ class Brand:
         except Exception as e:
             logger.error(f"Failed to get brand {brand_id}: {e}")
             return None
-
 
 @dataclass
 class Item:
@@ -629,13 +622,15 @@ class Borrower:
             logger.error(f"Failed to get borrower {borrower_id}: {e}")
             return None
 
-
 @dataclass
 class Requisition:
     """Represents a borrowing requisition."""
     id: Optional[int] = None
     borrower_id: int = 0
-    datetime_borrowed: datetime = datetime.now()
+    datetime_borrowed: Optional[datetime] = None  # NULL for reservations not yet picked up
+    expected_borrow: datetime = datetime.now()
+    expected_return: datetime = datetime.now()
+    status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
     lab_activity_name: str = ""
     lab_activity_date: date = date.today()
     num_students: Optional[int] = None
@@ -655,12 +650,16 @@ class Requisition:
                 # Update requisition
                 query = """
                 UPDATE Requisitions SET borrower_id = ?, datetime_borrowed = ?,
+                expected_borrow = ?, expected_return = ?, status = ?,
                 lab_activity_name = ?, lab_activity_date = ?, num_students = ?, num_groups = ?
                 WHERE id = ?
                 """
                 db.execute_update(query, (
                     self.borrower_id,
-                    self.datetime_borrowed.isoformat(),
+                    self.datetime_borrowed.isoformat() if self.datetime_borrowed else None,
+                    self.expected_borrow.isoformat(),
+                    self.expected_return.isoformat(),
+                    self.status,
                     self.lab_activity_name,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
@@ -670,12 +669,16 @@ class Requisition:
             else:
                 # Insert new
                 query = """
-                INSERT INTO Requisitions (borrower_id, datetime_borrowed, lab_activity_name,
-                lab_activity_date, num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO Requisitions (borrower_id, datetime_borrowed, expected_borrow,
+                expected_return, status, lab_activity_name, lab_activity_date, num_students, num_groups)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(query, (
                     self.borrower_id,
-                    self.datetime_borrowed.isoformat(),
+                    self.datetime_borrowed.isoformat() if self.datetime_borrowed else None,
+                    self.expected_borrow.isoformat(),
+                    self.expected_return.isoformat(),
+                    self.status,
                     self.lab_activity_name,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
@@ -725,13 +728,17 @@ class Requisition:
     def get_all(cls) -> List['Requisition']:
         """Get all requisitions."""
         try:
-            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY datetime_borrowed DESC")
+            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY expected_borrow DESC")
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
                 # Convert dates
                 if req_dict.get('datetime_borrowed'):
                     req_dict['datetime_borrowed'] = datetime.fromisoformat(req_dict['datetime_borrowed'])
+                if req_dict.get('expected_borrow'):
+                    req_dict['expected_borrow'] = datetime.fromisoformat(req_dict['expected_borrow'])
+                if req_dict.get('expected_return'):
+                    req_dict['expected_return'] = datetime.fromisoformat(req_dict['expected_return'])
                 if req_dict.get('lab_activity_date'):
                     req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
                 requisitions.append(cls(**req_dict))
@@ -739,7 +746,6 @@ class Requisition:
         except Exception as e:
             logger.error(f"Failed to get requisitions: {e}")
             return []
-
 
 @dataclass
 class Lifecycle_Rules:
@@ -803,7 +809,6 @@ class Lifecycle_Rules:
         except Exception as e:
             logger.error(f"Failed to get lifecycle rules for category type {category_type_id}: {e}")
             return None
-
 
 @dataclass
 class RequisitionItem:

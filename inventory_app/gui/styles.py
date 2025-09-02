@@ -170,9 +170,30 @@ class DarkTheme:
                 border: 1px solid {DarkTheme.BORDER_COLOR};
             }}
 
-            /* Labels */
+            /* Labels - Global styling to prevent borders */
             QLabel {{
                 color: {DarkTheme.TEXT_PRIMARY};
+                padding: 0px;
+                margin: 0px;
+                border: none;
+                border-width: 0px;
+                border-style: none;
+                border-radius: 0px;
+                background-color: transparent;
+                background: transparent;
+                outline: none;
+                font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
+            }}
+
+            /* Ensure all QLabel variants have no borders */
+            QLabel::item {{
+                border: none;
+                background-color: transparent;
+            }}
+
+            QLabel:disabled {{
+                border: none;
+                background-color: transparent;
             }}
 
             /* Frames */
@@ -285,6 +306,42 @@ class DarkTheme:
             }}
 
             QDateEdit::down-arrow:hover {{
+                border-top-color: {DarkTheme.ACCENT_COLOR};
+            }}
+
+            /* DateTime Edit widgets */
+            QDateTimeEdit {{
+                background-color: {DarkTheme.SECONDARY_DARK};
+                color: {DarkTheme.TEXT_PRIMARY};
+                border: 1px solid {DarkTheme.BORDER_COLOR};
+                border-radius: 6px;
+                padding: 6px 8px;
+                font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
+                min-width: 140px;
+            }}
+
+            QDateTimeEdit:hover {{
+                border-color: {DarkTheme.ACCENT_HOVER};
+            }}
+
+            QDateTimeEdit:focus {{
+                border-color: {DarkTheme.ACCENT_COLOR};
+            }}
+
+            QDateTimeEdit::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+
+            QDateTimeEdit::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 4px solid {DarkTheme.TEXT_SECONDARY};
+                margin-right: 4px;
+            }}
+
+            QDateTimeEdit::down-arrow:hover {{
                 border-top-color: {DarkTheme.ACCENT_COLOR};
             }}
 

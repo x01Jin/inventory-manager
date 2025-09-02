@@ -5,13 +5,16 @@ Provides full CRUD operations for requisitions with borrower management.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QMessageBox, QInputDialog
+    QPushButton, QGroupBox, QMessageBox, QInputDialog,
+    QSplitter
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
+from typing import Optional
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
 from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
+from inventory_app.gui.requisitions.requisition_preview import RequisitionPreview
 from inventory_app.gui.requisitions.new_requisition import NewRequisitionDialog
 from inventory_app.utils.logger import logger
 
@@ -34,6 +37,7 @@ class RequisitionsPage(QWidget):
         self.model = RequisitionsModel()
         self.filters = RequisitionsFilters()
         self.table = RequisitionsTable()
+        self.preview = RequisitionPreview()
 
         # Setup connections between components
         self._setup_connections()
@@ -92,15 +96,37 @@ class RequisitionsPage(QWidget):
 
         layout.addLayout(action_layout)
 
+        # Create main horizontal splitter for (filters + table) + preview
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Left panel: Filters + Table (vertical layout)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(15)
+
         # Filters section
         self.filters.set_model(self.model)
-        layout.addWidget(self.filters)
+        left_layout.addWidget(self.filters)
 
-        # Main content area with requisitions table
+        # Table section
         table_group = QGroupBox("Laboratory Requisitions")
         table_layout = QVBoxLayout(table_group)
         table_layout.addWidget(self.table)
-        layout.addWidget(table_group)
+        left_layout.addWidget(table_group)
+
+        main_splitter.addWidget(left_panel)
+
+        # Right panel: Preview
+        preview_group = QGroupBox("Requisition Details")
+        preview_layout = QVBoxLayout(preview_group)
+        preview_layout.addWidget(self.preview)
+        main_splitter.addWidget(preview_group)
+
+        # Set initial splitter proportions (left_panel:preview = 3:1)
+        main_splitter.setSizes([750, 250])
+
+        layout.addWidget(main_splitter)
 
         # Status bar
         self.status_label = QLabel("Ready")
@@ -109,6 +135,10 @@ class RequisitionsPage(QWidget):
 
     def _setup_connections(self):
         """Setup signal connections between components."""
+        # Table selection to preview panel and button states
+        self.table.requisition_selected.connect(self._on_requisition_selected)
+        self.table.itemSelectionChanged.connect(self._on_table_selection_changed)
+
         # Filter signals - connect to both model and refresh
         self.filters.search_changed.connect(self._on_filter_changed)
         self.filters.borrower_filter_changed.connect(self._on_filter_changed)
@@ -178,18 +208,6 @@ class RequisitionsPage(QWidget):
         """Handle successful requisition creation."""
         try:
             logger.info(f"New requisition created with ID: {requisition_id}")
-
-            # Refresh the data to show the new requisition
-            self.refresh_data()
-
-            # Emit data changed signal for other parts of the application
-            self.data_changed.emit()
-
-            # Show success message
-            QMessageBox.information(
-                self, "Success",
-                f"New requisition created successfully!\nRequisition ID: {requisition_id}"
-            )
 
         except Exception as e:
             logger.error(f"Failed to handle requisition creation: {e}")
@@ -277,6 +295,72 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to apply filters: {e}")
+
+    def _on_requisition_selected(self, requisition_id: int):
+        """Handle requisition selection from table - update preview panel and button states."""
+        try:
+            if requisition_id:
+                # Get the requisition summary from the model
+                requisition_summary = self.model.get_requisition_by_id(requisition_id)
+                if requisition_summary:
+                    self.preview.update_preview(requisition_summary)
+                    logger.debug(f"Updated preview for selected requisition {requisition_id}")
+                else:
+                    logger.warning(f"Could not find requisition {requisition_id} in model")
+                    self.preview.update_preview(None)
+            else:
+                # No selection - show empty state
+                self.preview.update_preview(None)
+
+            # Update button states based on selection
+            self._update_action_button_states(requisition_id)
+
+        except Exception as e:
+            logger.error(f"Failed to update preview for requisition {requisition_id}: {e}")
+            self.preview.update_preview(None)
+            self._update_action_button_states(None)
+
+    def _update_action_button_states(self, requisition_id: Optional[int]):
+        """Update the enabled state of action buttons based on selection."""
+        try:
+            has_selection = requisition_id is not None
+
+            # Enable/disable action buttons based on selection
+            self.edit_button.setEnabled(has_selection)
+            self.return_button.setEnabled(has_selection)
+            self.delete_button.setEnabled(has_selection)
+
+            logger.debug(f"Action buttons enabled: {has_selection}")
+
+        except Exception as e:
+            logger.error(f"Failed to update action button states: {e}")
+
+    def _on_table_selection_changed(self):
+        """Handle table selection changes (including deselection)."""
+        try:
+            # Get current selection
+            requisition_id = self.table.get_selected_requisition_id()
+
+            # Update preview based on selection
+            if requisition_id:
+                requisition_summary = self.model.get_requisition_by_id(requisition_id)
+                if requisition_summary:
+                    self.preview.update_preview(requisition_summary)
+                    logger.debug(f"Updated preview for selected requisition {requisition_id}")
+                else:
+                    logger.warning(f"Could not find requisition {requisition_id} in model")
+                    self.preview.update_preview(None)
+            else:
+                # No selection - show empty state
+                self.preview.update_preview(None)
+
+            # Update button states based on selection
+            self._update_action_button_states(requisition_id)
+
+        except Exception as e:
+            logger.error(f"Failed to handle table selection change: {e}")
+            self.preview.update_preview(None)
+            self._update_action_button_states(None)
 
     def _on_filters_cleared(self):
         """Handle filters cleared event."""

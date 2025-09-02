@@ -20,6 +20,8 @@ class RequisitionRow:
     borrower_affiliation: str = ""
     borrower_group: str = ""
     datetime_borrowed: Optional[datetime] = None  # Changed from date to datetime
+    expected_borrow: Optional[datetime] = None
+    expected_return: Optional[datetime] = None
     lab_activity_name: str = ""
     lab_activity_date: Optional[date] = None
     num_students: Optional[int] = None
@@ -87,6 +89,8 @@ class RequisitionsModel:
                     borrower_affiliation=summary.borrower.affiliation,
                     borrower_group=summary.borrower.group_name,
                     datetime_borrowed=summary.requisition.datetime_borrowed,
+                    expected_borrow=summary.requisition.expected_borrow,
+                    expected_return=summary.requisition.expected_return,
                     lab_activity_name=summary.requisition.lab_activity_name,
                     lab_activity_date=summary.requisition.lab_activity_date,
                     num_students=summary.requisition.num_students,
