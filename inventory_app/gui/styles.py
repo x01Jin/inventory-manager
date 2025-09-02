@@ -80,6 +80,19 @@ class DarkTheme:
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
             }}
 
+            /* Global focus outline suppression - eliminates striped square focus rectangles */
+            * {{
+                outline: none;
+            }}
+
+            *:focus {{
+                outline: none;
+            }}
+
+            QWidget:focus {{
+                outline: none;
+            }}
+
             /* Buttons */
             QPushButton {{
                 background-color: {DarkTheme.SECONDARY_DARK};
@@ -139,6 +152,16 @@ class DarkTheme:
 
             QTableWidget::item:selected {{
                 background-color: {DarkTheme.ACCENT_COLOR};
+            }}
+
+            /* Table item focus suppression */
+            QTableWidget::item:focus {{
+                outline: none;
+                border: none;
+            }}
+
+            QTableWidget:focus {{
+                outline: none;
             }}
 
             /* Table Headers */

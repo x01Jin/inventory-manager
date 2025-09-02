@@ -23,7 +23,6 @@ class InventoryController:
                 i.id,
                 i.name,
                 c.name as category_name,
-                ct.name as category_type_name,
                 i.size,
                 i.brand,
                 s.name as supplier_name,
@@ -34,23 +33,16 @@ class InventoryController:
                 i.is_consumable,
                 i.acquisition_date,
                 i.last_modified,
-                lr.expiry_lead_months,
-                lr.lifespan_years,
-                lr.calibration_interval_months,
-                lr.calibration_lead_months,
                 ib.date_received as first_batch_date,
                 COALESCE(stock.total_stock, 0) as total_stock,
                 COALESCE(stock.total_stock, 0) - COALESCE(borrowed.borrowed_qty, 0) as available_stock,
                 CASE
-                    WHEN i.expiration_date IS NOT NULL AND lr.expiry_lead_months IS NOT NULL
-                         AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
+                    WHEN i.expiration_date IS NOT NULL
+                         AND i.expiration_date <= DATE('now', '+6 months')
                     THEN 'expiration'
-                    WHEN lr.calibration_interval_months IS NOT NULL AND i.calibration_date IS NOT NULL
-                         AND DATE('now') >= DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months', '-' || COALESCE(lr.calibration_lead_months, 0) || ' months')
+                    WHEN i.calibration_date IS NOT NULL
+                         AND DATE('now') >= DATE(i.calibration_date, '+12 months')
                     THEN 'calibration'
-                    WHEN lr.lifespan_years IS NOT NULL AND ib.date_received IS NOT NULL
-                         AND DATE('now') >= DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
-                    THEN 'lifecycle'
                     ELSE ''
                 END as alert_status,
                 CASE
@@ -69,9 +61,7 @@ class InventoryController:
                 END as is_borrowed
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
-            LEFT JOIN Lifecycle_Rules lr ON ct.id = lr.category_type_id
             LEFT JOIN (
                 SELECT item_id, MIN(date_received) as date_received
                 FROM Item_Batches

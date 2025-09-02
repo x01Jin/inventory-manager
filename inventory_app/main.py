@@ -14,7 +14,6 @@ from inventory_app.database.connection import db  # noqa: E402
 from inventory_app.utils.logger import logger  # noqa: E402
 from inventory_app.business_logic.alert_engine import alert_engine  # noqa: E402
 
-
 def initialize_laboratory_database():
     """Initialize database with laboratory schema and seed data."""
     try:
@@ -36,7 +35,6 @@ def initialize_laboratory_database():
         logger.error(f"❌ Database initialization failed: {e}")
         return False
 
-
 def verify_components():
     """Verify that all critical components are available."""
     components_ok = True
@@ -51,7 +49,6 @@ def verify_components():
         logger.warning("⚠️ Some components may not be fully functional")
 
     return components_ok
-
 
 def main():
     """Main application entry point."""
@@ -90,7 +87,6 @@ def main():
         return 1
     finally:
         logger.info("🏁 Laboratory inventory system shutdown complete")
-
 
 if __name__ == "__main__":
     exit_code = main()

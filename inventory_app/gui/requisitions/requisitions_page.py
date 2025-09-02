@@ -209,6 +209,12 @@ class RequisitionsPage(QWidget):
         try:
             logger.info(f"New requisition created with ID: {requisition_id}")
 
+            # Refresh the data to show the new requisition
+            self.refresh_data()
+
+            # Emit signal to notify other components
+            self.data_changed.emit()
+
         except Exception as e:
             logger.error(f"Failed to handle requisition creation: {e}")
             QMessageBox.critical(self, "Error", f"Failed to refresh data after creating requisition: {str(e)}")

@@ -1,10 +1,12 @@
 .clinerules/
+.roo/
 .venv/
 logs/
 __pycache__/
 plan/
 build/
 dist/
+tests/
 *.spec
 inventory.db
 populate_sample_data.py

@@ -35,8 +35,6 @@ class AlertIndicator(QWidget):
             self.indicator.setStyleSheet(f"color: {DarkTheme.ERROR_COLOR}; font-weight: bold;")
         elif self.alert_type == "calibration":
             self.indicator.setStyleSheet(f"color: {DarkTheme.WARNING_COLOR}; font-weight: bold;")
-        elif self.alert_type == "lifecycle":
-            self.indicator.setStyleSheet(f"color: {DarkTheme.WARNING_COLOR}; font-weight: bold;")
         else:
             self.indicator.setVisible(False)
 
@@ -224,7 +222,7 @@ class InventoryTable(QTableWidget):
         alert_color = None
         if alert_status == "expiration":
             alert_color = QColor(DarkTheme.ERROR_COLOR).lighter(180)
-        elif alert_status in ["calibration", "lifecycle"]:
+        elif alert_status == "calibration":
             alert_color = QColor(DarkTheme.WARNING_COLOR).lighter(180)
 
         if alert_color:

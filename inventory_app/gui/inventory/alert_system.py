@@ -23,43 +23,30 @@ class AlertSystem:
                 i.id,
                 i.name,
                 c.name as category_name,
-                ct.name as category_type_name,
                 i.expiration_date,
                 i.calibration_date,
-                lr.expiry_lead_months,
-                lr.lifespan_years,
-                lr.calibration_interval_months,
-                lr.calibration_lead_months,
                 ib.date_received as first_batch_date,
                 CASE
-                    WHEN i.expiration_date IS NOT NULL AND lr.expiry_lead_months IS NOT NULL
-                         AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
+                    WHEN i.expiration_date IS NOT NULL
+                         AND i.expiration_date <= DATE('now', '+6 months')
                     THEN 'expiration'
-                    WHEN lr.calibration_interval_months IS NOT NULL AND i.calibration_date IS NOT NULL
-                         AND DATE('now') >= DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months', '-' || COALESCE(lr.calibration_lead_months, 0) || ' months')
+                    WHEN i.calibration_date IS NOT NULL
+                         AND DATE('now') >= DATE(i.calibration_date, '+12 months')
                     THEN 'calibration'
-                    WHEN lr.lifespan_years IS NOT NULL AND ib.date_received IS NOT NULL
-                         AND DATE('now') >= DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
-                    THEN 'lifecycle'
                     ELSE NULL
                 END as alert_type,
                 CASE
-                    WHEN i.expiration_date IS NOT NULL AND lr.expiry_lead_months IS NOT NULL
-                         AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
-                    THEN DATE(i.expiration_date, '-' || lr.expiry_lead_months || ' months')
-                    WHEN lr.calibration_interval_months IS NOT NULL AND i.calibration_date IS NOT NULL
-                         AND DATE('now') >= DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months', '-' || COALESCE(lr.calibration_lead_months, 0) || ' months')
-                    THEN DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months')
-                    WHEN lr.lifespan_years IS NOT NULL AND ib.date_received IS NOT NULL
-                         AND DATE('now') >= DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
-                    THEN DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
+                    WHEN i.expiration_date IS NOT NULL
+                         AND i.expiration_date <= DATE('now', '+6 months')
+                    THEN DATE(i.expiration_date, '-6 months')
+                    WHEN i.calibration_date IS NOT NULL
+                         AND DATE('now') >= DATE(i.calibration_date, '+12 months')
+                    THEN DATE(i.calibration_date, '+12 months')
                     ELSE NULL
                 END as alert_date
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
-            LEFT JOIN Lifecycle_Rules lr ON ct.id = lr.category_type_id
             LEFT JOIN (
                 SELECT item_id, MIN(date_received) as date_received
                 FROM Item_Batches
@@ -77,7 +64,6 @@ class AlertSystem:
                     'id': row['id'],
                     'name': row['name'],
                     'category_name': row['category_name'] or 'Uncategorized',
-                    'category_type_name': row['category_type_name'],
                     'alert_type': row['alert_type'],
                     'alert_date': row.get('alert_date'),
                     'expiration_date': row.get('expiration_date'),
@@ -99,15 +85,12 @@ class AlertSystem:
             query = """
             SELECT
                 i.id, i.name, c.name as category_name,
-                i.expiration_date, lr.expiry_lead_months,
+                i.expiration_date,
                 DATE('now', '+' || ? || ' days') as cutoff_date
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
-            LEFT JOIN Lifecycle_Rules lr ON ct.id = lr.category_type_id
             WHERE i.expiration_date IS NOT NULL
-              AND lr.expiry_lead_months IS NOT NULL
-              AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
+              AND i.expiration_date <= DATE('now', '+6 months')
             ORDER BY i.expiration_date ASC
             """
 
@@ -138,15 +121,12 @@ class AlertSystem:
             query = """
             SELECT
                 i.id, i.name, c.name as category_name,
-                i.calibration_date, lr.calibration_interval_months, lr.calibration_lead_months,
-                DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months') as next_calibration
+                i.calibration_date,
+                DATE(i.calibration_date, '+12 months') as next_calibration
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
-            LEFT JOIN Lifecycle_Rules lr ON ct.id = lr.category_type_id
-            WHERE lr.calibration_interval_months IS NOT NULL
-              AND i.calibration_date IS NOT NULL
-              AND DATE('now') >= DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months', '-' || COALESCE(lr.calibration_lead_months, 0) || ' months')
+            WHERE i.calibration_date IS NOT NULL
+              AND DATE('now') >= DATE(i.calibration_date, '+10 months')
             ORDER BY next_calibration ASC
             """
 
@@ -173,62 +153,13 @@ class AlertSystem:
             logger.error(f"Failed to get calibration alerts: {e}")
             return []
 
-    def get_lifecycle_alerts(self) -> List[Dict[str, Any]]:
-        """Get items reaching end of lifecycle (Spec #10)."""
-        try:
-            query = """
-            SELECT
-                i.id, i.name, c.name as category_name,
-                ib.date_received as first_batch_date,
-                lr.lifespan_years,
-                DATE(ib.date_received, '+' || lr.lifespan_years || ' years') as end_of_life
-            FROM Items i
-            LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Category_Types ct ON c.category_type_id = ct.id
-            LEFT JOIN Lifecycle_Rules lr ON ct.id = lr.category_type_id
-            LEFT JOIN (
-                SELECT item_id, MIN(date_received) as date_received
-                FROM Item_Batches
-                GROUP BY item_id
-            ) ib ON i.id = ib.item_id
-            WHERE lr.lifespan_years IS NOT NULL
-              AND ib.date_received IS NOT NULL
-              AND DATE('now') >= DATE(ib.date_received, '+' || lr.lifespan_years || ' years')
-            ORDER BY end_of_life ASC
-            """
-
-            rows = db.execute_query(query)
-            alerts = []
-
-            for row in rows:
-                end_of_life = row.get('end_of_life')
-                alert = {
-                    'id': row['id'],
-                    'name': row['name'],
-                    'category_name': row['category_name'] or 'Uncategorized',
-                    'first_batch_date': row['first_batch_date'],
-                    'lifespan_years': row['lifespan_years'],
-                    'end_of_life': end_of_life,
-                    'days_past_lifecycle': self._calculate_days_since(end_of_life) if end_of_life else None,
-                    'alert_type': 'lifecycle'
-                }
-                alerts.append(alert)
-
-            logger.debug(f"Found {len(alerts)} lifecycle alerts")
-            return alerts
-
-        except Exception as e:
-            logger.error(f"Failed to get lifecycle alerts: {e}")
-            return []
-
     def get_alert_summary(self) -> Dict[str, int]:
         """Get summary of all alert types."""
         alerts = self.get_active_alerts()
         summary = {
             'total_alerts': len(alerts),
             'expiration_alerts': sum(1 for a in alerts if a['alert_type'] == 'expiration'),
-            'calibration_alerts': sum(1 for a in alerts if a['alert_type'] == 'calibration'),
-            'lifecycle_alerts': sum(1 for a in alerts if a['alert_type'] == 'lifecycle')
+            'calibration_alerts': sum(1 for a in alerts if a['alert_type'] == 'calibration')
         }
         return summary
 

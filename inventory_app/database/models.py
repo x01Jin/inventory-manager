@@ -13,67 +13,20 @@ from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 
 @dataclass
-class CategoryType:
-    """Represents a category type for lifecycle rules."""
-    id: Optional[int] = None
-    name: str = ""
-
-    def save(self) -> bool:
-        """Save or update the category type."""
-        try:
-            if self.id:
-                # Update existing
-                query = "UPDATE Category_Types SET name = ? WHERE id = ?"
-                db.execute_update(query, (self.name, self.id))
-            else:
-                # Insert new
-                query = "INSERT INTO Category_Types (name) VALUES (?)"
-                result = db.execute_update(query, (self.name,), return_last_id=True)
-                if isinstance(result, tuple):
-                    _, self.id = result
-                else:
-                    self.id = db.get_last_insert_id()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save category type: {e}")
-            return False
-
-    @classmethod
-    def get_all(cls) -> List['CategoryType']:
-        """Get all category types."""
-        try:
-            rows = db.execute_query("SELECT * FROM Category_Types ORDER BY name")
-            return [cls(**dict(row)) for row in rows]
-        except Exception as e:
-            logger.error(f"Failed to get category types: {e}")
-            return []
-
-    @classmethod
-    def get_by_id(cls, type_id: int) -> Optional['CategoryType']:
-        """Get category type by ID."""
-        try:
-            rows = db.execute_query("SELECT * FROM Category_Types WHERE id = ?", (type_id,))
-            return cls(**dict(rows[0])) if rows else None
-        except Exception as e:
-            logger.error(f"Failed to get category type {type_id}: {e}")
-            return None
-
-@dataclass
 class Category:
     """Represents an item category."""
     id: Optional[int] = None
     name: str = ""
-    category_type_id: Optional[int] = None
 
     def save(self) -> bool:
         """Save or update the category."""
         try:
             if self.id:
-                query = "UPDATE Categories SET name = ?, category_type_id = ? WHERE id = ?"
-                db.execute_update(query, (self.name, self.category_type_id, self.id))
+                query = "UPDATE Categories SET name = ? WHERE id = ?"
+                db.execute_update(query, (self.name, self.id))
             else:
-                query = "INSERT INTO Categories (name, category_type_id) VALUES (?, ?)"
-                db.execute_update(query, (self.name, self.category_type_id))
+                query = "INSERT INTO Categories (name) VALUES (?)"
+                db.execute_update(query, (self.name,))
                 self.id = db.get_last_insert_id()
             return True
         except Exception as e:
@@ -746,69 +699,6 @@ class Requisition:
         except Exception as e:
             logger.error(f"Failed to get requisitions: {e}")
             return []
-
-@dataclass
-class Lifecycle_Rules:
-    """Represents lifecycle rules for category types."""
-    id: Optional[int] = None
-    category_type_id: int = 0
-    expiry_lead_months: Optional[int] = None
-    lifespan_years: Optional[int] = None
-    calibration_interval_months: Optional[int] = None
-    calibration_lead_months: Optional[int] = None
-
-    def save(self) -> bool:
-        """Save or update the lifecycle rules."""
-        try:
-            if self.id:
-                query = """
-                UPDATE Lifecycle_Rules SET category_type_id = ?, expiry_lead_months = ?,
-                lifespan_years = ?, calibration_interval_months = ?, calibration_lead_months = ?
-                WHERE id = ?
-                """
-                db.execute_update(query, (
-                    self.category_type_id, self.expiry_lead_months, self.lifespan_years,
-                    self.calibration_interval_months, self.calibration_lead_months, self.id
-                ))
-            else:
-                query = """
-                INSERT INTO Lifecycle_Rules (category_type_id, expiry_lead_months, lifespan_years,
-                calibration_interval_months, calibration_lead_months) VALUES (?, ?, ?, ?, ?)
-                """
-                db.execute_update(query, (
-                    self.category_type_id, self.expiry_lead_months, self.lifespan_years,
-                    self.calibration_interval_months, self.calibration_lead_months
-                ))
-                self.id = db.get_last_insert_id()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save lifecycle rules: {e}")
-            return False
-
-    def delete(self) -> bool:
-        """Delete the lifecycle rules."""
-        try:
-            if not self.id:
-                return False
-
-            db.execute_update("DELETE FROM Lifecycle_Rules WHERE id = ?", (self.id,))
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete lifecycle rules {self.id}: {e}")
-            return False
-
-    @classmethod
-    def get_by_category_type(cls, category_type_id: int) -> Optional['Lifecycle_Rules']:
-        """Get lifecycle rules by category type ID."""
-        try:
-            rows = db.execute_query(
-                "SELECT * FROM Lifecycle_Rules WHERE category_type_id = ?",
-                (category_type_id,)
-            )
-            return cls(**dict(rows[0])) if rows else None
-        except Exception as e:
-            logger.error(f"Failed to get lifecycle rules for category type {category_type_id}: {e}")
-            return None
 
 @dataclass
 class RequisitionItem:

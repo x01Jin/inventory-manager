@@ -4,89 +4,50 @@
 -- Enable foreign key enforcement
 PRAGMA foreign_keys = ON;
 
--- 1. Category_Types: High-level types for lifecycle rules
-CREATE TABLE Category_Types (
+-- 1. Categories: Item categories
+CREATE TABLE Categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
--- Insert initial category types
-INSERT INTO Category_Types (name) VALUES
-('Chemical'),
-('Glassware'),
-('Equipment'),
-('Apparatus'),
-('Material');
+INSERT INTO Categories (name) VALUES
+('Hydrochloric Acid'),
+('Sodium Hydroxide'),
+('Beaker'),
+('Volumetric Flask'),
+('Microscope'),
+('Centrifuge'),
+('Bunsen Burner'),
+('Pipette'),
+('Plastic Tubes'),
+('Filter Paper');
 
--- 2. Categories: Item categories linked to category types
-CREATE TABLE Categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    category_type_id INTEGER,
-    FOREIGN KEY (category_type_id) REFERENCES Category_Types(id)
-);
-
-INSERT INTO Categories (name, category_type_id) VALUES
-('Hydrochloric Acid', 1),
-('Sodium Hydroxide', 1),
-('Beaker', 2),
-('Volumetric Flask', 2),
-('Microscope', 3),
-('Centrifuge', 3),
-('Bunsen Burner', 4),
-('Pipette', 4),
-('Plastic Tubes', 5),
-('Filter Paper', 5);
-
--- Index for performance
-CREATE INDEX idx_categories_type ON Categories(category_type_id);
-
--- 3. Lifecycle_Rules: Alert rules per category type
-CREATE TABLE Lifecycle_Rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_type_id INTEGER NOT NULL,
-    expiry_lead_months INTEGER,            -- e.g., 6 for Chemicals; NULL for non-expiring types
-    lifespan_years INTEGER,                -- e.g., 3 for Glassware, 5 for Equipment/Apparatus; NULL for chemicals
-    calibration_interval_months INTEGER,   -- e.g., 12 for Equipment; NULL otherwise
-    calibration_lead_months INTEGER,       -- e.g., 3
-    UNIQUE(category_type_id),
-    FOREIGN KEY (category_type_id) REFERENCES Category_Types(id)
-);
-
--- Insert initial lifecycle rules
-INSERT INTO Lifecycle_Rules (category_type_id, expiry_lead_months, lifespan_years, calibration_interval_months, calibration_lead_months) VALUES
-(1, 6, NULL, NULL, NULL),  -- Chemical: 6 months expiration
-(2, NULL, 3, NULL, NULL),  -- Glassware: 3 years lifespan
-(3, NULL, 5, 12, 3),      -- Equipment: 5 years lifespan + yearly calibration
-(4, NULL, 5, NULL, NULL),  -- Apparatus: 5 years lifespan
-(5, NULL, 2, NULL, NULL);  -- Material: 2 years lifespan
-
--- 4. Suppliers: Supplier names for dropdown selection
+-- 2. Suppliers: Supplier names for dropdown selection
 CREATE TABLE Suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
 -- Insert initial suppliers
-INSERT INTO Suppliers (name) VALUES ('Malcor Chemicals'), ('ATR Trading System'), ('Brightway Trading School');
+INSERT INTO Suppliers (name) VALUES ('Malcor Chemicals'), ('ATR Trading System'), ('Brightway Trading School'), ('Sigma-Aldrich'), ('Thermo Fisher Scientific');
 
--- Sizes: Size options for dropdown
+-- 3. Sizes: Size options for dropdown
 CREATE TABLE Sizes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
 -- Insert initial sizes
-INSERT INTO Sizes (name) VALUES ('250mL');
+INSERT INTO Sizes (name) VALUES ('250mL'), ('500mL'), ('1L'), ('100mL'), ('50mL');
 
--- Brands: Brand options for dropdown
+-- 4. Brands: Brand options for dropdown
 CREATE TABLE Brands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
 -- Insert initial brands
-INSERT INTO Brands (name) VALUES ('LabCorp');
+INSERT INTO Brands (name) VALUES ('LabCorp'), ('Fisher Scientific'), ('Merck'), ('Sigma'), ('VWR');
 
 -- 5. Items: Core inventory table
 CREATE TABLE Items (
@@ -228,7 +189,7 @@ CREATE TABLE Disposal_History (
 -- Index
 CREATE INDEX idx_disposal_item ON Disposal_History(item_id);
 
--- Activity_Log: Recent activity tracking for dashboard
+-- 14. Activity_Log: Recent activity tracking for dashboard
 CREATE TABLE Activity_Log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     activity_type TEXT NOT NULL,  -- 'ITEM_ADDED', 'ITEM_EDITED', 'ITEM_DELETED', 'REQUISITION_CREATED', 'BORROWER_ADDED', etc.
@@ -255,74 +216,6 @@ FROM Items i
 LEFT JOIN Item_Batches ib ON ib.item_id = i.id
 GROUP BY i.id;
 
--- Item_Calibration_Due View: Helper for alerts
-CREATE VIEW Item_Calibration_Due AS
-SELECT
-    i.id AS item_id,
-    lr.calibration_interval_months,
-    lr.calibration_lead_months,
-    i.calibration_date AS last_calibration_date,
-    CASE
-        WHEN lr.calibration_interval_months IS NOT NULL AND i.calibration_date IS NOT NULL
-        THEN DATE(i.calibration_date, '+' || lr.calibration_interval_months || ' months')
-        ELSE NULL
-    END AS next_calibration_date
-FROM Items i
-JOIN Categories c ON i.category_id = c.id
-LEFT JOIN Lifecycle_Rules lr ON c.category_type_id = lr.category_type_id;
-
--- Alerts View: Combined alerts for expiration, lifecycle, calibration
-CREATE VIEW Alerts AS
-WITH starts AS (
-  SELECT
-    s.item_id,
-    COALESCE(s.first_batch_received, s.acquisition_date) AS start_date
-  FROM Item_Start_Dates s
-),
-cal AS (
-  SELECT * FROM Item_Calibration_Due
-)
-SELECT
-  i.id AS item_id,
-  i.name,
-  'Expiration Alert' AS alert_type,
-  i.expiration_date AS reference_date
-FROM Items i
-JOIN Categories c ON i.category_id = c.id
-JOIN Lifecycle_Rules lr ON c.category_type_id = lr.category_type_id
-WHERE i.expiration_date IS NOT NULL
-  AND lr.expiry_lead_months IS NOT NULL
-  AND i.expiration_date <= DATE('now', '+' || lr.expiry_lead_months || ' months')
-
-UNION ALL
-
-SELECT
-  i.id,
-  i.name,
-  'Lifecycle Alert' AS alert_type,
-  DATE(s.start_date, '+' || lr.lifespan_years || ' years') AS reference_date
-FROM Items i
-JOIN Categories c ON i.category_id = c.id
-JOIN Lifecycle_Rules lr ON c.category_type_id = lr.category_type_id
-JOIN starts s ON s.item_id = i.id
-WHERE lr.lifespan_years IS NOT NULL
-  AND s.start_date IS NOT NULL
-  AND DATE(s.start_date, '+' || lr.lifespan_years || ' years') <= DATE('now')
-
-UNION ALL
-
-SELECT
-  i.id,
-  i.name,
-  'Calibration Alert' AS alert_type,
-  cal.next_calibration_date AS reference_date
-FROM Items i
-JOIN Categories c ON i.category_id = c.id
-JOIN Lifecycle_Rules lr ON c.category_type_id = lr.category_type_id
-JOIN cal ON cal.item_id = i.id
-WHERE cal.next_calibration_date IS NOT NULL
-  AND DATE('now') >= DATE(cal.next_calibration_date, '-' || COALESCE(lr.calibration_lead_months, 0) || ' months');
-
 -- Item_Usage View: Usage tracking
 CREATE VIEW Item_Usage AS
 SELECT
@@ -335,69 +228,3 @@ JOIN Requisitions r ON ri.requisition_id = r.id
 JOIN Items i ON ri.item_id = i.id
 GROUP BY ri.item_id, r.lab_activity_date;
 
--- Dynamic Report Query Template (supports daily, weekly, monthly, quarterly granularity)
--- Replace ? placeholders with actual values in order:
--- 1. start_date, 2. end_date, 3. granularity ('daily', 'weekly', 'monthly', 'quarterly')
--- Optional filters: 4. grade_filter, 5. section_filter, 6. include_consumables (0/1)
-/*
-WITH base AS (
-  SELECT
-    i.id AS item_id,
-    i.name AS item_name,
-    c.name AS category_name,
-    i.size,
-    i.brand,
-    i.other_specifications,
-    SUM(ri.quantity_borrowed) AS qty,
-    r.lab_activity_date
-  FROM Requisition_Items ri
-  JOIN Requisitions r ON r.id = ri.requisition_id
-  JOIN Items i ON i.id = ri.item_id
-  JOIN Categories c ON c.id = i.category_id
-  WHERE r.lab_activity_date BETWEEN ? AND ?
-  -- Add optional grade filter
-  AND (? IS NULL OR r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?))
-  -- Add optional section filter
-  AND (? IS NULL OR r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?))
-  -- Add optional consumables filter
-  AND (? = 1 OR i.is_consumable = 0)
-  GROUP BY i.id, r.lab_activity_date
-),
-dynamic_periods AS (
-  SELECT
-    *,
-    CASE ?
-      WHEN 'daily' THEN strftime('%Y-%m-%d', lab_activity_date)
-      WHEN 'weekly' THEN strftime('%Y-%W', lab_activity_date)
-      WHEN 'monthly' THEN strftime('%Y-%m', lab_activity_date)
-      WHEN 'quarterly' THEN strftime('%Y', lab_activity_date) || '-Q' ||
-                          CAST(((CAST(strftime('%m', lab_activity_date) AS INTEGER) - 1) / 3) + 1 AS TEXT)
-    END AS period_key
-  FROM base
-),
-pivoted_data AS (
-  SELECT
-    item_id,
-    item_name,
-    category_name,
-    size,
-    brand,
-    other_specifications,
-    period_key,
-    SUM(qty) AS period_qty
-  FROM dynamic_periods
-  GROUP BY item_id, period_key
-)
-SELECT
-  item_name AS ITEMS,
-  category_name AS CATEGORIES,
-  size AS SIZE,
-  brand AS BRAND,
-  other_specifications AS SPECIFICATIONS,
-  -- Dynamic period columns will be generated here based on granularity
-  -- Example for monthly: "2023-01", "2023-02", etc.
-  SUM(period_qty) AS "TOTAL QUANTITY"
-FROM pivoted_data
-GROUP BY item_id
-ORDER BY category_name, item_name;
-*/

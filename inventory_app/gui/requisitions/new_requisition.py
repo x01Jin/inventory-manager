@@ -184,6 +184,14 @@ class NewRequisitionDialog(QDialog):
 
         layout.addWidget(notes_group)
 
+        # Connect form field signals to update button state
+        self.activity_name.textChanged.connect(self.update_create_button_state)
+        self.expected_borrow.dateTimeChanged.connect(self.update_create_button_state)
+        self.expected_return.dateTimeChanged.connect(self.update_create_button_state)
+        self.activity_date.dateChanged.connect(self.update_create_button_state)
+        self.num_students.valueChanged.connect(self.update_create_button_state)
+        self.num_groups.valueChanged.connect(self.update_create_button_state)
+
         layout.addStretch()
         return panel
 
