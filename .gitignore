@@ -7,4 +7,4 @@ build/
 dist/
 *.spec
 inventory.db
-inventory_app/populate_sample_data.py
+populate_sample_data.py

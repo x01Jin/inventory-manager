@@ -12,6 +12,7 @@ from inventory_app.gui.dashboard import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
 from inventory_app.gui.borrowers.borrowers_page import BorrowersPage
+from inventory_app.gui.reports.reports_page import ReportsPage
 from inventory_app.gui.settings.settings_page import SettingsPage
 
 
@@ -52,7 +53,7 @@ class MainWindow(QMainWindow):
         self.inventory_page = InventoryPage()
         self.requisitions_page = RequisitionsPage()
         self.borrowers_page = BorrowersPage()
-        self.reports_page = self.create_placeholder("Reports", "📊 Generate usage reports")
+        self.reports_page = ReportsPage()
         self.settings_page = SettingsPage()
 
         # Add pages to stack
@@ -87,6 +88,9 @@ class MainWindow(QMainWindow):
             elif page_index == 3 and hasattr(self.borrowers_page, 'refresh_data'):  # Borrowers
                 self.borrowers_page.refresh_data()
                 print("Refreshed borrowers data")
+            elif page_index == 4 and hasattr(self.reports_page, 'refresh_data'):  # Reports
+                self.reports_page.refresh_data()
+                print("Refreshed reports data")
 
         except Exception as e:
             print(f"Failed to change page to {page_index}: {e}")

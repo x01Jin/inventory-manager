@@ -13,7 +13,6 @@ sys.path.insert(0, parent_dir)
 from inventory_app.database.connection import db  # noqa: E402
 from inventory_app.utils.logger import logger  # noqa: E402
 from inventory_app.business_logic.alert_engine import alert_engine  # noqa: E402
-from inventory_app.business_logic.report_generator import report_generator  # noqa: E402
 
 
 def initialize_laboratory_database():
@@ -44,10 +43,6 @@ def verify_components():
 
     if not alert_engine:
         logger.warning("⚠️ Alert engine not available")
-        components_ok = False
-
-    if not report_generator:
-        logger.warning("⚠️ Report generator not available")
         components_ok = False
 
     if components_ok:

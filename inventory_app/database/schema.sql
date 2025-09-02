@@ -332,8 +332,10 @@ JOIN Requisitions r ON ri.requisition_id = r.id
 JOIN Items i ON ri.item_id = i.id
 GROUP BY ri.item_id, r.lab_activity_date;
 
--- Weekly Report Query Template (to be used programmatically)
--- Replace :start_date and :end_date with actual values
+-- Dynamic Report Query Template (supports daily, weekly, monthly, quarterly granularity)
+-- Replace ? placeholders with actual values in order:
+-- 1. start_date, 2. end_date, 3. granularity ('daily', 'weekly', 'monthly', 'quarterly')
+-- Optional filters: 4. grade_filter, 5. section_filter, 6. include_consumables (0/1)
 /*
 WITH base AS (
   SELECT
@@ -349,31 +351,50 @@ WITH base AS (
   JOIN Requisitions r ON r.id = ri.requisition_id
   JOIN Items i ON i.id = ri.item_id
   JOIN Categories c ON c.id = i.category_id
-  WHERE r.lab_activity_date BETWEEN :start_date AND :end_date
+  WHERE r.lab_activity_date BETWEEN ? AND ?
+  -- Add optional grade filter
+  AND (? IS NULL OR r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?))
+  -- Add optional section filter
+  AND (? IS NULL OR r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?))
+  -- Add optional consumables filter
+  AND (? = 1 OR i.is_consumable = 0)
   GROUP BY i.id, r.lab_activity_date
 ),
-with_weeks AS (
+dynamic_periods AS (
   SELECT
-    item_id, item_name, category_name, size, brand, other_specifications, qty, lab_activity_date,
-    CAST((strftime('%d', lab_activity_date) - 1) / 7 + 1 AS INTEGER) AS week_of_month
+    *,
+    CASE ?
+      WHEN 'daily' THEN strftime('%Y-%m-%d', lab_activity_date)
+      WHEN 'weekly' THEN strftime('%Y-%W', lab_activity_date)
+      WHEN 'monthly' THEN strftime('%Y-%m', lab_activity_date)
+      WHEN 'quarterly' THEN strftime('%Y', lab_activity_date) || '-Q' ||
+                          CAST(((CAST(strftime('%m', lab_activity_date) AS INTEGER) - 1) / 3) + 1 AS TEXT)
+    END AS period_key
   FROM base
+),
+pivoted_data AS (
+  SELECT
+    item_id,
+    item_name,
+    category_name,
+    size,
+    brand,
+    other_specifications,
+    period_key,
+    SUM(qty) AS period_qty
+  FROM dynamic_periods
+  GROUP BY item_id, period_key
 )
 SELECT
   item_name AS ITEMS,
   category_name AS CATEGORIES,
-  (SELECT COALESCE(SUM(quantity_received), 0)
-     FROM Item_Batches b
-     WHERE b.item_id = w.item_id) AS ACTUAL_INVENTORY,
   size AS SIZE,
   brand AS BRAND,
-  other_specifications AS "OTHER SPECIFICATIONS",
-  SUM(CASE WHEN week_of_month = 1 THEN qty ELSE 0 END) AS "WEEK 1",
-  SUM(CASE WHEN week_of_month = 2 THEN qty ELSE 0 END) AS "WEEK 2",
-  SUM(CASE WHEN week_of_month = 3 THEN qty ELSE 0 END) AS "WEEK 3",
-  SUM(CASE WHEN week_of_month = 4 THEN qty ELSE 0 END) AS "WEEK 4",
-  SUM(CASE WHEN week_of_month = 5 THEN qty ELSE 0 END) AS "WEEK 5",
-  SUM(qty) AS "TOTAL NUMBER OF ITEMS"
-FROM with_weeks w
+  other_specifications AS SPECIFICATIONS,
+  -- Dynamic period columns will be generated here based on granularity
+  -- Example for monthly: "2023-01", "2023-02", etc.
+  SUM(period_qty) AS "TOTAL QUANTITY"
+FROM pivoted_data
 GROUP BY item_id
 ORDER BY category_name, item_name;
 */

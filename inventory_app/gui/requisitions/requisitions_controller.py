@@ -122,7 +122,7 @@ class RequisitionsController:
             if not requisition.save(editor_name):
                 logger.error("Failed to save requisition")
                 return False
-            time.sleep(0.5)  # Allow requisition save to complete
+            time.sleep(0.1)  # Allow requisition save to complete
 
             # Step 2: Add items to requisition and update stock
             for item_data in items_data:
@@ -139,7 +139,7 @@ class RequisitionsController:
                 if not req_item.save():
                     logger.error(f"Failed to save requisition item: {item_data}")
                     return False
-                time.sleep(0.5)  # Allow requisition item save to complete
+                time.sleep(0.1)  # Allow requisition item save to complete
 
                 # Step 3: Record stock movement (consumption) using StockMovementService
                 # For now, record at item level (batch_id will be passed when batch selection is implemented)
@@ -151,7 +151,7 @@ class RequisitionsController:
                     f"Borrowed for activity: {requisition.lab_activity_name}",
                     batch_id
                 )
-                time.sleep(0.5)  # Allow stock movement to complete
+                time.sleep(0.1)  # Allow stock movement to complete
 
             logger.info(f"Created requisition {requisition.id} for borrower {borrower.name}")
             return True
@@ -202,7 +202,7 @@ class RequisitionsController:
             if not requisition.save(editor_name):
                 logger.error("Failed to save requisition")
                 return False
-            time.sleep(0.5)  # Allow requisition save to complete
+            time.sleep(0.1)  # Allow requisition save to complete
 
             # Add items to requisition and update stock
             for item_data in items_data:
@@ -219,7 +219,7 @@ class RequisitionsController:
                 if not req_item.save():
                     logger.error(f"Failed to save requisition item: {item_data}")
                     return False
-                time.sleep(0.5)  # Allow requisition item save to complete
+                time.sleep(0.1)  # Allow requisition item save to complete
 
                 # Record stock movement (consumption) using StockMovementService
                 # For now, record at item level (batch_id will be passed when batch selection is implemented)
@@ -231,7 +231,7 @@ class RequisitionsController:
                     f"Borrowed for activity: {requisition.lab_activity_name}",
                     batch_id
                 )
-                time.sleep(0.5)  # Allow stock movement to complete
+                time.sleep(0.1)  # Allow stock movement to complete
 
             logger.info(f"Created requisition {requisition.id} for existing borrower {borrower.name}")
             return True

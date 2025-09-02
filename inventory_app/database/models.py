@@ -480,27 +480,27 @@ class Item:
             # 1. Delete requisition items first (has dual dependencies: item + requisition)
             logger.info(f"Deleting Requisition_Items for item {self.id}")
             db.execute_update("DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,))
-            time.sleep(0.5)  # 0.5s delay to prevent constraint timing issues
+            time.sleep(0.1)  # 0.1s delay to prevent constraint timing issues
 
             # 2. Delete stock movements (references both items and batches)
             logger.info(f"Deleting Stock_Movements for item {self.id}")
             db.execute_update("DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,))
-            time.sleep(0.5)  # 0.5s delay
+            time.sleep(0.1)  # 0.1s delay
 
             # 3. Delete item batches (only depends on items, safe after movements deleted)
             logger.info(f"Deleting Item_Batches for item {self.id}")
             db.execute_update("DELETE FROM Item_Batches WHERE item_id = ?", (self.id,))
-            time.sleep(0.5)  # 0.5s delay
+            time.sleep(0.1)  # 0.1s delay
 
             # 4. Delete update history (only depends on items)
             logger.info(f"Deleting Update_History for item {self.id}")
             db.execute_update("DELETE FROM Update_History WHERE item_id = ?", (self.id,))
-            time.sleep(0.5)  # 0.5s delay
+            time.sleep(0.1)  # 0.1s delay
 
             # 5. Delete disposal history (only depends on items)
             logger.info(f"Deleting Disposal_History for item {self.id}")
             db.execute_update("DELETE FROM Disposal_History WHERE item_id = ?", (self.id,))
-            time.sleep(0.5)  # 0.5s delay
+            time.sleep(0.1)  # 0.1s delay
 
             # 6. Finally delete the item itself (no dependencies remain)
             logger.info(f"Deleting main Items record {self.id}")
