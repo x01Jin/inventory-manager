@@ -14,6 +14,7 @@ from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
 from inventory_app.gui.borrowers.borrowers_page import BorrowersPage
 from inventory_app.gui.reports.reports_page import ReportsPage
 from inventory_app.gui.settings.settings_page import SettingsPage
+from inventory_app.utils.logger import logger
 
 
 class MainWindow(QMainWindow):
@@ -21,7 +22,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        print("Initializing Laboratory Inventory Application...")
+        logger.info("Initializing Laboratory Inventory Application...")
 
         self.setWindowTitle("Laboratory Inventory Monitor")
         self.setMinimumSize(1280, 720)
@@ -67,7 +68,7 @@ class MainWindow(QMainWindow):
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
 
-        print("Laboratory Inventory Application ready")
+        logger.info("Laboratory Inventory Application ready")
 
     def on_page_changed(self, page_index: int):
         """Handle page changes and refresh page data."""
@@ -78,22 +79,22 @@ class MainWindow(QMainWindow):
             # Refresh the page data when switching
             if page_index == 0 and hasattr(self.dashboard_page, 'refresh_data'):  # Dashboard
                 self.dashboard_page.refresh_data()
-                print("Refreshed dashboard data")
+                logger.info("Refreshed dashboard data")
             elif page_index == 1 and hasattr(self.inventory_page, 'refresh_data'):  # Inventory
                 self.inventory_page.refresh_data()
-                print("Refreshed inventory data")
+                logger.info("Refreshed inventory data")
             elif page_index == 2 and hasattr(self.requisitions_page, 'refresh_data'):  # Requisitions
                 self.requisitions_page.refresh_data()
-                print("Refreshed requisitions data")
+                logger.info("Refreshed requisitions data")
             elif page_index == 3 and hasattr(self.borrowers_page, 'refresh_data'):  # Borrowers
                 self.borrowers_page.refresh_data()
-                print("Refreshed borrowers data")
+                logger.info("Refreshed borrowers data")
             elif page_index == 4 and hasattr(self.reports_page, 'refresh_data'):  # Reports
                 self.reports_page.refresh_data()
-                print("Refreshed reports data")
+                logger.info("Refreshed reports data")
 
         except Exception as e:
-            print(f"Failed to change page to {page_index}: {e}")
+            logger.error(f"Failed to change page to {page_index}: {e}")
 
     def create_placeholder(self, title: str, description: str):
         """Create placeholder page."""
@@ -124,11 +125,11 @@ def main():
         window = MainWindow()
         window.show()
 
-        print("Laboratory Inventory Application started successfully")
+        logger.info("Laboratory Inventory Application started successfully")
         return app.exec()
 
     except Exception as e:
-        print(f"Failed to start application: {e}")
+        logger.error(f"Failed to start application: {e}")
         return 1
 
 

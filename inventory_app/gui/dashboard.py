@@ -7,10 +7,11 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
-from inventory_app.database.models import Item, Requisition, Borrower
+from inventory_app.database.models import Requisition, Borrower
 from inventory_app.business_logic.alert_engine import alert_engine
 from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.database.connection import db
+from inventory_app.utils.logger import logger
 
 
 class DashboardPage(QWidget):
@@ -164,7 +165,7 @@ class DashboardPage(QWidget):
             self.update_recent_activity()
             self.update_alerts_table()
         except Exception as e:
-            print(f"Failed to refresh dashboard: {e}")
+            logger.error(f"Failed to refresh dashboard: {e}")
 
 
     def update_recent_activity(self):
@@ -190,7 +191,7 @@ class DashboardPage(QWidget):
             self.activity_text.setPlainText(activity_text)
 
         except Exception as e:
-            print(f"Failed to update recent activity: {e}")
+            logger.error(f"Failed to update recent activity: {e}")
             self.activity_text.setPlainText("Error loading recent activities")
 
     def get_batch_statistics(self):
@@ -214,7 +215,7 @@ class DashboardPage(QWidget):
             return {'total_batches': 0, 'total_stock': 0}
 
         except Exception as e:
-            print(f"Failed to get batch statistics: {e}")
+            logger.error(f"Failed to get batch statistics: {e}")
             return {'total_batches': 0, 'total_stock': 0}
 
     def update_alerts_table(self):
@@ -236,4 +237,4 @@ class DashboardPage(QWidget):
                 self.alerts_table.setItem(row, 2, urgency_item)
 
         except Exception as e:
-            print(f"Failed to update alerts: {e}")
+            logger.error(f"Failed to update alerts: {e}")

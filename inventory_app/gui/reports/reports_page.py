@@ -230,3 +230,7 @@ class ReportsPage(QWidget):
         except Exception as e:
             logger.error(f"Failed to update granularity info: {e}")
             self.granularity_info.setText("Error calculating granularity")
+
+    def refresh_data(self):
+            """Refresh data on the reports page."""
+            pass
