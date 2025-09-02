@@ -27,7 +27,7 @@ class ReportGenerator:
 
     def __init__(self):
         """Initialize report generator."""
-        logger.info("Report generator initialized")
+
 
     def get_granularity(self, start_date: date, end_date: date) -> str:
         """

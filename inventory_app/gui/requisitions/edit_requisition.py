@@ -5,7 +5,7 @@ Uses composition pattern with existing services for robust functionality.
 """
 
 from typing import List, Dict, Optional
-from datetime import datetime, date
+from datetime import date
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QGroupBox, QMessageBox, QLineEdit,
@@ -14,11 +14,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDate, QDateTime
 
-from inventory_app.database.models import Borrower, Requisition, RequisitionItem
+from inventory_app.database.models import Borrower, RequisitionItem
 from inventory_app.database.connection import db
 from inventory_app.services.item_service import ItemService
 from inventory_app.services.stock_movement_service import StockMovementService
-from inventory_app.gui.borrowers.borrower_selector import BorrowerSelector
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 

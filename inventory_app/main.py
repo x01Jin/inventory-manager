@@ -53,11 +53,7 @@ def verify_components():
 def main():
     """Main application entry point."""
     try:
-        # Application header
         logger.info("🏥 LABORATORY INVENTORY MONITORING SYSTEM")
-        logger.info("Features: Equipment tracking, usage monitoring, alerts, Excel reports")
-        logger.info("Based on laboratory inventory specifications")
-
         logger.info("Starting Laboratory Inventory Application...")
 
         # Initialize database
@@ -87,6 +83,10 @@ def main():
         return 1
     finally:
         logger.info("🏁 Laboratory inventory system shutdown complete")
+
+if __name__ == "__main__":
+    exit_code = main()
+    sys.exit(exit_code)
 
 if __name__ == "__main__":
     exit_code = main()

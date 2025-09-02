@@ -55,7 +55,7 @@ class InventoryTable(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_table()
-        logger.info("Inventory table initialized")
+
 
     def setup_table(self):
         """Setup the table structure and styling."""

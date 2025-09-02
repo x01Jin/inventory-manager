@@ -26,7 +26,7 @@ class InventoryFilters(QWidget):
         self.categories: List[str] = []
         self.suppliers: List[str] = []
         self.setup_ui()
-        logger.info("Inventory filters initialized")
+
 
     def setup_ui(self):
         """Setup the filter controls UI."""

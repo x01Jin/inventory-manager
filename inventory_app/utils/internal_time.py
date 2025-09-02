@@ -32,9 +32,7 @@ def check_and_update_requisition_statuses():
     Called during manual refresh operations to ensure status accuracy.
     """
     try:
-        logger.info("🔍 Performing manual status check for requisitions...")
         now = datetime.now()
-        logger.info(f"📅 Current time: {now}")
 
         # Get all requisitions that might need status updates
         query = """
@@ -45,10 +43,7 @@ def check_and_update_requisition_statuses():
         """
         rows = db.execute_query(query)
 
-        logger.info(f"📋 Found {len(rows) if rows else 0} requisitions that might need status updates")
-
         if not rows:
-            logger.info("❌ No requisitions found needing status updates")
             return 0
 
         updated_count = 0
@@ -56,31 +51,14 @@ def check_and_update_requisition_statuses():
         for row in rows:
             req_id = row['id']
             current_status = row['status']
-            expected_return = row.get('expected_return')
-            expected_borrow = row.get('expected_borrow')
-
-            logger.info(f"🔎 Checking requisition {req_id}:")
-            logger.info(f"   Status: {current_status}")
-            logger.info(f"   Expected borrow: {expected_borrow}")
-            logger.info(f"   Expected return: {expected_return}")
 
             # Determine expected status
             expected_status = _calculate_expected_status(row, now)
-            logger.info(f"   Calculated expected status: {expected_status}")
 
             if expected_status and expected_status != current_status:
-                logger.info(f"✅ Status change needed: {current_status} → {expected_status}")
                 # Update status in database
                 _update_requisition_status(req_id, expected_status)
-                logger.info(f"💾 Manual status update: Requisition {req_id} changed from '{current_status}' to '{expected_status}'")
                 updated_count += 1
-            else:
-                logger.info(f"⏭️ No status change needed for requisition {req_id}")
-
-        if updated_count > 0:
-            logger.info(f"🎉 Manual status check completed: {updated_count} requisitions updated")
-        else:
-            logger.info("🤷 Manual status check completed: no updates needed")
 
         return updated_count
 

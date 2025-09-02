@@ -22,8 +22,6 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        logger.info("Initializing Laboratory Inventory Application...")
-
         self.setWindowTitle("Laboratory Inventory Monitor")
         self.setMinimumSize(1280, 720)
 
@@ -67,8 +65,6 @@ class MainWindow(QMainWindow):
 
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
-
-        logger.info("Laboratory Inventory Application ready")
 
     def on_page_changed(self, page_index: int):
         """Handle page changes and refresh page data."""

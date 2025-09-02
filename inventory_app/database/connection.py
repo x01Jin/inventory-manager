@@ -6,7 +6,6 @@ Handles SQLite database creation, connection, and basic operations.
 import sqlite3
 from pathlib import Path
 from typing import Optional, Any, List, Dict, Union
-from contextlib import contextmanager
 
 from inventory_app.utils.logger import logger
 
@@ -26,7 +25,29 @@ class DatabaseConnection:
         """
         self.db_path = Path(db_path)
         self._connection: Optional[sqlite3.Connection] = None
-        logger.info(f"Database connection initialized for {db_path}")
+
+    class _ConnectionContext:
+        """
+        Context manager for database connections.
+        Handles connection lifecycle and transaction rollback on errors.
+        """
+
+        def __init__(self, db_path: Path):
+            self.db_path = db_path
+            self.conn: Optional[sqlite3.Connection] = None
+
+        def __enter__(self) -> sqlite3.Connection:
+            self.conn = sqlite3.connect(self.db_path)
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            self.conn.row_factory = sqlite3.Row  # Enable column access by name
+            return self.conn
+
+        def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+            if self.conn:
+                if exc_type:
+                    self.conn.rollback()
+                    logger.error(f"Database connection error: {exc_val}")
+                self.conn.close()
 
     def create_database(self) -> bool:
         """
@@ -55,26 +76,12 @@ class DatabaseConnection:
             logger.error(f"Failed to create database: {e}")
             return False
 
-    @contextmanager
     def get_connection(self):
         """
         Context manager for database connections.
         Automatically handles connection opening/closing and transactions.
         """
-        conn = None
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.row_factory = sqlite3.Row  # Enable column access by name
-            yield conn
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            logger.error(f"Database connection error: {e}")
-            raise
-        finally:
-            if conn:
-                conn.close()
+        return self._ConnectionContext(self.db_path)
 
     def execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """
@@ -97,7 +104,6 @@ class DatabaseConnection:
                 for row in rows:
                     results.append(dict(row))
 
-                logger.debug(f"Executed query: {query[:50]}... Returned {len(results)} rows")
                 return results
 
         except Exception as e:
@@ -127,10 +133,8 @@ class DatabaseConnection:
                 if return_last_id:
                     last_id_cursor = conn.execute("SELECT last_insert_rowid()")
                     last_insert_id = last_id_cursor.fetchone()[0]
-                    logger.debug(f"Executed update: {query[:50]}... Affected {affected_rows} rows, Last ID: {last_insert_id}")
                     return affected_rows, last_insert_id
                 else:
-                    logger.debug(f"Executed update: {query[:50]}... Affected {affected_rows} rows")
                     return affected_rows
 
         except Exception as e:
@@ -150,8 +154,6 @@ class DatabaseConnection:
             with self.get_connection() as conn:
                 conn.executescript(script)
                 conn.commit()
-
-                logger.debug("Executed SQL script successfully")
 
         except Exception as e:
             logger.error(f"Script execution failed: {e}")

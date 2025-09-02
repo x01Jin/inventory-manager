@@ -152,26 +152,18 @@ class RequisitionsPage(QWidget):
     def refresh_data(self):
         """Refresh all requisition data."""
         try:
-            logger.info("🔄 REFRESH START: Refreshing requisition data...")
-
             # Load initial data from model
-            logger.info("📥 STEP 1: Loading initial data from model...")
             success = self.model.load_data()
             if not success:
                 logger.error("❌ STEP 1 FAILED: Failed to load initial data")
                 QMessageBox.warning(self, "Data Load Error",
                                   "Failed to load requisition data from database.")
                 return
-            logger.info("✅ STEP 1 SUCCESS: Initial data loaded")
 
             # Perform manual status check and update database
-            logger.info("🔍 STEP 2: Performing manual status check...")
             updated_count = check_and_update_requisition_statuses()
-            logger.info(f"📊 STEP 2 RESULT: Status check found {updated_count} updates")
 
             if updated_count > 0:
-                logger.info(f"🔄 STEP 3: Reloading data after {updated_count} status updates...")
-
                 # Reload data to get updated statuses
                 success = self.model.load_data()
                 if not success:
@@ -179,9 +171,6 @@ class RequisitionsPage(QWidget):
                     QMessageBox.warning(self, "Data Reload Error",
                                       "Failed to reload requisition data after status updates.")
                     return
-                logger.info("✅ STEP 3 SUCCESS: Data reloaded with updated statuses")
-            else:
-                logger.info("⏭️ STEP 3 SKIPPED: No status updates needed")
 
             # Reload borrower options (in case new borrowers have requisitions)
             self.filters._load_borrower_options()
@@ -205,8 +194,6 @@ class RequisitionsPage(QWidget):
                 f"Returned: {stats['returned_requisitions']} | "
                 f"Overdue: {stats['overdue_requisitions']}"
             )
-
-            logger.info(f"Refreshed requisition data: {len(rows)} requisitions displayed")
 
         except Exception as e:
             logger.error(f"Failed to refresh requisition data: {e}")

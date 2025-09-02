@@ -141,8 +141,6 @@ class RequisitionsFilters(QWidget):
                 display_text = f"{borrower.name} ({borrower.affiliation})"
                 self.borrower_combo.addItem(display_text, borrower.name.lower())
 
-            logger.debug(f"Loaded {len(borrowers)} borrowers with requisitions into filter dropdown")
-
         except Exception as e:
             logger.error(f"Failed to load borrower options: {e}")
 

@@ -106,8 +106,6 @@ class RequisitionsTable(QTableWidget):
                 borrowed_item = QTableWidgetItem(borrowed_date_str)
                 self.setItem(row_position, 2, borrowed_item)
 
-            logger.info(f"Populated table with {len(requisitions)} requisitions")
-
         except Exception as e:
             logger.error(f"Failed to populate requisitions table: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load requisition data: {str(e)}")

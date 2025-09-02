@@ -4,7 +4,7 @@ Handles calculation and retrieval of alerts for expiration and calibration.
 Uses composition pattern with DatabaseConnection.
 """
 
-from typing import List, Dict
+from typing import List
 from datetime import date
 from dataclasses import dataclass
 
@@ -29,7 +29,6 @@ class AlertEngine:
 
     def __init__(self):
         """Initialize alert engine."""
-        logger.info("Alert engine initialized")
 
     def get_all_alerts(self) -> List[Alert]:
         """

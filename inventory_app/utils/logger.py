@@ -7,6 +7,43 @@ import logging
 from pathlib import Path
 
 
+class LimitedFileHandler(logging.FileHandler):
+    def __init__(self, filename, max_lines=1000, **kwargs):
+        super().__init__(filename, **kwargs)
+        self.max_lines = max_lines
+        self.line_count = 0
+        self._count_existing_lines()
+        self._truncate_if_needed()
+
+    def _count_existing_lines(self):
+        try:
+            with open(self.baseFilename, 'r', encoding='utf-8') as f:
+                self.line_count = sum(1 for _ in f)
+        except FileNotFoundError:
+            self.line_count = 0
+
+    def _truncate_if_needed(self):
+        if self.line_count > self.max_lines:
+            self._truncate_file()
+
+    def _truncate_file(self):
+        try:
+            with open(self.baseFilename, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            if len(lines) > self.max_lines:
+                lines = lines[-self.max_lines:]
+                with open(self.baseFilename, 'w', encoding='utf-8') as f:
+                    f.writelines(lines)
+                self.line_count = len(lines)
+        except FileNotFoundError:
+            pass
+
+    def emit(self, record):
+        super().emit(record)
+        self.line_count += 1
+        if self.line_count > self.max_lines:
+            self._truncate_file()
+
 def setup_logger():
     """
     Sets up centralized logging for the application.
@@ -25,7 +62,7 @@ def setup_logger():
 
     # File handler for logs/logs.txt
     log_file = logs_dir / "logs.txt"
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = LimitedFileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
 
     # Console handler for development (optional, can be disabled for production)
