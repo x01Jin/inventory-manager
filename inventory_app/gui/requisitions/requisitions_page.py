@@ -16,7 +16,9 @@ from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
 from inventory_app.gui.requisitions.requisition_preview import RequisitionPreview
 from inventory_app.gui.requisitions.new_requisition import NewRequisitionDialog
+from inventory_app.gui.requisitions.edit_requisition import EditRequisitionDialog
 from inventory_app.utils.logger import logger
+from inventory_app.utils.internal_time import check_and_update_requisition_statuses
 
 
 class RequisitionsPage(QWidget):
@@ -150,14 +152,36 @@ class RequisitionsPage(QWidget):
     def refresh_data(self):
         """Refresh all requisition data."""
         try:
-            logger.info("Refreshing requisition data...")
+            logger.info("🔄 REFRESH START: Refreshing requisition data...")
 
-            # Load data from model
+            # Load initial data from model
+            logger.info("📥 STEP 1: Loading initial data from model...")
             success = self.model.load_data()
             if not success:
+                logger.error("❌ STEP 1 FAILED: Failed to load initial data")
                 QMessageBox.warning(self, "Data Load Error",
                                   "Failed to load requisition data from database.")
                 return
+            logger.info("✅ STEP 1 SUCCESS: Initial data loaded")
+
+            # Perform manual status check and update database
+            logger.info("🔍 STEP 2: Performing manual status check...")
+            updated_count = check_and_update_requisition_statuses()
+            logger.info(f"📊 STEP 2 RESULT: Status check found {updated_count} updates")
+
+            if updated_count > 0:
+                logger.info(f"🔄 STEP 3: Reloading data after {updated_count} status updates...")
+
+                # Reload data to get updated statuses
+                success = self.model.load_data()
+                if not success:
+                    logger.error("❌ STEP 3 FAILED: Failed to reload data after status updates")
+                    QMessageBox.warning(self, "Data Reload Error",
+                                      "Failed to reload requisition data after status updates.")
+                    return
+                logger.info("✅ STEP 3 SUCCESS: Data reloaded with updated statuses")
+            else:
+                logger.info("⏭️ STEP 3 SKIPPED: No status updates needed")
 
             # Reload borrower options (in case new borrowers have requisitions)
             self.filters._load_borrower_options()
@@ -209,6 +233,8 @@ class RequisitionsPage(QWidget):
         try:
             logger.info(f"New requisition created with ID: {requisition_id}")
 
+
+
             # Refresh the data to show the new requisition
             self.refresh_data()
 
@@ -221,7 +247,37 @@ class RequisitionsPage(QWidget):
 
     def edit_requisition(self):
         """Open dialog to edit the currently selected requisition."""
-        pass
+        try:
+            requisition_id = self.table.get_selected_requisition_id()
+            if not requisition_id:
+                QMessageBox.warning(self, "No Selection", "Please select a requisition to edit.")
+                return
+
+            # Get the requisition summary from the model
+            requisition_summary = self.model.get_requisition_by_id(requisition_id)
+            if not requisition_summary:
+                QMessageBox.warning(self, "Error", "Could not find requisition data.")
+                return
+
+            # Check if requisition can be edited
+            if requisition_summary.status == "returned":
+                QMessageBox.warning(self, "Cannot Edit",
+                                  "Fully returned requisitions cannot be edited.")
+                return
+
+            # Create and show the edit dialog
+            dialog = EditRequisitionDialog(requisition_summary, parent=self)
+
+            # Connect signal to refresh data when requisition is updated
+            dialog.requisition_updated.connect(self.refresh_data)
+            dialog.requisition_updated.connect(self.data_changed.emit)
+
+            # Show the dialog
+            dialog.exec()
+
+        except Exception as e:
+            logger.error(f"Failed to open edit requisition dialog: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open edit dialog: {str(e)}")
 
     def return_items(self):
         """Open dialog to process item returns for the selected requisition."""
@@ -257,6 +313,7 @@ class RequisitionsPage(QWidget):
             # Delete the requisition
             if self.model.delete_requisition(requisition_id, editor_name.strip()):
                 logger.info(f"Requisition {requisition_id} deleted by {editor_name}")
+
                 QMessageBox.information(self, "Success", "Requisition deleted successfully!")
                 self.refresh_data()
                 self.data_changed.emit()

@@ -215,8 +215,19 @@ class DarkTheme:
             }}
 
             QLabel:disabled {{
-                border: none;
-                background-color: transparent;
+                border: none !important;
+                background-color: transparent !important;
+            }}
+
+            /* Additional QLabel border removal with higher specificity */
+            QWidget QLabel {{
+                border: none !important;
+                background-color: transparent !important;
+            }}
+
+            * QLabel {{
+                border: none !important;
+                background-color: transparent !important;
             }}
 
             /* Frames */

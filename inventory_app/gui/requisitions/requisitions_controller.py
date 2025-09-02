@@ -62,8 +62,8 @@ class RequisitionsController:
                 # Get requisition items with details using ItemService
                 items = self.item_service.get_requisition_items_with_details(req.id)
 
-                # Determine status
-                status = self._determine_requisition_status(req, items)
+                # Get status directly from database (real-time monitor updates this)
+                status = req.status if req.status else "Active"
 
                 summary = RequisitionSummary(
                     requisition=req,
@@ -189,53 +189,3 @@ class RequisitionsController:
             db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (requisition_id,))
         except Exception as e:
             logger.error(f"Failed to clear requisition items: {e}")
-
-    def _determine_requisition_status(self, requisition: Requisition, items: List[Dict]) -> str:
-        """Determine the status of a requisition based on return records."""
-        try:
-            # Check if requisition ID exists
-            if not requisition.id:
-                logger.warning("Requisition ID is None, cannot determine status")
-                return "Active"
-
-            # Check if all items in the requisition have been returned
-            all_returned = True
-            current_date = date.today()
-
-            for item in items:
-                item_id = item['item_id']
-                borrowed_qty = item['quantity_borrowed']
-
-                # Get total returned quantity for this item in this requisition
-                returned_qty = self._get_returned_quantity_for_item(item_id, requisition.id)
-
-                if returned_qty < borrowed_qty:
-                    all_returned = False
-                    break
-
-            if all_returned:
-                return "Returned"
-            elif requisition.lab_activity_date < current_date:
-                # Past due date and not fully returned
-                return "Overdue"
-            else:
-                # Not past due and not fully returned
-                return "Active"
-
-        except Exception as e:
-            logger.error(f"Failed to determine requisition status: {e}")
-            return "Active"  # Default fallback
-
-    def _get_returned_quantity_for_item(self, item_id: int, requisition_id: int) -> int:
-        """Get the total quantity returned for a specific item in a requisition."""
-        try:
-            query = """
-            SELECT COALESCE(SUM(quantity), 0) as returned_qty
-            FROM Stock_Movements
-            WHERE item_id = ? AND source_id = ? AND movement_type = 'RETURN'
-            """
-            rows = db.execute_query(query, (item_id, requisition_id))
-            return rows[0]['returned_qty'] if rows else 0
-        except Exception as e:
-            logger.error(f"Failed to get returned quantity for item {item_id}: {e}")
-            return 0

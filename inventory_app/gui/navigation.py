@@ -1,10 +1,11 @@
 """
 Navigation panel component for the inventory application.
-Simple and clean navigation using composition.
+Simple and clean navigation using composition with live clock display.
 """
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, QTimer
+from datetime import datetime
 
 from inventory_app.gui.styles import DarkTheme
 
@@ -52,6 +53,19 @@ class NavigationPanel(QWidget):
         user_info.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; padding: 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {DarkTheme.BORDER_COLOR};")
         layout.addWidget(user_info)
 
+        # Live clock display
+        self.clock_label = QLabel()
+        self.clock_label.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; padding: 10px 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-family: 'Courier New'; border-top: 1px solid {DarkTheme.BORDER_COLOR};")
+        layout.addWidget(self.clock_label)
+
+        # Setup live clock timer
+        self.clock_timer = QTimer()
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000)  # Update every second for real-time display
+
+        # Initial clock update
+        self.update_clock()
+
         # Set first button as active
         self.set_active_button(0)
 
@@ -91,3 +105,9 @@ class NavigationPanel(QWidget):
         """Set the active navigation button."""
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
+
+    def update_clock(self):
+        """Update the clock display with current date and time."""
+        now = datetime.now()
+        time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        self.clock_label.setText(f"🕐 {time_str}")

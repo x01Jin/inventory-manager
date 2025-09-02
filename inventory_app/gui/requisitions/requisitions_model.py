@@ -142,7 +142,7 @@ class RequisitionsModel:
         Filter by requisition status.
 
         Args:
-            status: Status to filter by ('Active', 'Returned', 'Overdue')
+            status: Status to filter by ('active', 'returned', 'overdue')
         """
         self.status_filter = status
         self._apply_filters()
@@ -193,10 +193,10 @@ class RequisitionsModel:
         """
         try:
             total_requisitions = len(self.filtered_requisitions)
-            active_count = sum(1 for r in self.filtered_requisitions if r.status == "Active")
-            returned_count = sum(1 for r in self.filtered_requisitions if r.status == "Returned")
-            overdue_count = sum(1 for r in self.filtered_requisitions if r.status == "Overdue")
-            # Note: "Partially Returned" status removed - requisitions are either Active, Returned, or Overdue
+            active_count = sum(1 for r in self.filtered_requisitions if r.status == "active")
+            returned_count = sum(1 for r in self.filtered_requisitions if r.status == "returned")
+            overdue_count = sum(1 for r in self.filtered_requisitions if r.status == "overdue")
+            # Note: "Partially Returned" status removed - requisitions are either active, returned, or overdue
 
             # Calculate total items borrowed
             total_items = sum(r.total_items for r in self.filtered_requisitions)

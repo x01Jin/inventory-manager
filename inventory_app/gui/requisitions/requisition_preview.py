@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionSummary
+from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.logger import logger
 
 
@@ -61,14 +62,14 @@ class RequisitionPreview(QWidget):
         self.clear_container()
 
         empty_label = QLabel("Select a requisition")
-        empty_label.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-size: 14pt;
+        empty_label.setStyleSheet(f"""
+            QLabel {{
+                color: {DarkTheme.TEXT_MUTED};
+                font-size: {DarkTheme.FONT_SIZE_TITLE}pt;
                 font-style: italic;
                 text-align: center;
                 padding: 40px;
-            }
+            }}
         """)
         empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.container_layout.addWidget(empty_label)
@@ -109,7 +110,7 @@ class RequisitionPreview(QWidget):
 
         # Header
         header = QLabel("📋 Requisition Details")
-        header.setStyleSheet("font-size: 14pt; font-weight: bold; margin-bottom: 10px; padding: 0; border: none; background-color: transparent;")
+        header.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; margin-bottom: 10px;")
         self.container_layout.addWidget(header)
 
         # Status at the very top
@@ -141,18 +142,9 @@ class RequisitionPreview(QWidget):
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(15, 10, 15, 10)
 
-        status_label = QLabel(f"📊 Status: {status}")
-        status_label.setStyleSheet(f"""
-            QLabel {{
-                font-size: 12pt;
-                font-weight: bold;
-                color: {self._get_status_color(status)};
-                padding: 0;
-                margin: 0;
-                border: none;
-                background-color: transparent;
-            }}
-        """)
+        color = self._get_status_color(status)
+        status_label = QLabel(f"📊 Status: {status.upper()}")
+        status_label.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-weight: bold; color: {color};")
         layout.addWidget(status_label)
 
         return frame
@@ -166,15 +158,13 @@ class RequisitionPreview(QWidget):
         layout.setSpacing(8)
 
         name_label = QLabel(f"• Name: {borrower.name}")
-        name_label.setStyleSheet("font-weight: bold; font-size: 10pt; padding: 0; margin: 0; border: none; background-color: transparent;")
+        name_label.setStyleSheet(f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(name_label)
 
         affiliation_label = QLabel(f"• Affiliation: {borrower.affiliation}")
-        affiliation_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
         layout.addWidget(affiliation_label)
 
         group_label = QLabel(f"• Group: {borrower.group_name}")
-        group_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
         layout.addWidget(group_label)
 
         return group
@@ -191,25 +181,23 @@ class RequisitionPreview(QWidget):
         if req.expected_borrow:
             expected_borrow_str = req.expected_borrow.strftime("%Y-%m-%d %H:%M")
             expected_borrow_label = QLabel(f"• Expected Borrow: {expected_borrow_str}")
-            expected_borrow_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
             layout.addWidget(expected_borrow_label)
 
         # Borrowed Date
         if req.datetime_borrowed:
             borrowed_str = req.datetime_borrowed.strftime("%Y-%m-%d %H:%M")
             borrowed_label = QLabel(f"• Borrowed Date: {borrowed_str}")
-            borrowed_label.setStyleSheet("font-weight: bold; color: #28a745; padding: 0; margin: 0; border: none; background-color: transparent;")
+            borrowed_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
             layout.addWidget(borrowed_label)
         else:
             not_borrowed_label = QLabel("• Borrowed Date:  Reserved")
-            not_borrowed_label.setStyleSheet("font-style: italic; color: #856404; padding: 0; margin: 0; border: none; background-color: transparent;")
+            not_borrowed_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.WARNING_COLOR};")
             layout.addWidget(not_borrowed_label)
 
         # Expected Return
         if req.expected_return:
             expected_return_str = req.expected_return.strftime("%Y-%m-%d %H:%M")
             expected_return_label = QLabel(f"• Expected Return: {expected_return_str}")
-            expected_return_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
             layout.addWidget(expected_return_label)
 
         return group
@@ -223,23 +211,20 @@ class RequisitionPreview(QWidget):
         layout.setSpacing(8)
 
         activity_label = QLabel(f"• Activity: {req.lab_activity_name}")
-        activity_label.setStyleSheet("font-weight: bold; font-size: 10pt; padding: 0; margin: 0; border: none; background-color: transparent;")
+        activity_label.setStyleSheet(f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(activity_label)
 
         if req.lab_activity_date:
             date_str = req.lab_activity_date.strftime("%Y-%m-%d")
             date_label = QLabel(f"• Activity Date: {date_str}")
-            date_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
             layout.addWidget(date_label)
 
         if req.num_students:
             students_label = QLabel(f"• Students: {req.num_students}")
-            students_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
             layout.addWidget(students_label)
 
         if req.num_groups:
             groups_label = QLabel(f"• Groups: {req.num_groups}")
-            groups_label.setStyleSheet("padding: 0; margin: 0; border: none; background-color: transparent;")
             layout.addWidget(groups_label)
 
         return group
@@ -254,13 +239,13 @@ class RequisitionPreview(QWidget):
 
         if not items:
             no_items_label = QLabel("No items borrowed")
-            no_items_label.setStyleSheet("font-style: italic; color: #666; padding: 0; margin: 0; border: none; background-color: transparent;")
+            no_items_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.TEXT_MUTED};")
             layout.addWidget(no_items_label)
         else:
             for item in items:
                 item_text = f"• {item['name']} (x{item['quantity_borrowed']})"
                 item_label = QLabel(item_text)
-                item_label.setStyleSheet("font-size: 9pt; padding: 0; margin: 0; border: none; background-color: transparent;")
+                item_label.setStyleSheet("font-size: 9pt;")
                 layout.addWidget(item_label)
 
         return group
@@ -268,17 +253,17 @@ class RequisitionPreview(QWidget):
     def _get_status_color(self, status: str) -> str:
         """Get color for status text."""
         colors = {
-            "Active": "#f59e0b",    # Bright orange/yellow
-            "Returned": "#10b981", # Bright green
-            "Overdue": "#ef4444",  # Bright red
+            "active": "#f59e0b",    # Bright orange/yellow
+            "returned": "#10b981", # Bright green
+            "overdue": "#ef4444",  # Bright red
             "requested": "#06b6d4" # Bright cyan
         }
         return colors.get(status, "#ffffff")
 
     def _get_group_style(self) -> str:
         """Get consistent styling for group boxes."""
-        return """
-            QGroupBox {
+        return f"""
+            QGroupBox {{
                 font-weight: bold;
                 border: none;
                 border-radius: 0px;
@@ -286,15 +271,15 @@ class RequisitionPreview(QWidget):
                 padding-top: 10px;
                 background-color: transparent;
                 border: none;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #ffffff;
+                color: {DarkTheme.TEXT_PRIMARY};
                 border: none;
                 background-color: transparent;
-            }
+            }}
         """
 
     def get_current_requisition_id(self) -> Optional[int]:

@@ -88,7 +88,8 @@ class RequisitionsTable(QTableWidget):
                 self.insertRow(row_position)
 
                 # Status (Column 0)
-                status_item = QTableWidgetItem(row_data.status)
+                display_status = row_data.status.capitalize() if row_data.status else "Unknown"
+                status_item = QTableWidgetItem(display_status)
                 self.setItem(row_position, 0, status_item)
                 self._color_status_item(status_item, row_data.status)
 
@@ -176,13 +177,13 @@ class RequisitionsTable(QTableWidget):
             item: The table item to color
             status: The status string
         """
-        if status == "Active":
+        if status == "active":
             item.setBackground(QColor("#FFF3CD"))  # Light yellow
             item.setForeground(QColor("#856404"))  # Dark yellow
-        elif status == "Returned":
+        elif status == "returned":
             item.setBackground(QColor("#D1ECF1"))  # Light blue
             item.setForeground(QColor("#0C5460"))  # Dark blue
-        elif status == "Overdue":
+        elif status == "overdue":
             item.setBackground(QColor("#F8D7DA"))  # Light red
             item.setForeground(QColor("#721C24"))  # Dark red
         else:
