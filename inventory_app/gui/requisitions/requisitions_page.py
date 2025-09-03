@@ -3,22 +3,31 @@ Requisitions management page - Complete laboratory borrowing system.
 Provides full CRUD operations for requisitions with borrower management.
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QMessageBox, QInputDialog,
-    QSplitter
-)
-from PyQt6.QtCore import Qt, pyqtSignal
 from typing import Optional
+
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QGroupBox,
+    QMessageBox,
+    QInputDialog,
+    QSplitter,
+)
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
 from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
 from inventory_app.gui.requisitions.requisition_preview import RequisitionPreview
-from inventory_app.gui.requisitions.new_requisition import NewRequisitionDialog
-from inventory_app.gui.requisitions.edit_requisition import EditRequisitionDialog
-from inventory_app.utils.logger import logger
+from inventory_app.gui.requisitions.requisition_management import (
+    NewRequisitionDialog,
+    EditRequisitionDialog,
+)
 from inventory_app.utils.internal_time import check_and_update_requisition_statuses
+from inventory_app.utils.logger import logger
 
 
 class RequisitionsPage(QWidget):
@@ -29,7 +38,7 @@ class RequisitionsPage(QWidget):
 
     # Signals for integration with main application
     requisition_selected = pyqtSignal(int)  # Requisition ID selected
-    data_changed = pyqtSignal()             # Data was modified
+    data_changed = pyqtSignal()  # Data was modified
 
     def __init__(self, parent=None):
         """Initialize the requisitions page."""
@@ -156,8 +165,11 @@ class RequisitionsPage(QWidget):
             success = self.model.load_data()
             if not success:
                 logger.error("❌ STEP 1 FAILED: Failed to load initial data")
-                QMessageBox.warning(self, "Data Load Error",
-                                  "Failed to load requisition data from database.")
+                QMessageBox.warning(
+                    self,
+                    "Data Load Error",
+                    "Failed to load requisition data from database.",
+                )
                 return
 
             # Perform manual status check and update database
@@ -167,9 +179,14 @@ class RequisitionsPage(QWidget):
                 # Reload data to get updated statuses
                 success = self.model.load_data()
                 if not success:
-                    logger.error("❌ STEP 3 FAILED: Failed to reload data after status updates")
-                    QMessageBox.warning(self, "Data Reload Error",
-                                      "Failed to reload requisition data after status updates.")
+                    logger.error(
+                        "❌ STEP 3 FAILED: Failed to reload data after status updates"
+                    )
+                    QMessageBox.warning(
+                        self,
+                        "Data Reload Error",
+                        "Failed to reload requisition data after status updates.",
+                    )
                     return
 
             # Reload borrower options (in case new borrowers have requisitions)
@@ -197,7 +214,9 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to refresh requisition data: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load requisition data: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to load requisition data: {str(e)}"
+            )
 
     def new_requisition(self):
         """Open dialog to create a new requisition."""
@@ -213,14 +232,14 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to open new requisition dialog: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to open new requisition dialog: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to open new requisition dialog: {str(e)}"
+            )
 
     def _on_requisition_created(self, requisition_id: int):
         """Handle successful requisition creation."""
         try:
             logger.info(f"New requisition created with ID: {requisition_id}")
-
-
 
             # Refresh the data to show the new requisition
             self.refresh_data()
@@ -230,14 +249,20 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to handle requisition creation: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to refresh data after creating requisition: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to refresh data after creating requisition: {str(e)}",
+            )
 
     def edit_requisition(self):
         """Open dialog to edit the currently selected requisition."""
         try:
             requisition_id = self.table.get_selected_requisition_id()
             if not requisition_id:
-                QMessageBox.warning(self, "No Selection", "Please select a requisition to edit.")
+                QMessageBox.warning(
+                    self, "No Selection", "Please select a requisition to edit."
+                )
                 return
 
             # Get the requisition summary from the model
@@ -248,8 +273,9 @@ class RequisitionsPage(QWidget):
 
             # Check if requisition can be edited
             if requisition_summary.status == "returned":
-                QMessageBox.warning(self, "Cannot Edit",
-                                  "Fully returned requisitions cannot be edited.")
+                QMessageBox.warning(
+                    self, "Cannot Edit", "Fully returned requisitions cannot be edited."
+                )
                 return
 
             # Create and show the edit dialog
@@ -274,16 +300,19 @@ class RequisitionsPage(QWidget):
         """Delete the currently selected requisition."""
         requisition_id = self.table.get_selected_requisition_id()
         if not requisition_id:
-            QMessageBox.warning(self, "No Selection", "Please select a requisition to delete.")
+            QMessageBox.warning(
+                self, "No Selection", "Please select a requisition to delete."
+            )
             return
 
         # Confirm deletion
         reply = QMessageBox.question(
-            self, "Confirm Deletion",
+            self,
+            "Confirm Deletion",
             "Are you sure you want to delete this requisition?\n\n"
             "This action cannot be undone and will remove all associated borrowing records.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.No,
         )
 
         if reply != QMessageBox.StandardButton.Yes:
@@ -291,8 +320,9 @@ class RequisitionsPage(QWidget):
 
         try:
             # Ask for editor name (Spec #14)
-            editor_name, ok = QInputDialog.getText(self, "Editor Information",
-                                                  "Enter your name/initials (required):")
+            editor_name, ok = QInputDialog.getText(
+                self, "Editor Information", "Enter your name/initials (required):"
+            )
             if not ok or not editor_name.strip():
                 QMessageBox.warning(self, "Required", "Editor name is required.")
                 return
@@ -301,7 +331,9 @@ class RequisitionsPage(QWidget):
             if self.model.delete_requisition(requisition_id, editor_name.strip()):
                 logger.info(f"Requisition {requisition_id} deleted by {editor_name}")
 
-                QMessageBox.information(self, "Success", "Requisition deleted successfully!")
+                QMessageBox.information(
+                    self, "Success", "Requisition deleted successfully!"
+                )
                 self.refresh_data()
                 self.data_changed.emit()
             else:
@@ -309,7 +341,9 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to delete requisition {requisition_id}: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to delete requisition: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to delete requisition: {str(e)}"
+            )
 
     def _on_filter_changed(self):
         """Handle any filter change - apply filters and refresh table."""
@@ -318,18 +352,17 @@ class RequisitionsPage(QWidget):
             current_filters = self.filters.get_current_filters()
 
             # Apply filters to model
-            if 'search_term' in current_filters:
-                self.model.filter_by_search(current_filters['search_term'])
-            if 'borrower_filter' in current_filters:
-                self.model.filter_by_borrower(current_filters['borrower_filter'])
-            if 'activity_filter' in current_filters:
-                self.model.filter_by_activity(current_filters['activity_filter'])
-            if 'status_filter' in current_filters:
-                self.model.filter_by_status(current_filters['status_filter'])
-            if 'date_from' in current_filters or 'date_to' in current_filters:
+            if "search_term" in current_filters:
+                self.model.filter_by_search(current_filters["search_term"])
+            if "borrower_filter" in current_filters:
+                self.model.filter_by_borrower(current_filters["borrower_filter"])
+            if "activity_filter" in current_filters:
+                self.model.filter_by_activity(current_filters["activity_filter"])
+            if "status_filter" in current_filters:
+                self.model.filter_by_status(current_filters["status_filter"])
+            if "date_from" in current_filters or "date_to" in current_filters:
                 self.model.filter_by_date_range(
-                    current_filters.get('date_from'),
-                    current_filters.get('date_to')
+                    current_filters.get("date_from"), current_filters.get("date_to")
                 )
 
             # Refresh table with filtered data
@@ -341,7 +374,9 @@ class RequisitionsPage(QWidget):
             filtered_count = len(rows)
             self.filters.update_summary(total_count, filtered_count)
 
-            logger.debug(f"Applied filters: {filtered_count} of {total_count} requisitions shown")
+            logger.debug(
+                f"Applied filters: {filtered_count} of {total_count} requisitions shown"
+            )
 
         except Exception as e:
             logger.error(f"Failed to apply filters: {e}")
@@ -354,9 +389,13 @@ class RequisitionsPage(QWidget):
                 requisition_summary = self.model.get_requisition_by_id(requisition_id)
                 if requisition_summary:
                     self.preview.update_preview(requisition_summary)
-                    logger.debug(f"Updated preview for selected requisition {requisition_id}")
+                    logger.debug(
+                        f"Updated preview for selected requisition {requisition_id}"
+                    )
                 else:
-                    logger.warning(f"Could not find requisition {requisition_id} in model")
+                    logger.warning(
+                        f"Could not find requisition {requisition_id} in model"
+                    )
                     self.preview.update_preview(None)
             else:
                 # No selection - show empty state
@@ -366,7 +405,9 @@ class RequisitionsPage(QWidget):
             self._update_action_button_states(requisition_id)
 
         except Exception as e:
-            logger.error(f"Failed to update preview for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to update preview for requisition {requisition_id}: {e}"
+            )
             self.preview.update_preview(None)
             self._update_action_button_states(None)
 
@@ -396,9 +437,13 @@ class RequisitionsPage(QWidget):
                 requisition_summary = self.model.get_requisition_by_id(requisition_id)
                 if requisition_summary:
                     self.preview.update_preview(requisition_summary)
-                    logger.debug(f"Updated preview for selected requisition {requisition_id}")
+                    logger.debug(
+                        f"Updated preview for selected requisition {requisition_id}"
+                    )
                 else:
-                    logger.warning(f"Could not find requisition {requisition_id} in model")
+                    logger.warning(
+                        f"Could not find requisition {requisition_id} in model"
+                    )
                     self.preview.update_preview(None)
             else:
                 # No selection - show empty state

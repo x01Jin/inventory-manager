@@ -522,7 +522,6 @@ class DarkTheme:
                 border-radius: 6px;
                 padding: 6px 8px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
-                min-width: 100px;
             }}
 
             QComboBox:hover {{
@@ -535,19 +534,13 @@ class DarkTheme:
 
             QComboBox::drop-down {{
                 border: none;
-                width: 20px;
+                width: 0px;
             }}
 
             QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid {DarkTheme.TEXT_SECONDARY};
-                margin-right: 4px;
-            }}
-
-            QComboBox::down-arrow:hover {{
-                border-top-color: {DarkTheme.ACCENT_COLOR};
+                image: url();
+                width: 0px;
+                height: 0px;
             }}
 
             QComboBox QAbstractItemView {{

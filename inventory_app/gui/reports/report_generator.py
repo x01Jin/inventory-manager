@@ -10,7 +10,7 @@ from pathlib import Path
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.utils.date_utils import date_formatter
+from inventory_app.gui.reports.report_utils import date_formatter
 from inventory_app.gui.reports.query_builder import ReportQueryBuilder, ReportStatisticsBuilder
 
 # Import openpyxl directly since it's in requirements.txt

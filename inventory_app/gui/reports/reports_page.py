@@ -12,7 +12,7 @@ from inventory_app.gui.reports.report_config import ReportConfig, ReportMessages
 from inventory_app.gui.reports.ui_components import ReportUIComponents, ReportStyler, ReportUIUpdater
 from inventory_app.gui.reports.report_worker import ReportWorker
 from inventory_app.utils.logger import logger
-from inventory_app.utils.date_utils import date_formatter
+from inventory_app.gui.reports.report_utils import date_formatter
 
 import os
 from datetime import datetime

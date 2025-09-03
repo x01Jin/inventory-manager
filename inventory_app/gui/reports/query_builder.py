@@ -207,7 +207,7 @@ class ReportQueryBuilder:
 
     def _generate_weekly_period_mappings(self, start_date: date, end_date: date) -> Dict[str, List[Tuple[str, str]]]:
         """Generate period key to date range mappings using Python logic."""
-        from inventory_app.utils.date_utils import date_formatter
+        from inventory_app.gui.reports.report_utils import date_formatter
 
         # Get period keys from Python logic - this gives us the expected output format
         period_keys = date_formatter.get_period_keys(start_date, end_date, 'weekly')

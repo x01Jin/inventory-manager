@@ -97,7 +97,7 @@ CREATE TABLE Stock_Movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
     batch_id INTEGER,              -- Nullable for non-batch items
-    movement_type TEXT NOT NULL,   -- 'RECEIPT','CONSUMPTION','ADJUSTMENT','DISPOSAL','RETURN'
+    movement_type TEXT NOT NULL,   -- 'CONSUMPTION','BORROW','DISPOSAL','RETURN'
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     source_id INTEGER,             -- e.g., requisition_id for usage
@@ -227,4 +227,3 @@ FROM Requisition_Items ri
 JOIN Requisitions r ON ri.requisition_id = r.id
 JOIN Items i ON ri.item_id = i.id
 GROUP BY ri.item_id, r.lab_activity_date;
-

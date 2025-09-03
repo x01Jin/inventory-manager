@@ -1,380 +1,471 @@
 """
-Enhanced date utilities for the inventory management system.
-Provides comprehensive date formatting, granularity calculation, and period handling.
+Pure date and time utilities for consistent formatting and display across the application.
+
+This module provides reusable functions for date/time formatting, parsing, and conversion
+without any business logic or feature-specific code.
 """
 
-from datetime import date, timedelta
-from typing import List, Tuple
-from calendar import monthrange
+from datetime import datetime, date, time
+from typing import Optional, Union, List
+import calendar
+
+# Constants for month and day names
+MONTH_NAMES = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
+}
+
+DAY_NAMES = {
+    0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"
+}
+
+# Full month and day names for detailed formatting
+FULL_MONTH_NAMES = {
+    1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+    7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+}
+
+FULL_DAY_NAMES = {
+    0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
+    4: "Friday", 5: "Saturday", 6: "Sunday"
+}
 
 
-class EnhancedDateFormatter:
-    """Advanced date formatting utilities with smart granularity."""
+def get_month_name(month_num: int, full: bool = False) -> str:
+    """Get month name from month number (1-12).
 
-    # Constants for month and day names
-    MONTH_NAMES = {
-        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
-        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"
-    }
+    Args:
+        month_num: Month number (1-12)
+        full: If True, return full month name, otherwise abbreviated
 
-    DAY_NAMES = {
-        0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"
-    }
-
-    @staticmethod
-    def get_smart_granularity(start_date: date, end_date: date) -> str:
-        """
-        Determine the optimal reporting granularity based on date range.
-
-        Args:
-            start_date: Start date of the period
-            end_date: End date of the period
-
-        Returns:
-            Granularity level: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'multi_year'
-        """
-        days_diff = (end_date - start_date).days + 1
-
-        if days_diff <= 7:
-            return 'daily'
-        elif days_diff <= 30:
-            return 'weekly'
-        elif days_diff <= 180:
-            return 'monthly'
-        elif days_diff <= 365:
-            return 'quarterly'
-        elif days_diff <= 730:
-            return 'yearly'
-        else:
-            return 'multi_year'
-
-    @staticmethod
-    def format_period_header(date_obj: date, granularity: str) -> str:
-        """
-        Format a date according to the specified granularity.
-
-        Args:
-            date_obj: Date to format
-            granularity: Granularity level
-
-        Returns:
-            Formatted period header string
-        """
-        if granularity == 'daily':
-            # Format: (Mon - Jan 01, 2020)
-            day_name = EnhancedDateFormatter.DAY_NAMES.get(date_obj.weekday(), "Mon")
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
-            return f"({day_name} - {month_name} {date_obj.day:02d}, {date_obj.year})"
-        elif granularity == 'weekly':
-            # Format: (W1 - Jan/2020) - Month-based weeks
-            week_num = ((date_obj.day - 1) // 7) + 1
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
-            return f"(W{week_num} - {month_name}/{date_obj.year})"
-        elif granularity == 'monthly':
-            # Format: (Jan/2020)
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
-            return f"({month_name}/{date_obj.year})"
-        elif granularity == 'quarterly':
-            # Format: (Jan-Mar/2020)
-            quarter = ((date_obj.month - 1) // 3) + 1
-            # Calculate quarter start and end months
-            quarter_start_month = (quarter - 1) * 3 + 1
-            quarter_end_month = quarter * 3
-
-            start_month_name = EnhancedDateFormatter.MONTH_NAMES.get(quarter_start_month, "Jan")
-            end_month_name = EnhancedDateFormatter.MONTH_NAMES.get(quarter_end_month, "Mar")
-            return f"({start_month_name}-{end_month_name}/{date_obj.year})"
-        elif granularity in ['yearly', 'multi_year']:
-            # Format: (2020)
-            return f"({date_obj.year})"
-        else:
-            return date_obj.strftime('%Y-%m-%d')
-
-    @staticmethod
-    def calculate_periods_with_excess(start_date: date, end_date: date, granularity: str) -> Tuple[List[date], List[date]]:
-        """
-        Calculate main periods and any excess time that doesn't fit the granularity.
-
-        Args:
-            start_date: Start date of the period
-            end_date: End date of the period
-            granularity: Granularity level
-
-        Returns:
-            Tuple of (main_periods, excess_periods)
-        """
-        main_periods = []
-        excess_periods = []
-        current = start_date
-
-        while current <= end_date:
-            main_periods.append(current)
-
-            if granularity == 'daily':
-                current += timedelta(days=1)
-            elif granularity == 'weekly':
-                current += timedelta(weeks=1)
-            elif granularity == 'monthly':
-                # Move to next month
-                if current.month == 12:
-                    current = current.replace(year=current.year + 1, month=1)
-                else:
-                    current = current.replace(month=current.month + 1)
-            elif granularity == 'quarterly':
-                # Move to next quarter
-                quarter_months = 3
-                new_month = current.month + quarter_months
-                if new_month > 12:
-                    current = current.replace(year=current.year + 1, month=new_month - 12)
-                else:
-                    current = current.replace(month=new_month)
-            elif granularity == 'yearly':
-                current = current.replace(year=current.year + 1)
-            else:  # multi_year
-                current = current.replace(year=current.year + 1)
-
-        # Check for excess periods
-        if current <= end_date:
-            excess_periods.append(current)
-
-        return main_periods, excess_periods
-
-    @staticmethod
-    def get_period_keys(start_date: date, end_date: date, granularity: str) -> List[str]:
-        """
-        Generate comprehensive period keys including excess periods for complete data coverage.
-
-        Args:
-            start_date: Start date
-            end_date: End date
-            granularity: Granularity level
-
-        Returns:
-            List of period key strings for SQL queries
-        """
-        period_keys = []
-
-        if granularity == 'daily':
-            # Daily: Just include all individual days
-            current_date = start_date
-            while current_date <= end_date:
-                period_keys.append(current_date.strftime('%Y-%m-%d'))
-                current_date += timedelta(days=1)
-
-        elif granularity == 'weekly':
-            # Weekly: Include excess days + main weeks + excess days
-            period_keys.extend(EnhancedDateFormatter._get_weekly_period_keys(start_date, end_date))
-
-        elif granularity == 'monthly':
-            # Monthly: Include excess days + main months + excess days
-            period_keys.extend(EnhancedDateFormatter._get_monthly_period_keys(start_date, end_date))
-
-        elif granularity == 'quarterly':
-            # Quarterly: Include excess days + main quarters + excess days
-            period_keys.extend(EnhancedDateFormatter._get_quarterly_period_keys(start_date, end_date))
-
-        elif granularity in ['yearly', 'multi_year']:
-            # Yearly: Just include the years
-            current_year = start_date.year
-            while current_year <= end_date.year:
-                period_keys.append(str(current_year))
-                current_year += 1
-
-        return period_keys
-
-    @staticmethod
-    def _get_weekly_period_keys(start_date: date, end_date: date) -> List[str]:
-        """Generate weekly period keys with excess handling."""
-        period_keys = []
-
-        # Find the first Monday on or before start_date
-        first_monday = start_date - timedelta(days=(start_date.weekday() - 0) % 7)
-        if first_monday < start_date:
-            # Add excess days before first Monday
-            excess_start = start_date
-            excess_end = first_monday + timedelta(days=6)  # Sunday before first Monday
-            if excess_start <= excess_end:
-                period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        # Add main weeks (Monday to Sunday)
-        current_monday = first_monday
-        while current_monday <= end_date:
-            week_sunday = current_monday + timedelta(days=6)
-            if current_monday >= start_date or week_sunday >= start_date:
-                # Only include weeks that have days in our range
-                week_year = current_monday.year
-                week_month = current_monday.month
-                # Calculate week number within month
-                first_monday_of_month = current_monday.replace(day=1)
-                while first_monday_of_month.weekday() != 0:  # Find first Monday of month
-                    first_monday_of_month += timedelta(days=1)
-                if first_monday_of_month > current_monday:
-                    first_monday_of_month -= timedelta(days=7)  # Go to previous Monday
-
-                week_num = ((current_monday - first_monday_of_month).days // 7) + 1
-                period_keys.append(f"{week_year}-{week_month:02d}-W{week_num}")
-
-            current_monday += timedelta(days=7)
-
-        # Add excess days after last Sunday
-        # Find the last Sunday that was actually processed in the loop
-        last_sunday = current_monday - timedelta(days=8)  # Go back to the last processed Sunday
-        if last_sunday < end_date:
-            excess_start = last_sunday + timedelta(days=1)
-            excess_end = end_date
-            if excess_start <= excess_end:
-                period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        return list(dict.fromkeys(period_keys))  # Remove duplicates
-
-    @staticmethod
-    def _get_monthly_period_keys(start_date: date, end_date: date) -> List[str]:
-        """Generate monthly period keys with excess handling."""
-        period_keys = []
-
-        # Add excess days before first day of month
-        if start_date.day > 1:
-            month_start = start_date.replace(day=1)
-            excess_start = month_start
-            excess_end = start_date - timedelta(days=1)
-            period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        # Add main months
-        current_month = start_date.replace(day=1)
-        while current_month <= end_date:
-            period_keys.append(current_month.strftime('%Y-%m'))
-            if current_month.month == 12:
-                current_month = current_month.replace(year=current_month.year + 1, month=1)
-            else:
-                current_month = current_month.replace(month=current_month.month + 1)
-
-        # Add excess days after last day of month
-        last_month_end = current_month - timedelta(days=1)
-        if last_month_end < end_date:
-            excess_start = last_month_end + timedelta(days=1)
-            excess_end = end_date
-            if excess_start <= excess_end:
-                period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        return list(dict.fromkeys(period_keys))  # Remove duplicates
-
-    @staticmethod
-    def _get_quarterly_period_keys(start_date: date, end_date: date) -> List[str]:
-        """Generate quarterly period keys with excess handling."""
-        period_keys = []
-
-        # Find quarter start
-        quarter_start_month = ((start_date.month - 1) // 3) * 3 + 1
-        quarter_start = start_date.replace(month=quarter_start_month, day=1)
-
-        # Add excess days before quarter start
-        if start_date > quarter_start:
-            excess_start = quarter_start
-            excess_end = start_date - timedelta(days=1)
-            period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        # Add main quarters
-        current_quarter_start = quarter_start
-        while current_quarter_start <= end_date:
-            quarter = ((current_quarter_start.month - 1) // 3) + 1
-            period_keys.append(f"{current_quarter_start.year}-Q{quarter}")
-
-            # Move to next quarter
-            next_month = current_quarter_start.month + 3
-            if next_month > 12:
-                current_quarter_start = current_quarter_start.replace(year=current_quarter_start.year + 1, month=1)
-            else:
-                current_quarter_start = current_quarter_start.replace(month=next_month)
-
-        # Add excess days after quarter end
-        quarter_end = current_quarter_start - timedelta(days=1)
-        if quarter_end < end_date:
-            excess_start = quarter_end + timedelta(days=1)
-            excess_end = end_date
-            if excess_start <= excess_end:
-                period_keys.append(f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}")
-
-        return list(dict.fromkeys(period_keys))  # Remove duplicates
-
-    @staticmethod
-    def get_days_in_period(date_obj: date, granularity: str) -> int:
-        """
-        Get the number of days in a period for accurate calculations.
-
-        Args:
-            date_obj: Date within the period
-            granularity: Granularity level
-
-        Returns:
-            Number of days in the period
-        """
-        if granularity == 'daily':
-            return 1
-        elif granularity == 'weekly':
-            # Calculate days until end of week (Sunday)
-            days_to_end = 6 - date_obj.weekday()
-            return days_to_end + 1
-        elif granularity == 'monthly':
-            return monthrange(date_obj.year, date_obj.month)[1]
-        elif granularity == 'quarterly':
-            # Calculate days in quarter
-            quarter_start_month = ((date_obj.month - 1) // 3) * 3 + 1
-            days = 0
-            for month in range(quarter_start_month, quarter_start_month + 3):
-                days += monthrange(date_obj.year, month)[1]
-            return days
-        elif granularity in ['yearly', 'multi_year']:
-            return 365 + (1 if date_obj.year % 4 == 0 and (date_obj.year % 100 != 0 or date_obj.year % 400 == 0) else 0)
-        else:
-            return 1
-
-    @staticmethod
-    def validate_date_range(start_date: date, end_date: date) -> bool:
-        """
-        Validate that the date range is logical.
-
-        Args:
-            start_date: Start date
-            end_date: End date
-
-        Returns:
-            True if valid, False otherwise
-        """
-        return start_date <= end_date
-
-    @staticmethod
-    def get_date_range_description(start_date: date, end_date: date) -> str:
-        """
-        Get a human-readable description of the date range.
-
-        Args:
-            start_date: Start date
-            end_date: End date
-
-        Returns:
-            Description string
-        """
-        days_diff = (end_date - start_date).days + 1
-        granularity = EnhancedDateFormatter.get_smart_granularity(start_date, end_date)
-
-        if days_diff == 1:
-            return f"Single day: {start_date.strftime('%B %d, %Y')}"
-        elif days_diff <= 7:
-            return f"{days_diff} days ({granularity} view)"
-        elif days_diff <= 30:
-            weeks = days_diff // 7
-            extra_days = days_diff % 7
-            desc = f"{weeks} week{'s' if weeks > 1 else ''}"
-            if extra_days > 0:
-                desc += f" {extra_days} day{'s' if extra_days > 1 else ''}"
-            return f"{desc} ({granularity} view)"
-        elif days_diff <= 365:
-            months = days_diff // 30
-            return f"~{months} month{'s' if months > 1 else ''} ({granularity} view)"
-        else:
-            years = days_diff // 365
-            return f"~{years} year{'s' if years > 1 else ''} ({granularity} view)"
+    Returns:
+        Month name string
+    """
+    if full:
+        return FULL_MONTH_NAMES.get(month_num, "")
+    return MONTH_NAMES.get(month_num, "")
 
 
-# Global instance for convenience
-date_formatter = EnhancedDateFormatter()
+def get_day_name(day_num: int, full: bool = False) -> str:
+    """Get day name from weekday number (0-6, where 0=Monday).
+
+    Args:
+        day_num: Weekday number (0=Monday, 6=Sunday)
+        full: If True, return full day name, otherwise abbreviated
+
+    Returns:
+        Day name string
+    """
+    if full:
+        return FULL_DAY_NAMES.get(day_num, "")
+    return DAY_NAMES.get(day_num, "")
+
+
+def format_date_short(date_obj: Union[date, datetime]) -> str:
+    """Format date in short format: 'Jan 15, 2025'.
+
+    Args:
+        date_obj: Date or datetime object
+
+    Returns:
+        Formatted date string
+    """
+    if isinstance(date_obj, datetime):
+        date_obj = date_obj.date()
+
+    month_name = get_month_name(date_obj.month)
+    return f"{month_name} {date_obj.day}, {date_obj.year}"
+
+
+def format_date_long(date_obj: Union[date, datetime]) -> str:
+    """Format date in long format: 'Monday, January 15, 2025'.
+
+    Args:
+        date_obj: Date or datetime object
+
+    Returns:
+        Formatted date string
+    """
+    if isinstance(date_obj, datetime):
+        date_obj = date_obj.date()
+
+    day_name = get_day_name(date_obj.weekday(), full=True)
+    month_name = get_month_name(date_obj.month, full=True)
+    return f"{day_name}, {month_name} {date_obj.day}, {date_obj.year}"
+
+
+def format_datetime_12h(dt_obj: datetime) -> str:
+    """Format datetime in 12-hour format: 'Jan 15, 2025 2:30 PM'.
+
+    Args:
+        dt_obj: Datetime object
+
+    Returns:
+        Formatted datetime string
+    """
+    date_str = format_date_short(dt_obj)
+    time_str = format_time_12h(dt_obj.time())
+    return f"{date_str} {time_str}"
+
+
+def format_time_12h(time_obj: time) -> str:
+    """Format time in 12-hour format: '2:30 PM'.
+
+    Args:
+        time_obj: Time object
+
+    Returns:
+        Formatted time string
+    """
+    hour = time_obj.hour
+    minute = time_obj.minute
+
+    if hour == 0:
+        hour_12 = 12
+        am_pm = "AM"
+    elif hour < 12:
+        hour_12 = hour
+        am_pm = "AM"
+    elif hour == 12:
+        hour_12 = 12
+        am_pm = "PM"
+    else:
+        hour_12 = hour - 12
+        am_pm = "PM"
+
+    return f"{hour_12}:{minute:02d} {am_pm}"
+
+
+def parse_date_iso(date_str: str) -> Optional[date]:
+    """Parse ISO date string (YYYY-MM-DD) to date object.
+
+    Args:
+        date_str: Date string in ISO format
+
+    Returns:
+        Date object or None if parsing fails
+    """
+    try:
+        return date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_datetime_iso(dt_str: str) -> Optional[datetime]:
+    """Parse ISO datetime string to datetime object.
+
+    Args:
+        dt_str: Datetime string in ISO format
+
+    Returns:
+        Datetime object or None if parsing fails
+    """
+    try:
+        return datetime.fromisoformat(dt_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_time_12h(time_str: str) -> Optional[time]:
+    """Parse 12-hour time string to time object.
+
+    Args:
+        time_str: Time string in 12-hour format (e.g., "2:30 PM")
+
+    Returns:
+        Time object or None if parsing fails
+    """
+    try:
+        # Split time and AM/PM
+        time_part, am_pm = time_str.strip().rsplit(' ', 1)
+        hour_str, minute_str = time_part.split(':')
+
+        hour = int(hour_str)
+        minute = int(minute_str)
+
+        # Convert to 24-hour format
+        if am_pm.upper() == "AM":
+            if hour == 12:
+                hour = 0
+        elif am_pm.upper() == "PM":
+            if hour != 12:
+                hour += 12
+
+        return time(hour=hour, minute=minute)
+
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def format_relative_date(date_obj: date) -> str:
+    """Format date as relative string: 'Today', 'Yesterday', 'Tomorrow', or formatted date.
+
+    Args:
+        date_obj: Date object
+
+    Returns:
+        Relative date string
+    """
+    today = date.today()
+    diff = (date_obj - today).days
+
+    if diff == 0:
+        return "Today"
+    elif diff == -1:
+        return "Yesterday"
+    elif diff == 1:
+        return "Tomorrow"
+    else:
+        return format_date_short(date_obj)
+
+
+def datetime_to_qdatetime(dt_obj: datetime):
+    """Convert Python datetime to QDateTime.
+
+    Args:
+        dt_obj: Python datetime object
+
+    Returns:
+        QDateTime object
+    """
+    try:
+        from PyQt6.QtCore import QDateTime, QDate, QTime
+        qdate = QDate(dt_obj.year, dt_obj.month, dt_obj.day)
+        qtime = QTime(dt_obj.hour, dt_obj.minute, dt_obj.second)
+        return QDateTime(qdate, qtime)
+    except ImportError:
+        return None
+
+
+def qdatetime_to_datetime(qdt) -> Optional[datetime]:
+    """Convert QDateTime to Python datetime.
+
+    Args:
+        qdt: QDateTime object
+
+    Returns:
+        Python datetime object or None if conversion fails
+    """
+    try:
+        if hasattr(qdt, 'toPyDateTime'):
+            return qdt.toPyDateTime()
+        return None
+    except (AttributeError, TypeError):
+        return None
+
+
+def date_to_qdate(date_obj: date):
+    """Convert Python date to QDate.
+
+    Args:
+        date_obj: Python date object
+
+    Returns:
+        QDate object
+    """
+    try:
+        from PyQt6.QtCore import QDate
+        return QDate(date_obj.year, date_obj.month, date_obj.day)
+    except ImportError:
+        return None
+
+
+def qdate_to_date(qdate) -> Optional[date]:
+    """Convert QDate to Python date.
+
+    Args:
+        qdate: QDate object
+
+    Returns:
+        Python date object or None if conversion fails
+    """
+    try:
+        if hasattr(qdate, 'toPyDate'):
+            return qdate.toPyDate()
+        return None
+    except (AttributeError, TypeError):
+        return None
+
+
+def get_current_datetime() -> datetime:
+    """Get current datetime.
+
+    Returns:
+        Current datetime object
+    """
+    return datetime.now()
+
+
+def get_current_date() -> date:
+    """Get current date.
+
+    Returns:
+        Current date object
+    """
+    return date.today()
+
+
+def format_date_iso(date_obj: Union[date, datetime]) -> str:
+    """Format date/datetime to ISO string (YYYY-MM-DD).
+
+    Args:
+        date_obj: Date or datetime object
+
+    Returns:
+        ISO formatted date string
+    """
+    if isinstance(date_obj, datetime):
+        return date_obj.date().isoformat()
+    return date_obj.isoformat()
+
+
+def format_datetime_iso(dt_obj: datetime) -> str:
+    """Format datetime to ISO string (YYYY-MM-DDTHH:MM:SS).
+
+    Args:
+        dt_obj: Datetime object
+
+    Returns:
+        ISO formatted datetime string
+    """
+    return dt_obj.isoformat()
+
+
+def is_valid_date_format(date_str: str, format_pattern: str = "%Y-%m-%d") -> bool:
+    """Validate date string format.
+
+    Args:
+        date_str: Date string to validate
+        format_pattern: Expected format pattern (default: YYYY-MM-DD)
+
+    Returns:
+        True if format is valid, False otherwise
+    """
+    try:
+        datetime.strptime(date_str, format_pattern)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def get_days_in_month(year: int, month: int) -> int:
+    """Get the number of days in a specific month and year.
+
+    Automatically handles leap years and different month lengths.
+
+    Args:
+        year: Year (e.g., 2025)
+        month: Month number (1-12)
+
+    Returns:
+        Number of days in the month (28, 29, 30, or 31)
+    """
+    return calendar.monthrange(year, month)[1]
+
+
+def get_valid_days_for_month(year: int, month: int) -> List[int]:
+    """Get list of valid day numbers for a specific month and year.
+
+    Args:
+        year: Year (e.g., 2025)
+        month: Month number (1-12)
+
+    Returns:
+        List of valid day numbers for the month
+    """
+    days_in_month = get_days_in_month(year, month)
+    return list(range(1, days_in_month + 1))
+
+
+def is_leap_year(year: int) -> bool:
+    """Check if a year is a leap year.
+
+    Args:
+        year: Year to check
+
+    Returns:
+        True if leap year, False otherwise
+    """
+    return calendar.isleap(year)
+
+
+def get_year_range(current_year: Optional[int] = None, years_before: int = 5, years_after: int = 5) -> List[int]:
+    """Get a range of years for dropdown selection.
+
+    Args:
+        current_year: Center year (defaults to current year)
+        years_before: Number of years before current year
+        years_after: Number of years after current year
+
+    Returns:
+        List of years for dropdown
+    """
+    if current_year is None:
+        current_year = date.today().year
+
+    start_year = current_year - years_before
+    end_year = current_year + years_after
+
+    return list(range(start_year, end_year + 1))
+
+
+def convert_12h_to_24h(hour_12: int, am_pm: str) -> int:
+    """Convert 12-hour format hour to 24-hour format.
+
+    Args:
+        hour_12: Hour in 12-hour format (1-12)
+        am_pm: "AM" or "PM"
+
+    Returns:
+        Hour in 24-hour format (0-23)
+    """
+    if am_pm.upper() == "AM":
+        return 0 if hour_12 == 12 else hour_12
+    else:  # PM
+        return 12 if hour_12 == 12 else hour_12 + 12
+
+
+def convert_24h_to_12h(hour_24: int) -> tuple[int, str]:
+    """Convert 24-hour format hour to 12-hour format.
+
+    Args:
+        hour_24: Hour in 24-hour format (0-23)
+
+    Returns:
+        Tuple of (hour_12, am_pm) where hour_12 is 1-12 and am_pm is "AM" or "PM"
+    """
+    if hour_24 == 0:
+        return 12, "AM"
+    elif hour_24 < 12:
+        return hour_24, "AM"
+    elif hour_24 == 12:
+        return 12, "PM"
+    else:
+        return hour_24 - 12, "PM"
+
+
+def get_minutes_options() -> List[str]:
+    """Get formatted minute options for dropdown selection.
+
+    Returns:
+        List of minute strings with leading zeros: ["01", "02", ..., "59"]
+    """
+    return [f"{minute:02d}" for minute in range(0, 60)]
+
+
+def get_hour_options_12h() -> List[int]:
+    """Get 12-hour format hour options for dropdown selection.
+
+    Returns:
+        List of hours 1-12
+    """
+    return list(range(1, 13))
+
+
+def get_ampm_options() -> List[str]:
+    """Get AM/PM options for dropdown selection.
+
+    Returns:
+        List of ["AM", "PM"]
+    """
+    return ["AM", "PM"]
