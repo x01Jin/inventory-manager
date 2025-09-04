@@ -575,6 +575,24 @@ class Requester:
             logger.error(f"Failed to get requester {requester_id}: {e}")
             return None
 
+    def delete(self) -> bool:
+        """Delete the requester."""
+        try:
+            if not self.id:
+                return False
+
+            # Check if requester has any associated requisitions
+            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Requisitions WHERE requester_id = ?", (self.id,))
+            if usage_check and usage_check[0]['count'] > 0:
+                logger.warning(f"Cannot delete requester {self.id}: requester has associated requisitions")
+                return False
+
+            db.execute_update("DELETE FROM Requesters WHERE id = ?", (self.id,))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete requester {self.id}: {e}")
+            return False
+
 @dataclass
 class Requisition:
     """Represents a requesting requisition."""

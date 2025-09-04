@@ -74,8 +74,13 @@ class RequestersPage(QWidget):
         self.edit_button.clicked.connect(self.edit_selected_requester)
         self.edit_button.setEnabled(False)
 
+        self.delete_button = QPushButton("🗑️ Delete Requester")
+        self.delete_button.clicked.connect(self.delete_selected_requester)
+        self.delete_button.setEnabled(False)
+
         action_layout.addWidget(self.add_button)
         action_layout.addWidget(self.edit_button)
+        action_layout.addWidget(self.delete_button)
         action_layout.addStretch()
 
         layout.addLayout(action_layout)
@@ -169,13 +174,67 @@ class RequestersPage(QWidget):
             logger.error(f"Failed to edit requester {requester_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to edit requester: {str(e)}")
 
+    def delete_selected_requester(self):
+        """Delete the currently selected requester."""
+        requester_id = self.table.get_selected_requester_id()
+        if not requester_id:
+            QMessageBox.warning(self, "No Selection", "Please select a requester to delete.")
+            return
+
+        # Check if requester has requisitions (shouldn't happen due to UI state, but double-check)
+        if self.model.requester_has_requisitions(requester_id):
+            QMessageBox.warning(self, "Cannot Delete",
+                              "Cannot delete requester: requester has recorded requisitions.")
+            return
+
+        # Get requester details for confirmation
+        requester = self.model.get_requester_by_id(requester_id)
+        if not requester:
+            QMessageBox.warning(self, "Error", "Requester not found.")
+            return
+
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete requester '{requester.name}'?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                success = self.model.delete_requester(requester_id, "User")
+                if success:
+                    QMessageBox.information(self, "Success", "Requester deleted successfully!")
+                    self.refresh_data()
+                    self.data_changed.emit()
+                else:
+                    QMessageBox.critical(self, "Error", "Failed to delete requester.")
+            except Exception as e:
+                logger.error(f"Failed to delete requester {requester_id}: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to delete requester: {str(e)}")
+
     def _on_requester_selected(self, requester_id: int):
         """Handle requester selection."""
         has_selection = requester_id is not None
         self.edit_button.setEnabled(has_selection)
 
         if has_selection:
+            # Check if requester has requisitions to determine delete button state
+            has_requisitions = self.model.requester_has_requisitions(requester_id)
+
+            if has_requisitions:
+                self.delete_button.setEnabled(False)
+                self.delete_button.setToolTip("Cannot delete: requester has recorded requisitions")
+            else:
+                self.delete_button.setEnabled(True)
+                self.delete_button.setToolTip("Delete this requester")
+
             self.requester_selected.emit(requester_id)
+        else:
+            # No selection - disable both buttons
+            self.delete_button.setEnabled(False)
+            self.delete_button.setToolTip("")
 
     def _on_requester_double_clicked(self, requester_id: int):
         """Handle double-click on requester (edit action)."""

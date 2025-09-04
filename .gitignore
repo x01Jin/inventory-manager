@@ -7,6 +7,7 @@ plan/
 build/
 dist/
 tests/
+.VSCodeCounter/
 *.spec
 inventory.db
 populate_sample_data.py

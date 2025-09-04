@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from inventory_app.database.models import Requester as RequesterDB
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.utils.activity_logger import activity_logger
 
 
 @dataclass
@@ -197,19 +198,72 @@ class RequesterModel:
             logger.error(f"Failed to update requester {requester_id}: {e}")
             return False
 
-    def delete_requester(self, requester_id: int) -> bool:
+    def delete_requester(self, requester_id: int, editor_name: str = "System") -> bool:
         """
-        Delete a requester (not implemented in RequesterDB model yet).
+        Delete a requester.
 
         Args:
             requester_id: ID of requester to delete
+            editor_name: Name of the user performing the deletion
 
         Returns:
             bool: True if successful
         """
-        # For now, just return False as deletion is not implemented
-        logger.warning(f"Requester deletion not implemented for ID: {requester_id}")
-        return False
+        try:
+            requester = self.get_requester_by_id(requester_id)
+            if not requester:
+                logger.error(f"Requester {requester_id} not found")
+                return False
+
+            # Attempt deletion
+            success = requester.delete()
+            if success:
+                # Refresh data after successful deletion
+                self.load_data()
+
+                # Log activity
+                activity_logger.log_activity(
+                    activity_logger.REQUESTER_DELETED,
+                    f"Deleted requester: {requester.name}",
+                    requester_id,
+                    "requester",
+                    editor_name
+                )
+
+                logger.info(f"Successfully deleted requester {requester_id}: {requester.name}")
+            else:
+                logger.warning(f"Failed to delete requester {requester_id}: requester has associated requisitions")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Failed to delete requester {requester_id}: {e}")
+            return False
+
+    def requester_has_requisitions(self, requester_id: int) -> bool:
+        """
+        Check if a requester has any associated requisitions.
+
+        Args:
+            requester_id: ID of requester to check
+
+        Returns:
+            bool: True if requester has requisitions, False otherwise
+        """
+        try:
+            query = """
+            SELECT COUNT(*) as count
+            FROM Requisitions
+            WHERE requester_id = ?
+            """
+            result = db.execute_query(query, (requester_id,))
+            if result and len(result) > 0:
+                count = result[0]['count']
+                return count > 0
+            return False
+        except Exception as e:
+            logger.error(f"Failed to check requisitions for requester {requester_id}: {e}")
+            return True  # Return True to be safe (disable deletion if we can't check)
 
     # Private methods
 
