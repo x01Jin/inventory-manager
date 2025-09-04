@@ -203,19 +203,29 @@ class ItemService:
             return "Unknown"
 
     def _get_total_stock(self, item_id: int) -> int:
-        """Get total stock for an item (all batches minus disposed quantities)."""
+        """Get total stock for an item accounting for all stock movements."""
         try:
             query = """
             SELECT
                 COALESCE(SUM(ib.quantity_received), 0) as original_stock,
-                COALESCE(disposed.disposed_qty, 0) as disposed_qty,
-                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(disposed.disposed_qty, 0) as total_stock
+                COALESCE(movements.consumed_qty, 0) as consumed_qty,
+                COALESCE(movements.disposed_qty, 0) as disposed_qty,
+                COALESCE(movements.returned_qty, 0) as returned_qty,
+                COALESCE(SUM(ib.quantity_received), 0) -
+                COALESCE(movements.consumed_qty, 0) -
+                COALESCE(movements.disposed_qty, 0) +
+                COALESCE(movements.returned_qty, 0) as total_stock
             FROM Item_Batches ib
             LEFT JOIN (
-                SELECT SUM(quantity) as disposed_qty
-                FROM Stock_Movements
-                WHERE movement_type = 'DISPOSAL' AND item_id = ?
-            ) disposed ON 1=1
+                SELECT
+                    sm.item_id,
+                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                FROM Stock_Movements sm
+                WHERE sm.item_id = ?
+                GROUP BY sm.item_id
+            ) movements ON ib.item_id = movements.item_id
             WHERE ib.item_id = ?
             """
             rows = db.execute_query(query, (item_id, item_id))
@@ -226,7 +236,8 @@ class ItemService:
 
     def _get_available_stock_for_batch(self, batch_id: int, exclude_requisition_id: Optional[int] = None) -> int:
         """
-        Get available stock for a specific batch.
+        Get available stock for a specific batch using consistent calculations.
+        Accounts for all stock movements: CONSUMPTION, DISPOSAL, RETURN.
 
         Args:
             batch_id: ID of the batch
@@ -236,22 +247,49 @@ class ItemService:
             Available stock for the batch
         """
         try:
-            # Get the total quantity for this batch
-            query = "SELECT quantity_received FROM Item_Batches WHERE id = ?"
-            rows = db.execute_query(query, (batch_id,))
+            # Get the batch with all movement calculations
+            query = """
+            SELECT
+                ib.quantity_received,
+                COALESCE(movements.consumed_qty, 0) as consumed_qty,
+                COALESCE(movements.disposed_qty, 0) as disposed_qty,
+                COALESCE(movements.returned_qty, 0) as returned_qty,
+                ib.quantity_received -
+                COALESCE(movements.consumed_qty, 0) -
+                COALESCE(movements.disposed_qty, 0) +
+                COALESCE(movements.returned_qty, 0) as total_stock
+            FROM Item_Batches ib
+            LEFT JOIN (
+                SELECT
+                    sm.batch_id,
+                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                FROM Stock_Movements sm
+                WHERE sm.batch_id = ?
+                GROUP BY sm.batch_id
+            ) movements ON ib.id = movements.batch_id
+            WHERE ib.id = ?
+            """
+
+            params = (batch_id, batch_id)
+            rows = db.execute_query(query, params)
             if not rows:
                 return 0
 
-            total_quantity = rows[0]['quantity_received']
+            batch_data = rows[0]
+            total_stock = batch_data['total_stock'] or 0
 
-            # Get currently requested quantity from this batch
-            # This is more complex as we need to track which specific batches are requested
-            # For now, we'll use a simplified approach based on stock movements
+            # Get currently requested quantity from this batch (excluding specified requisition)
             requested_query = """
             SELECT COALESCE(SUM(sm.quantity), 0) as requested_qty
             FROM Stock_Movements sm
+            JOIN Items i ON sm.item_id = i.id
             WHERE sm.batch_id = ?
-            AND sm.movement_type = 'CONSUMPTION'
+            AND (
+                (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
+                (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+            )
             """
 
             params = (batch_id,)
@@ -259,20 +297,10 @@ class ItemService:
                 requested_query += " AND sm.source_id != ?"
                 params = (batch_id, exclude_requisition_id)
 
-            # Check if there are any unreturned movements for this batch
-            requested_query += """
-            AND NOT EXISTS (
-                SELECT 1 FROM Stock_Movements sm_return
-                WHERE sm_return.batch_id = sm.batch_id
-                AND sm_return.movement_type = 'RETURN'
-                AND sm_return.source_id = sm.source_id
-            )
-            """
-
             requested_rows = db.execute_query(requested_query, params)
             requested_qty = requested_rows[0]['requested_qty'] if requested_rows else 0
 
-            return max(0, total_quantity - requested_qty)
+            return max(0, total_stock - requested_qty)
 
         except Exception as e:
             logger.error(f"Failed to get available stock for batch {batch_id}: {e}")

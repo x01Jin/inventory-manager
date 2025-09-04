@@ -32,6 +32,19 @@ class StockMovementService:
         """
         self._record_movement(item_id, 'CONSUMPTION', quantity, source_id, note, batch_id)
 
+    def record_reservation(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+        """
+        Record item reservation (temporary hold for active requisitions).
+
+        Args:
+            item_id: ID of the item
+            quantity: Quantity reserved
+            source_id: Requisition ID
+            note: Description/note for the movement
+            batch_id: Specific batch being reserved (optional)
+        """
+        self._record_movement(item_id, 'RESERVATION', quantity, source_id, note, batch_id)
+
     def record_return(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
         """
         Record item return.
@@ -153,6 +166,8 @@ class StockMovementService:
     def get_current_stock_level(self, item_id: int) -> int:
         """
         Calculate current stock level for an item based on movements.
+        Two-phase logic: RESERVATION/REQUEST reduce available stock,
+        CONSUMPTION/DISPOSAL are permanent reductions.
 
         Args:
             item_id: ID of the item
@@ -161,14 +176,13 @@ class StockMovementService:
             Current stock level
         """
         try:
-            # This would need to be implemented based on your stock movement logic
-            # For now, return a placeholder
             query = """
             SELECT COALESCE(SUM(
                 CASE
                     WHEN movement_type = 'RECEIPT' THEN quantity
                     WHEN movement_type = 'CONSUMPTION' THEN -quantity
                     WHEN movement_type = 'REQUEST' THEN -quantity
+                    WHEN movement_type = 'RESERVATION' THEN -quantity
                     WHEN movement_type = 'RETURN' THEN quantity
                     WHEN movement_type = 'DISPOSAL' THEN -quantity
                     WHEN movement_type = 'LOST' THEN -quantity  -- Backward compatibility

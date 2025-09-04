@@ -303,7 +303,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                     )
                     return
 
-                # Create stock movement with automatic movement type detection
+                # Create stock movement
                 from inventory_app.database.connection import db
 
                 # Determine movement type based on item consumability
@@ -311,7 +311,10 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 item_result = db.execute_query(item_query, (item["item_id"],))
                 is_consumable = item_result[0]["is_consumable"] if item_result else 1
 
-                movement_type = "CONSUMPTION" if is_consumable else "REQUEST"
+                # Phase 1: All items reduce available stock on creation
+                # For consumables: Record RESERVATION movement (temporary hold)
+                # For non-consumables: Record REQUEST movement (existing behavior)
+                movement_type = "RESERVATION" if is_consumable else "REQUEST"
 
                 movement_query = """
                 INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id)

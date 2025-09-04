@@ -15,6 +15,72 @@ class InventoryController:
     def __init__(self):
         pass
 
+    def _get_stock_calculations(self, item_id: Optional[int] = None) -> str:
+        """
+        Get consistent stock calculation SQL that accounts for all stock movements.
+        Returns SQL subquery for stock calculations.
+
+        Args:
+            item_id: Optional item ID filter for single item calculations
+
+        Returns:
+            SQL subquery string for stock calculations
+        """
+        base_query = """
+            SELECT
+                ib.item_id,
+                SUM(ib.quantity_received) as original_stock,
+                COALESCE(movements.consumed_qty, 0) as consumed_qty,
+                COALESCE(movements.disposed_qty, 0) as disposed_qty,
+                COALESCE(movements.returned_qty, 0) as returned_qty,
+                SUM(ib.quantity_received) -
+                COALESCE(movements.consumed_qty, 0) -
+                COALESCE(movements.disposed_qty, 0) +
+                COALESCE(movements.returned_qty, 0) as total_stock
+            FROM Item_Batches ib
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON ib.item_id = movements.item_id
+        """
+
+        if item_id:
+            base_query += f" WHERE ib.item_id = {item_id}"
+
+        base_query += " GROUP BY ib.item_id"
+
+        return base_query
+
+    def _get_requested_calculations(self) -> str:
+        """
+        Get consistent requested quantity calculation SQL.
+        Two-phase logic: Active requisitions reduce available stock via REQUEST/RESERVATION movements.
+        Finalized requisitions don't reduce available stock (movements have been replaced).
+        Returns SQL subquery for requested calculations.
+        """
+        return """
+            SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON ri.requisition_id = r.id
+            JOIN Items i ON ri.item_id = i.id
+            WHERE r.status != 'returned'  -- Only active requisitions reduce available stock
+            AND EXISTS (
+                SELECT 1 FROM Stock_Movements sm
+                WHERE sm.item_id = ri.item_id
+                AND sm.source_id = r.id
+                AND (
+                    (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
+                    (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+                )
+            )
+            GROUP BY ri.item_id
+        """
+
     def load_inventory_data(self) -> List[Dict[str, Any]]:
         """Load inventory items with related data from database."""
         try:
@@ -68,31 +134,10 @@ class InventoryController:
                 GROUP BY item_id
             ) ib ON i.id = ib.item_id
             LEFT JOIN (
-                SELECT
-                    ib.item_id,
-                    SUM(ib.quantity_received) as original_stock,
-                    COALESCE(disposed.disposed_qty, 0) as disposed_qty,
-                    SUM(ib.quantity_received) - COALESCE(disposed.disposed_qty, 0) as total_stock
-                FROM Item_Batches ib
-                LEFT JOIN (
-                    SELECT item_id, SUM(quantity) as disposed_qty
-                    FROM Stock_Movements
-                    WHERE movement_type = 'DISPOSAL'
-                    GROUP BY item_id
-                ) disposed ON ib.item_id = disposed.item_id
-                GROUP BY ib.item_id
+                """ + self._get_stock_calculations() + """
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
-                FROM Requisition_Items ri
-                JOIN Requisitions r ON ri.requisition_id = r.id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM Stock_Movements sm
-                    WHERE sm.item_id = ri.item_id
-                    AND sm.movement_type = 'RETURN'
-                    AND sm.source_id = r.id
-                )
-                GROUP BY ri.item_id
+                """ + self._get_requested_calculations() + """
             ) requested ON i.id = requested.item_id
             ORDER BY c.name, i.name
             """
@@ -137,31 +182,10 @@ class InventoryController:
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
             LEFT JOIN (
-                SELECT
-                    ib.item_id,
-                    SUM(ib.quantity_received) as original_stock,
-                    COALESCE(disposed.disposed_qty, 0) as disposed_qty,
-                    SUM(ib.quantity_received) - COALESCE(disposed.disposed_qty, 0) as total_stock
-                FROM Item_Batches ib
-                LEFT JOIN (
-                    SELECT item_id, SUM(quantity) as disposed_qty
-                    FROM Stock_Movements
-                    WHERE movement_type = 'DISPOSAL'
-                    GROUP BY item_id
-                ) disposed ON ib.item_id = disposed.item_id
-                GROUP BY ib.item_id
+                """ + self._get_stock_calculations() + """
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
-                FROM Requisition_Items ri
-                JOIN Requisitions r ON ri.requisition_id = r.id
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM Stock_Movements sm
-                    WHERE sm.item_id = ri.item_id
-                    AND sm.movement_type = 'RETURN'
-                    AND sm.source_id = r.id
-                )
-                GROUP BY ri.item_id
+                """ + self._get_requested_calculations() + """
             ) requested ON i.id = requested.item_id
             WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ?
             ORDER BY c.name, i.name
@@ -228,37 +252,49 @@ class InventoryController:
     def get_batch_statistics(self) -> Dict[str, int]:
         """Get overall batch statistics for the inventory."""
         try:
-            # Query to get batch count and total stock across all batches
-            query = """
+            # Get consistent stock calculations and requested quantities
+            stock_query = """
             SELECT
-                COUNT(*) as total_batches,
+                COUNT(DISTINCT ib.id) as total_batches,
                 COALESCE(SUM(ib.quantity_received), 0) as original_total_stock,
-                COALESCE(disposed.disposed_qty, 0) as total_disposed,
-                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(disposed.disposed_qty, 0) as active_total_stock
+                COALESCE(movements.total_consumed, 0) as total_consumed,
+                COALESCE(movements.total_disposed, 0) as total_disposed,
+                COALESCE(movements.total_returned, 0) as total_returned,
+                COALESCE(SUM(ib.quantity_received), 0) -
+                COALESCE(movements.total_consumed, 0) -
+                COALESCE(movements.total_disposed, 0) +
+                COALESCE(movements.total_returned, 0) as total_stock
             FROM Item_Batches ib
             LEFT JOIN (
-                SELECT SUM(quantity) as disposed_qty
-                FROM Stock_Movements
-                WHERE movement_type = 'DISPOSAL'
-            ) disposed ON 1=1
+                SELECT
+                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as total_consumed,
+                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as total_disposed,
+                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as total_returned
+                FROM Stock_Movements sm
+            ) movements ON 1=1
             """
 
-            rows = db.execute_query(query)
-            if not rows:
+            stock_rows = db.execute_query(stock_query)
+            if not stock_rows:
                 return {'total_batches': 0, 'total_stock': 0, 'available_stock': 0}
 
-            batch_stats = rows[0]
+            batch_stats = stock_rows[0]
 
-            # Calculate available stock (total - currently requested)
+            # Calculate available stock using new two-phase logic
             available_query = """
             SELECT COALESCE(SUM(ri.quantity_requested), 0) as total_requested
             FROM Requisition_Items ri
             JOIN Requisitions r ON ri.requisition_id = r.id
-            WHERE NOT EXISTS (
+            JOIN Items i ON ri.item_id = i.id
+            WHERE r.status != 'returned'  -- Only active requisitions reduce available stock
+            AND EXISTS (
                 SELECT 1 FROM Stock_Movements sm
                 WHERE sm.item_id = ri.item_id
-                AND sm.movement_type = 'RETURN'
                 AND sm.source_id = r.id
+                AND (
+                    (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
+                    (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+                )
             )
             """
 
@@ -267,8 +303,8 @@ class InventoryController:
 
             return {
                 'total_batches': batch_stats['total_batches'] or 0,
-                'total_stock': batch_stats['active_total_stock'] or 0,
-                'available_stock': max(0, (batch_stats['active_total_stock'] or 0) - total_requested)
+                'total_stock': batch_stats['total_stock'] or 0,
+                'available_stock': max(0, (batch_stats['total_stock'] or 0) - total_requested)
             }
 
         except Exception as e:

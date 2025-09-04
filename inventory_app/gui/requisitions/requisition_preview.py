@@ -331,13 +331,13 @@ class RequisitionPreview(QWidget):
 
             # Summary totals
             totals_label = QLabel(
-                f"📊 Totals: {summary['total_returned']} returned, {summary['total_lost']} lost"
+                f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost"
             )
             totals_label.setStyleSheet(f"font-weight: bold; font-size: 10pt; color: {DarkTheme.SUCCESS_COLOR}; margin-top: 8px;")
             layout.addWidget(totals_label)
 
             # Lock notice
-            lock_notice = QLabel("🔒 This requisition has been processed and is locked from further editing.")
+            lock_notice = QLabel("🔒 This requisition has been finalized...")
             lock_notice.setStyleSheet(f"font-size: 9pt; color: {DarkTheme.WARNING_COLOR}; font-style: italic; margin-top: 5px;")
             layout.addWidget(lock_notice)
 
