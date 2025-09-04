@@ -166,8 +166,8 @@ class StockMovementService:
     def get_current_stock_level(self, item_id: int) -> int:
         """
         Calculate current stock level for an item based on movements.
-        Two-phase logic: RESERVATION/REQUEST reduce available stock,
-        CONSUMPTION/DISPOSAL are permanent reductions.
+        RESERVATION: Temporary hold (reduces available stock)
+        CONSUMPTION/DISPOSAL: Permanent reduction (reduces total stock)
 
         Args:
             item_id: ID of the item
@@ -176,24 +176,78 @@ class StockMovementService:
             Current stock level
         """
         try:
-            query = """
+            # Get total stock from batches first
+            batch_query = """
+            SELECT COALESCE(SUM(quantity_received), 0) as total_received
+            FROM Item_Batches
+            WHERE item_id = ?
+            """
+            batch_rows = db.execute_query(batch_query, (item_id,))
+            total_received = batch_rows[0]['total_received'] if batch_rows else 0
+
+            # Get net movement adjustments
+            movement_query = """
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN movement_type = 'RECEIPT' THEN quantity
                     WHEN movement_type = 'CONSUMPTION' THEN -quantity
-                    WHEN movement_type = 'REQUEST' THEN -quantity
-                    WHEN movement_type = 'RESERVATION' THEN -quantity
-                    WHEN movement_type = 'RETURN' THEN quantity
                     WHEN movement_type = 'DISPOSAL' THEN -quantity
+                    WHEN movement_type = 'RETURN' THEN quantity
                     WHEN movement_type = 'LOST' THEN -quantity  -- Backward compatibility
                     ELSE 0
                 END
-            ), 0) as current_stock
+            ), 0) as net_adjustment
             FROM Stock_Movements
             WHERE item_id = ?
             """
-            rows = db.execute_query(query, (item_id,))
-            return rows[0]['current_stock'] if rows else 0
+            movement_rows = db.execute_query(movement_query, (item_id,))
+            net_adjustment = movement_rows[0]['net_adjustment'] if movement_rows else 0
+
+            return max(0, total_received + net_adjustment)
         except Exception as e:
             logger.error(f"Failed to get current stock level for item {item_id}: {e}")
             return 0
+
+    def get_reserved_stock(self, item_id: int) -> int:
+        """
+        Get total reserved stock for an item (temporary holds).
+
+        Args:
+            item_id: ID of the item
+
+        Returns:
+            Total reserved quantity
+        """
+        try:
+            query = """
+            SELECT COALESCE(SUM(quantity), 0) as reserved_qty
+            FROM Stock_Movements
+            WHERE item_id = ? AND movement_type IN ('RESERVATION', 'REQUEST')
+            """
+            rows = db.execute_query(query, (item_id,))
+            return rows[0]['reserved_qty'] if rows else 0
+        except Exception as e:
+            logger.error(f"Failed to get reserved stock for item {item_id}: {e}")
+            return 0
+
+    def delete_movements_for_requisition(self, requisition_id: int) -> bool:
+        """
+        Delete all stock movements associated with a specific requisition.
+        Used when editing requisitions to remove old movements before creating new ones.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            True if movements were successfully deleted
+        """
+        try:
+            query = """
+            DELETE FROM Stock_Movements
+            WHERE source_id = ?
+            """
+            db.execute_update(query, (requisition_id,))
+            logger.info(f"Deleted stock movements for requisition {requisition_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete stock movements for requisition {requisition_id}: {e}")
+            return False

@@ -435,14 +435,19 @@ class BaseRequisitionDialog(QDialog):
     def load_available_items(self):
         """Load available items for selection with real-time stock calculation."""
         try:
-            items = self.item_service.get_inventory_batches_for_selection()
+            # For editing mode, exclude current requisition's stock movements
+            exclude_requisition_id = getattr(self, 'temp_requisition_id', None)
+            items = self.item_service.get_inventory_batches_for_selection(
+                exclude_requisition_id=exclude_requisition_id
+            )
             self.available_items_list.clear()
 
             for item in items:
                 # Calculate real-time available stock: DB available - currently selected
+                # For editing, we also exclude the current requisition's movements
                 real_time_stock = (
                     self.item_manager.get_real_time_available_stock_for_batch(
-                        item["batch_id"], self.selected_items
+                        item["batch_id"], self.selected_items, exclude_requisition_id
                     )
                 )
 
@@ -567,6 +572,7 @@ class BaseRequisitionDialog(QDialog):
         current_row = self.selected_items_list.currentRow()
         if current_row >= 0 and current_row < len(self.selected_items):
             removed_item = self.selected_items.pop(current_row)
+
             # Refresh available items to update real-time stock display
             self.load_available_items()
             self.update_selected_items_display()

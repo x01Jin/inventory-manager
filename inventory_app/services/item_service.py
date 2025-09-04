@@ -305,3 +305,19 @@ class ItemService:
         except Exception as e:
             logger.error(f"Failed to get available stock for batch {batch_id}: {e}")
             return 0
+
+    def get_available_stock_for_batch_excluding_requisition(
+        self, batch_id: int, exclude_requisition_id: int
+    ) -> int:
+        """
+        Get available stock for a batch, excluding a specific requisition's stock movements.
+        This is used during editing to show correct available stock.
+
+        Args:
+            batch_id: ID of the batch
+            exclude_requisition_id: Requisition ID to exclude from calculations
+
+        Returns:
+            Available stock excluding the specified requisition
+        """
+        return self._get_available_stock_for_batch(batch_id, exclude_requisition_id)

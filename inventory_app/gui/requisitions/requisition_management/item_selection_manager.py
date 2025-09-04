@@ -3,11 +3,15 @@ Item Selection Manager - Handles item selection logic with smart duplicate handl
 
 Provides centralized item management with proper stock calculations and
 duplicate item combination to prevent multiple entries of the same item.
+Stock movements are recorded only on final save to avoid conflicts.
 """
 
 from typing import Dict, List, Optional
+from datetime import date
 
 from inventory_app.services.item_service import ItemService
+from inventory_app.database.connection import db
+from inventory_app.utils.logger import logger
 
 
 class ItemSelectionManager:
@@ -207,3 +211,53 @@ class ItemSelectionManager:
         )
 
         return quantity, ok if ok is not None else False
+
+    def create_stock_movements_for_requisition(
+        self,
+        requisition_id: int,
+        selected_items: List[Dict]
+    ) -> bool:
+        """
+        Create stock movements for a requisition on final save.
+        Only creates movements when requisition is saved, not during selection.
+
+        Args:
+            requisition_id: Associated requisition ID
+            selected_items: Final list of selected items
+
+        Returns:
+            True if movements were created successfully
+        """
+        try:
+            # Record movements based on selected items
+            for item in selected_items:
+                # Get item consumability
+                item_query = "SELECT is_consumable FROM Items WHERE id = ?"
+                item_result = db.execute_query(item_query, (item["item_id"],))
+                is_consumable = item_result[0]["is_consumable"] if item_result else 1
+                movement_type = "RESERVATION" if is_consumable else "REQUEST"
+
+                # Record the movement
+                movement_query = """
+                INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """
+
+                db.execute_update(
+                    movement_query,
+                    (
+                        item["item_id"],
+                        item["batch_id"],
+                        movement_type,
+                        item["quantity"],
+                        date.today().isoformat(),
+                        requisition_id,
+                    ),
+                )
+
+            logger.info(f"Created stock movements for requisition {requisition_id} with {len(selected_items)} items")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to create stock movements for requisition {requisition_id}: {e}")
+            return False

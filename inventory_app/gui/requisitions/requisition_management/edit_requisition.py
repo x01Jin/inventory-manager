@@ -46,6 +46,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
         super().__init__(mode="edit", parent=parent)
 
+        # Set exclusion for stock calculations during editing
+        self.temp_requisition_id = self.requisition_id
+
         # Load existing data into form fields
         self.load_existing_data_simple()
 
@@ -351,6 +354,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             # Clear existing items and re-create
             db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.requisition_id,))
 
+            # Delete existing stock movements to prevent double reservation
+            self.stock_service.delete_movements_for_requisition(self.requisition_id)
+
             # Add new items
             for item in self.selected_items:
                 req_item = RequisitionItem()
@@ -361,6 +367,18 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                     logger.error(f"Failed to save item {item['item_id']}")
                     QMessageBox.critical(self, "Error", "Failed to save items.")
                     return
+
+            # Create stock movements for the updated requisition
+            movement_success = self.item_manager.create_stock_movements_for_requisition(
+                self.requisition_id, self.selected_items
+            )
+
+            if not movement_success:
+                QMessageBox.warning(
+                    self, "Stock Movement Warning",
+                    "Requisition updated but stock movement recording failed.\n"
+                    "Please verify stock levels manually."
+                )
 
             # Log activity
             from inventory_app.services.requisition_activity import requisition_activity_manager

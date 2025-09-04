@@ -286,7 +286,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
             requisition_id = requisition.id
 
-            # Create requisition items and stock movements
+            # Create requisition items
             for item in self.selected_items:
                 # Create requisition item
                 req_item = RequisitionItem()
@@ -303,36 +303,16 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                     )
                     return
 
-                # Create stock movement
-                from inventory_app.database.connection import db
+            # Create stock movements for the requisition
+            movement_success = self.item_manager.create_stock_movements_for_requisition(
+                requisition_id, self.selected_items
+            )
 
-                # Determine movement type based on item consumability
-                item_query = "SELECT is_consumable FROM Items WHERE id = ?"
-                item_result = db.execute_query(item_query, (item["item_id"],))
-                is_consumable = item_result[0]["is_consumable"] if item_result else 1
-
-                # Phase 1: All items reduce available stock on creation
-                # For consumables: Record RESERVATION movement (temporary hold)
-                # For non-consumables: Record REQUEST movement (existing behavior)
-                movement_type = "RESERVATION" if is_consumable else "REQUEST"
-
-                movement_query = """
-                INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """
-
-                from datetime import date
-
-                db.execute_update(
-                    movement_query,
-                    (
-                        item["item_id"],
-                        item["batch_id"],
-                        movement_type,
-                        item["quantity"],
-                        date.today().isoformat(),
-                        requisition_id,
-                    ),
+            if not movement_success:
+                QMessageBox.warning(
+                    self, "Stock Movement Warning",
+                    "Requisition created but stock movement recording failed.\n"
+                    "Please verify stock levels manually."
                 )
 
             # Log rich activity description
