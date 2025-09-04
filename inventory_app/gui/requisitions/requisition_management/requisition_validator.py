@@ -9,7 +9,7 @@ from typing import List, Dict
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QDateTime
 
-from inventory_app.database.models import Borrower
+from inventory_app.database.models import Requester
 
 
 class RequisitionValidator:
@@ -20,27 +20,27 @@ class RequisitionValidator:
     error messages across create and edit dialogs.
     """
 
-    def validate_requisition_data(self, borrower: Borrower,
+    def validate_requisition_data(self, requester: Requester,
                                 selected_items: List[Dict],
-                                expected_borrow: QDateTime,
+                                expected_request: QDateTime,
                                 expected_return: QDateTime,
                                 activity_name: str) -> bool:
         """
         Comprehensive validation of requisition data.
 
         Args:
-            borrower: Selected borrower
+            requester: Selected requester
             selected_items: List of selected items
-            expected_borrow: Expected borrow date/time
+            expected_request: Expected request date/time
             expected_return: Expected return date/time
             activity_name: Activity name
 
         Returns:
             True if all validations pass
         """
-        # Validate borrower
-        if not borrower:
-            QMessageBox.warning(None, "Validation Error", "Please select a borrower.")
+        # Validate requester
+        if not requester:
+            QMessageBox.warning(None, "Validation Error", "Please select a requester.")
             return False
 
         # Validate activity name
@@ -54,27 +54,27 @@ class RequisitionValidator:
             return False
 
         # Validate dates
-        if not self.validate_dates(expected_borrow, expected_return):
+        if not self.validate_dates(expected_request, expected_return):
             return False
 
         return True
 
-    def validate_dates(self, borrow_dt: QDateTime, return_dt: QDateTime) -> bool:
+    def validate_dates(self, request_dt: QDateTime, return_dt: QDateTime) -> bool:
         """
-        Validate borrow and return dates.
+        Validate request and return dates.
 
         Args:
-            borrow_dt: Expected borrow date/time
+            request_dt: Expected request date/time
             return_dt: Expected return date/time
 
         Returns:
             True if dates are valid
         """
-        if return_dt <= borrow_dt:
+        if return_dt <= request_dt:
             QMessageBox.warning(
                 None,
                 "Validation Error",
-                "Expected return date/time must be after expected borrow date/time."
+                "Expected return date/time must be after expected request date/time."
             )
             return False
         return True
@@ -159,18 +159,18 @@ class RequisitionValidator:
             return False, "No changes detected. Please modify at least one field."
 
         # Extract data with proper type checking
-        borrower = new_data.get('borrower')
+        requester = new_data.get('requester')
         selected_items = new_data.get('selected_items', [])
-        expected_borrow = new_data.get('expected_borrow')
+        expected_request = new_data.get('expected_request')
         expected_return = new_data.get('expected_return')
         activity_name = new_data.get('activity_name', '')
 
         # Type validation before calling validate_requisition_data
-        if not isinstance(borrower, Borrower) or borrower is None:
-            return False, "Invalid borrower data."
+        if not isinstance(requester, Requester) or requester is None:
+            return False, "Invalid requester data."
 
-        if not isinstance(expected_borrow, QDateTime) or expected_borrow is None:
-            return False, "Invalid expected borrow date/time."
+        if not isinstance(expected_request, QDateTime) or expected_request is None:
+            return False, "Invalid expected request date/time."
 
         if not isinstance(expected_return, QDateTime) or expected_return is None:
             return False, "Invalid expected return date/time."
@@ -180,9 +180,9 @@ class RequisitionValidator:
 
         # Validate the new data
         if not self.validate_requisition_data(
-            borrower,
+            requester,
             selected_items,
-            expected_borrow,
+            expected_request,
             expected_return,
             activity_name
         ):
@@ -203,7 +203,7 @@ class RequisitionValidator:
         """
         # Compare simple fields
         fields_to_compare = [
-            'activity_name', 'expected_borrow', 'expected_return',
+            'activity_name', 'expected_request', 'expected_return',
             'activity_date', 'num_students', 'num_groups'
         ]
 
@@ -211,8 +211,8 @@ class RequisitionValidator:
             if original.get(field) != new.get(field):
                 return True
 
-        # Compare borrower
-        if original.get('borrower_id') != new.get('borrower_id'):
+        # Compare requester
+        if original.get('requester_id') != new.get('requester_id'):
             return True
 
         # Compare items
@@ -228,7 +228,7 @@ class RequisitionValidator:
             for new_item in new_items:
                 if (new_item.get('item_id') == orig_item.get('item_id') and
                     new_item.get('batch_id') == orig_item.get('batch_id') and
-                    new_item.get('quantity') == orig_item.get('quantity_borrowed', orig_item.get('quantity'))):
+                    new_item.get('quantity') == orig_item.get('quantity_requested', orig_item.get('quantity'))):
                     found = True
                     break
             if not found:

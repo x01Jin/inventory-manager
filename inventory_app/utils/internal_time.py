@@ -36,10 +36,10 @@ def check_and_update_requisition_statuses():
 
         # Get all requisitions that might need status updates
         query = """
-        SELECT id, status, expected_return, expected_borrow, datetime_borrowed
+        SELECT id, status, expected_return, expected_request, datetime_requested
         FROM Requisitions
         WHERE status IN ('requested', 'active', 'overdue')
-        AND (expected_return IS NOT NULL OR expected_borrow IS NOT NULL)
+        AND (expected_return IS NOT NULL OR expected_request IS NOT NULL)
         """
         rows = db.execute_query(query)
 
@@ -75,20 +75,20 @@ def _calculate_expected_status(requisition: dict, current_time: datetime) -> str
 
     if status == 'requested':
         # Check if reservation should become active
-        expected_borrow = requisition.get('expected_borrow')
-        if expected_borrow:
-            if isinstance(expected_borrow, str):
-                expected_borrow = datetime.fromisoformat(expected_borrow)
-            if current_time >= expected_borrow:
+        expected_request = requisition.get('expected_request')
+        if expected_request:
+            if isinstance(expected_request, str):
+                expected_request = datetime.fromisoformat(expected_request)
+            if current_time >= expected_request:
                 return 'active'
 
     elif status == 'active':
-        # Check if active requisition should go back to requested (if expected_borrow is extended)
-        expected_borrow = requisition.get('expected_borrow')
-        if expected_borrow:
-            if isinstance(expected_borrow, str):
-                expected_borrow = datetime.fromisoformat(expected_borrow)
-            if current_time < expected_borrow:
+        # Check if active requisition should go back to requested (if expected_request is extended)
+        expected_request = requisition.get('expected_request')
+        if expected_request:
+            if isinstance(expected_request, str):
+                expected_request = datetime.fromisoformat(expected_request)
+            if current_time < expected_request:
                 return 'requested'
 
         # Check if active requisition should become overdue
@@ -120,16 +120,16 @@ def _check_all_items_returned(req_id: int) -> bool:
     try:
         query = """
         SELECT COUNT(*) as total_items,
-               COUNT(CASE WHEN returned_qty >= borrowed_qty THEN 1 END) as returned_items
+               COUNT(CASE WHEN returned_qty >= requested_qty THEN 1 END) as returned_items
         FROM (
-            SELECT ri.item_id, ri.quantity_borrowed as borrowed_qty,
+            SELECT ri.item_id, ri.quantity_requested as requested_qty,
                    COALESCE(SUM(sm.quantity), 0) as returned_qty
             FROM Requisition_Items ri
             LEFT JOIN Stock_Movements sm ON sm.item_id = ri.item_id
                 AND sm.source_id = ri.requisition_id
                 AND sm.movement_type = 'RETURN'
             WHERE ri.requisition_id = ?
-            GROUP BY ri.item_id, ri.quantity_borrowed
+            GROUP BY ri.item_id, ri.quantity_requested
         )
         """
         rows = db.execute_query(query, (req_id,))
@@ -152,23 +152,23 @@ def _update_requisition_status(req_id: int, new_status: str) -> None:
         """
         db.execute_update(update_query, (new_status, req_id))
 
-        # If activating a reservation, also set datetime_borrowed
+        # If activating a reservation, also set datetime_requested
         if new_status == 'active':
-            borrow_update = """
+            request_update = """
             UPDATE Requisitions
-            SET datetime_borrowed = ?
-            WHERE id = ? AND datetime_borrowed IS NULL
+            SET datetime_requested = ?
+            WHERE id = ? AND datetime_requested IS NULL
             """
-            db.execute_update(borrow_update, (datetime.now(), req_id))
+            db.execute_update(request_update, (datetime.now(), req_id))
 
-        # If setting back to requested, clear datetime_borrowed
+        # If setting back to requested, clear datetime_requested
         if new_status == 'requested':
-            borrow_clear = """
+            request_clear = """
             UPDATE Requisitions
-            SET datetime_borrowed = NULL
+            SET datetime_requested = NULL
             WHERE id = ?
             """
-            db.execute_update(borrow_clear, (req_id,))
+            db.execute_update(request_clear, (req_id,))
 
         # Log the status change
         reason = f"Manual status update to {new_status}"

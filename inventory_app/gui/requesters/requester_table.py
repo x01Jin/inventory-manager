@@ -1,7 +1,7 @@
 """
-Borrower table - displays borrower data in a table format.
-Provides table widget for showing borrowers with selection capabilities.
-Uses composition pattern with BorrowerModel.
+Requester table - displays requester data in a table format.
+Provides table widget for showing requesters with selection capabilities.
+Uses composition pattern with RequesterModel.
 """
 
 from typing import List, Optional
@@ -11,22 +11,22 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from inventory_app.gui.borrowers.borrower_model import BorrowerRow
+from inventory_app.gui.requesters.requester_model import RequesterRow
 from inventory_app.utils.logger import logger
 
 
-class BorrowerTable(QTableWidget):
+class RequesterTable(QTableWidget):
     """
-    Table widget for displaying borrower information.
-    Shows borrower details with selection capabilities.
+    Table widget for displaying requester information.
+    Shows requester details with selection capabilities.
     """
 
     # Signals
-    borrower_selected = pyqtSignal(int)  # Emitted when a borrower is selected (borrower_id)
-    borrower_double_clicked = pyqtSignal(int)  # Emitted on double-click (borrower_id)
+    requester_selected = pyqtSignal(int)  # Emitted when a requester is selected (requester_id)
+    requester_double_clicked = pyqtSignal(int)  # Emitted on double-click (requester_id)
 
     def __init__(self, parent=None):
-        """Initialize the borrower table."""
+        """Initialize the requester table."""
         super().__init__(parent)
 
         # Configure table properties
@@ -42,7 +42,7 @@ class BorrowerTable(QTableWidget):
         # Configure table appearance and behavior
         self._configure_table()
 
-        logger.info("Borrower table initialized")
+        logger.info("Requester table initialized")
 
     def _configure_table(self):
         """Configure table appearance and behavior."""
@@ -69,19 +69,19 @@ class BorrowerTable(QTableWidget):
         self.itemSelectionChanged.connect(self._on_selection_changed)
         self.itemDoubleClicked.connect(self._on_item_double_clicked)
 
-    def populate_table(self, borrowers: List[BorrowerRow]) -> None:
+    def populate_table(self, requesters: List[RequesterRow]) -> None:
         """
-        Populate the table with borrower data.
+        Populate the table with requester data.
 
         Args:
-            borrowers: List of BorrowerRow objects to display
+            requesters: List of RequesterRow objects to display
         """
         try:
             # Clear existing data
             self.setRowCount(0)
 
             # Add rows
-            for row_data in borrowers:
+            for row_data in requesters:
                 row_position = self.rowCount()
                 self.insertRow(row_position)
 
@@ -104,18 +104,18 @@ class BorrowerTable(QTableWidget):
                 created_str = row_data.created_date.strftime("%Y-%m-%d") if row_data.created_date else ""
                 self.setItem(row_position, 4, QTableWidgetItem(created_str))
 
-            logger.info(f"Populated table with {len(borrowers)} borrowers")
+            logger.info(f"Populated table with {len(requesters)} requesters")
 
         except Exception as e:
-            logger.error(f"Failed to populate borrowers table: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load borrower data: {str(e)}")
+            logger.error(f"Failed to populate requesters table: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load requester data: {str(e)}")
 
-    def get_selected_borrower_id(self) -> Optional[int]:
+    def get_selected_requester_id(self) -> Optional[int]:
         """
-        Get the ID of the currently selected borrower.
+        Get the ID of the currently selected requester.
 
         Returns:
-            Borrower ID or None if no selection
+            Requester ID or None if no selection
         """
         current_row = self.currentRow()
         if current_row >= 0:
@@ -124,19 +124,19 @@ class BorrowerTable(QTableWidget):
                 return name_item.data(Qt.ItemDataRole.UserRole)
         return None
 
-    def select_borrower_by_id(self, borrower_id: int) -> bool:
+    def select_requester_by_id(self, requester_id: int) -> bool:
         """
-        Select a borrower by its ID.
+        Select a requester by its ID.
 
         Args:
-            borrower_id: ID of the borrower to select
+            requester_id: ID of the requester to select
 
         Returns:
             bool: True if found and selected, False otherwise
         """
         for row in range(self.rowCount()):
             name_item = self.item(row, 1)  # Name is in column 1
-            if name_item and name_item.data(Qt.ItemDataRole.UserRole) == borrower_id:
+            if name_item and name_item.data(Qt.ItemDataRole.UserRole) == requester_id:
                 self.selectRow(row)
                 return True
         return False
@@ -173,15 +173,15 @@ class BorrowerTable(QTableWidget):
 
     def _on_selection_changed(self) -> None:
         """Handle selection changes."""
-        borrower_id = self.get_selected_borrower_id()
-        if borrower_id is not None:
-            self.borrower_selected.emit(borrower_id)
+        requester_id = self.get_selected_requester_id()
+        if requester_id is not None:
+            self.requester_selected.emit(requester_id)
 
     def _on_item_double_clicked(self, item) -> None:
         """Handle double-click events."""
-        borrower_id = self.get_selected_borrower_id()
-        if borrower_id is not None:
-            self.borrower_double_clicked.emit(borrower_id)
+        requester_id = self.get_selected_requester_id()
+        if requester_id is not None:
+            self.requester_double_clicked.emit(requester_id)
 
     def resize_columns_to_contents(self) -> None:
         """Resize columns to fit their contents."""

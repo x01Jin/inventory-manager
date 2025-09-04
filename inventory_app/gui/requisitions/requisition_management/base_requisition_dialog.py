@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from inventory_app.database.models import Borrower
+from inventory_app.database.models import Requester
 from inventory_app.services.item_service import ItemService
 from inventory_app.services.stock_movement_service import StockMovementService
 from .item_selection_manager import ItemSelectionManager
@@ -249,7 +249,7 @@ class BaseRequisitionDialog(QDialog):
         self.validator = RequisitionValidator()
 
         # Standardized data structures
-        self.selected_borrower: Optional[Borrower] = None
+        self.selected_requester: Optional[Requester] = None
         self.selected_items: List[Dict] = []  # Standardized item format
 
         self._setup_ui()
@@ -606,7 +606,7 @@ class BaseRequisitionDialog(QDialog):
         )
 
 class CompactRequisitionSchedule(QWidget):
-    """Compact borrow and return schedule widget with horizontal layout."""
+    """Compact request and return schedule widget with horizontal layout."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -622,54 +622,54 @@ class CompactRequisitionSchedule(QWidget):
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(8)
 
-        # Borrow schedule row
-        borrow_layout = QHBoxLayout()
-        borrow_layout.setSpacing(5)
+        # Request schedule row
+        request_layout = QHBoxLayout()
+        request_layout.setSpacing(5)
 
-        borrow_layout.addWidget(QLabel("Expected to get at :      "))
+        request_layout.addWidget(QLabel("Expected to get at :      "))
 
-        # Borrow time selectors - responsive sizing
-        self.borrow_hour = QComboBox()
-        self.borrow_hour.setMinimumWidth(35)
-        self.borrow_hour.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_hour)
+        # Request time selectors - responsive sizing
+        self.request_hour = QComboBox()
+        self.request_hour.setMinimumWidth(35)
+        self.request_hour.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_hour)
 
-        borrow_layout.addWidget(QLabel(":"))
+        request_layout.addWidget(QLabel(":"))
 
-        self.borrow_minute = QComboBox()
-        self.borrow_minute.setMinimumWidth(35)
-        self.borrow_minute.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_minute)
+        self.request_minute = QComboBox()
+        self.request_minute.setMinimumWidth(35)
+        self.request_minute.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_minute)
 
-        self.borrow_ampm = QComboBox()
-        self.borrow_ampm.setMinimumWidth(35)
-        self.borrow_ampm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_ampm)
+        self.request_ampm = QComboBox()
+        self.request_ampm.setMinimumWidth(35)
+        self.request_ampm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_ampm)
 
-        borrow_layout.addWidget(QLabel("  -  "))
+        request_layout.addWidget(QLabel("  -  "))
 
-        # Borrow date selectors - responsive sizing
-        self.borrow_month = QComboBox()
-        self.borrow_month.setMinimumWidth(45)
-        self.borrow_month.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_month)
+        # Request date selectors - responsive sizing
+        self.request_month = QComboBox()
+        self.request_month.setMinimumWidth(45)
+        self.request_month.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_month)
 
-        borrow_layout.addWidget(QLabel("/"))
+        request_layout.addWidget(QLabel("/"))
 
-        self.borrow_day = QComboBox()
-        self.borrow_day.setMinimumWidth(35)
-        self.borrow_day.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_day)
+        self.request_day = QComboBox()
+        self.request_day.setMinimumWidth(35)
+        self.request_day.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_day)
 
-        borrow_layout.addWidget(QLabel("/"))
+        request_layout.addWidget(QLabel("/"))
 
-        self.borrow_year = QComboBox()
-        self.borrow_year.setMinimumWidth(55)
-        self.borrow_year.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        borrow_layout.addWidget(self.borrow_year)
+        self.request_year = QComboBox()
+        self.request_year.setMinimumWidth(55)
+        self.request_year.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        request_layout.addWidget(self.request_year)
 
-        borrow_layout.addStretch()
-        main_layout.addLayout(borrow_layout)
+        request_layout.addStretch()
+        main_layout.addLayout(request_layout)
 
         # Return schedule row
         return_layout = QHBoxLayout()
@@ -722,8 +722,8 @@ class CompactRequisitionSchedule(QWidget):
 
     def _connect_signals(self):
         """Connect signals for dynamic updates."""
-        self.borrow_month.currentIndexChanged.connect(self._on_borrow_date_changed)
-        self.borrow_year.currentIndexChanged.connect(self._on_borrow_date_changed)
+        self.request_month.currentIndexChanged.connect(self._on_request_date_changed)
+        self.request_year.currentIndexChanged.connect(self._on_request_date_changed)
         self.return_month.currentIndexChanged.connect(self._on_return_date_changed)
         self.return_year.currentIndexChanged.connect(self._on_return_date_changed)
 
@@ -736,43 +736,43 @@ class CompactRequisitionSchedule(QWidget):
 
         # Populate all dropdowns
         self._populate_dropdowns()
-        self.set_borrow_datetime(now)
+        self.set_request_datetime(now)
         self.set_return_datetime(default_return)
 
     def _populate_dropdowns(self):
         """Populate all comboboxes with data."""
         # Months
         for month_num, month_name in MONTH_NAMES.items():
-            self.borrow_month.addItem(month_name, month_num)
+            self.request_month.addItem(month_name, month_num)
             self.return_month.addItem(month_name, month_num)
 
         # Years
         years = get_year_range()
         for year in years:
-            self.borrow_year.addItem(str(year), year)
+            self.request_year.addItem(str(year), year)
             self.return_year.addItem(str(year), year)
 
         # Hours (1-12)
         hours = get_hour_options_12h()
         for hour in hours:
-            self.borrow_hour.addItem(str(hour), hour)
+            self.request_hour.addItem(str(hour), hour)
             self.return_hour.addItem(str(hour), hour)
 
         # Minutes (00-59 with proper formatting)
         minutes = get_minutes_options()
         for minute_val, minute_str in enumerate(minutes):
-            self.borrow_minute.addItem(minute_str, minute_val)
+            self.request_minute.addItem(minute_str, minute_val)
             self.return_minute.addItem(minute_str, minute_val)
 
         # AM/PM
         ampm_options = get_ampm_options()
         for ampm in ampm_options:
-            self.borrow_ampm.addItem(ampm, ampm)
+            self.request_ampm.addItem(ampm, ampm)
             self.return_ampm.addItem(ampm, ampm)
 
-    def _on_borrow_date_changed(self):
-        """Update borrow day dropdown when month or year changes."""
-        self._update_days_dropdown(self.borrow_day, self.borrow_year, self.borrow_month)
+    def _on_request_date_changed(self):
+        """Update request day dropdown when month or year changes."""
+        self._update_days_dropdown(self.request_day, self.request_year, self.request_month)
 
     def _on_return_date_changed(self):
         """Update return day dropdown when month or year changes."""
@@ -797,21 +797,21 @@ class CompactRequisitionSchedule(QWidget):
             else:
                 day_combo.setCurrentText(str(valid_days[-1]))
 
-    def set_borrow_datetime(self, dt_obj):
-        """Set the borrow date/time."""
+    def set_request_datetime(self, dt_obj):
+        """Set the request date/time."""
         from datetime import datetime
 
         if isinstance(dt_obj, datetime):
             hour_12, am_pm = convert_24h_to_12h(dt_obj.hour)
 
-            self.borrow_month.setCurrentText(MONTH_NAMES.get(dt_obj.month, ""))
-            self.borrow_year.setCurrentText(str(dt_obj.year))
-            self._update_days_dropdown(self.borrow_day, self.borrow_year, self.borrow_month)
-            self.borrow_day.setCurrentText(str(dt_obj.day))
+            self.request_month.setCurrentText(MONTH_NAMES.get(dt_obj.month, ""))
+            self.request_year.setCurrentText(str(dt_obj.year))
+            self._update_days_dropdown(self.request_day, self.request_year, self.request_month)
+            self.request_day.setCurrentText(str(dt_obj.day))
 
-            self.borrow_hour.setCurrentText(str(hour_12))
-            self.borrow_minute.setCurrentText(f"{dt_obj.minute:02d}")
-            self.borrow_ampm.setCurrentText(am_pm)
+            self.request_hour.setCurrentText(str(hour_12))
+            self.request_minute.setCurrentText(f"{dt_obj.minute:02d}")
+            self.request_ampm.setCurrentText(am_pm)
 
     def set_return_datetime(self, dt_obj):
         """Set the return date/time."""
@@ -829,16 +829,16 @@ class CompactRequisitionSchedule(QWidget):
             self.return_minute.setCurrentText(f"{dt_obj.minute:02d}")
             self.return_ampm.setCurrentText(am_pm)
 
-    def get_borrow_datetime(self):
-        """Get the selected borrow date/time as datetime object."""
+    def get_request_datetime(self):
+        """Get the selected request date/time as datetime object."""
         from datetime import datetime
 
-        year = self.borrow_year.currentData()
-        month = self.borrow_month.currentData()
-        day = self.borrow_day.currentData()
-        hour_12 = self.borrow_hour.currentData()
-        minute = self.borrow_minute.currentData()
-        am_pm = self.borrow_ampm.currentData()
+        year = self.request_year.currentData()
+        month = self.request_month.currentData()
+        day = self.request_day.currentData()
+        hour_12 = self.request_hour.currentData()
+        minute = self.request_minute.currentData()
+        am_pm = self.request_ampm.currentData()
 
         if all([year, month, day, hour_12, minute is not None, am_pm]):
             hour_24 = convert_12h_to_24h(hour_12, am_pm)
@@ -878,20 +878,20 @@ class RequisitionScheduleManager:
         self.schedule = CompactRequisitionSchedule(parent)
         return self.schedule
 
-    def set_borrow_datetime(self, dt_obj):
-        """Set borrow datetime in the schedule."""
+    def set_request_datetime(self, dt_obj):
+        """Set request datetime in the schedule."""
         if self.schedule:
-            self.schedule.set_borrow_datetime(dt_obj)
+            self.schedule.set_request_datetime(dt_obj)
 
     def set_return_datetime(self, dt_obj):
         """Set return datetime in the schedule."""
         if self.schedule:
             self.schedule.set_return_datetime(dt_obj)
 
-    def get_borrow_datetime(self):
-        """Get selected borrow datetime."""
+    def get_request_datetime(self):
+        """Get selected request datetime."""
         if self.schedule:
-            return self.schedule.get_borrow_datetime()
+            return self.schedule.get_request_datetime()
         return None
 
     def get_return_datetime(self):

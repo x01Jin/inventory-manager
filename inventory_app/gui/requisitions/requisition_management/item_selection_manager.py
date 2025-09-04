@@ -112,7 +112,7 @@ class ItemSelectionManager:
 
         Args:
             batch_id: ID of the batch
-            exclude_requisition_id: Requisition ID to exclude from borrowed check
+            exclude_requisition_id: Requisition ID to exclude from requested check
 
         Returns:
             Available stock for the batch
@@ -135,7 +135,7 @@ class ItemSelectionManager:
         Args:
             batch_id: ID of the batch
             selected_items: Currently selected items in the dialog
-            exclude_requisition_id: Requisition ID to exclude from borrowed check
+            exclude_requisition_id: Requisition ID to exclude from requested check
 
         Returns:
             Real-time available stock for the batch

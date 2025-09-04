@@ -16,11 +16,11 @@ from inventory_app.utils.logger import logger
 class RequisitionRow:
     """Data structure for displaying requisition information in tables."""
     id: Optional[int] = None
-    borrower_name: str = ""
-    borrower_affiliation: str = ""
-    borrower_group: str = ""
-    datetime_borrowed: Optional[datetime] = None  # Changed from date to datetime
-    expected_borrow: Optional[datetime] = None
+    requester_name: str = ""
+    requester_affiliation: str = ""
+    requester_group: str = ""
+    datetime_requested: Optional[datetime] = None  # Changed from date to datetime
+    expected_request: Optional[datetime] = None
     expected_return: Optional[datetime] = None
     lab_activity_name: str = ""
     lab_activity_date: Optional[date] = None
@@ -43,9 +43,11 @@ class RequisitionsModel:
         self.all_requisitions: List[RequisitionSummary] = []
         self.filtered_requisitions: List[RequisitionSummary] = []
         self.search_term: str = ""
-        self.borrower_filter: str = ""
+        self.requester_filter: str = ""
         self.activity_filter: str = ""
         self.status_filter: str = ""
+        self.workflow_status_filter: str = ""
+        self.processed_status_filter: str = ""
         self.date_from: Optional[date] = None
         self.date_to: Optional[date] = None
 
@@ -79,17 +81,17 @@ class RequisitionsModel:
             for summary in self.filtered_requisitions:
                 # Create comma-separated list of items
                 items_list = ", ".join([
-                    f"{item['name']} (x{item['quantity_borrowed']})"
+                    f"{item['name']} (x{item['quantity_requested']})"
                     for item in summary.items
                 ])
 
                 row = RequisitionRow(
                     id=summary.requisition.id,
-                    borrower_name=summary.borrower.name,
-                    borrower_affiliation=summary.borrower.affiliation,
-                    borrower_group=summary.borrower.group_name,
-                    datetime_borrowed=summary.requisition.datetime_borrowed,
-                    expected_borrow=summary.requisition.expected_borrow,
+                    requester_name=summary.requester.name,
+                    requester_affiliation=summary.requester.affiliation,
+                    requester_group=summary.requester.group_name,
+                    datetime_requested=summary.requisition.datetime_requested,
+                    expected_request=summary.requisition.expected_request,
                     expected_return=summary.requisition.expected_return,
                     lab_activity_name=summary.requisition.lab_activity_name,
                     lab_activity_date=summary.requisition.lab_activity_date,
@@ -112,19 +114,19 @@ class RequisitionsModel:
         Filter requisitions by search term.
 
         Args:
-            search_term: Term to search for in borrower name, activity, or items
+            search_term: Term to search for in requester name, activity, or items
         """
         self.search_term = search_term.lower()
         self._apply_filters()
 
-    def filter_by_borrower(self, borrower_name: str) -> None:
+    def filter_by_requester(self, requester_name: str) -> None:
         """
-        Filter by borrower name.
+        Filter by requester name.
 
         Args:
-            borrower_name: Borrower name to filter by
+            requester_name: Requester name to filter by
         """
-        self.borrower_filter = borrower_name.lower()
+        self.requester_filter = requester_name.lower()
         self._apply_filters()
 
     def filter_by_activity(self, activity_name: str) -> None:
@@ -142,9 +144,29 @@ class RequisitionsModel:
         Filter by requisition status.
 
         Args:
-            status: Status to filter by ('active', 'returned', 'overdue')
+            status: Status to filter by ('active', 'returned', 'overdue', 'partially returned', etc.)
         """
         self.status_filter = status
+        self._apply_filters()
+
+    def filter_by_workflow_status(self, workflow_status: str) -> None:
+        """
+        Filter by workflow status only (requested, active, overdue).
+
+        Args:
+            workflow_status: Workflow status to filter by
+        """
+        self.workflow_status_filter = workflow_status
+        self._apply_filters()
+
+    def filter_by_processed_status(self, processed_status: str) -> None:
+        """
+        Filter by processed status (returned, partially returned, used, lost).
+
+        Args:
+            processed_status: Processed status to filter by
+        """
+        self.processed_status_filter = processed_status
         self._apply_filters()
 
     def filter_by_date_range(self, date_from: Optional[date], date_to: Optional[date]) -> None:
@@ -162,9 +184,11 @@ class RequisitionsModel:
     def clear_filters(self) -> None:
         """Clear all filters."""
         self.search_term = ""
-        self.borrower_filter = ""
+        self.requester_filter = ""
         self.activity_filter = ""
         self.status_filter = ""
+        self.workflow_status_filter = ""
+        self.processed_status_filter = ""
         self.date_from = None
         self.date_to = None
         self._apply_filters()
@@ -196,21 +220,30 @@ class RequisitionsModel:
             active_count = sum(1 for r in self.filtered_requisitions if r.status == "active")
             returned_count = sum(1 for r in self.filtered_requisitions if r.status == "returned")
             overdue_count = sum(1 for r in self.filtered_requisitions if r.status == "overdue")
-            # Note: "Partially Returned" status removed - requisitions are either active, returned, or overdue
+            partially_returned_count = sum(1 for r in self.filtered_requisitions if "partially returned" in r.status)
+            consumed_count = sum(1 for r in self.filtered_requisitions if r.status == "consumed")
+            lost_count = sum(1 for r in self.filtered_requisitions if r.status == "lost")
+            returned_and_lost_count = sum(1 for r in self.filtered_requisitions if r.status == "returned and lost")
+            returned_and_consumed_count = sum(1 for r in self.filtered_requisitions if r.status == "returned and consumed")
 
-            # Calculate total items borrowed
+            # Calculate total items requested
             total_items = sum(r.total_items for r in self.filtered_requisitions)
 
-            # Count unique borrowers
-            unique_borrowers = len(set(r.borrower.id for r in self.filtered_requisitions if r.borrower.id))
+            # Count unique requesters
+            unique_requesters = len(set(r.requester.id for r in self.filtered_requisitions if r.requester.id))
 
             return {
                 'total_requisitions': total_requisitions,
                 'active_requisitions': active_count,
                 'returned_requisitions': returned_count,
                 'overdue_requisitions': overdue_count,
-                'total_items_borrowed': total_items,
-                'unique_borrowers': unique_borrowers
+                'partially_returned_requisitions': partially_returned_count,
+                'consumed_requisitions': consumed_count,
+                'lost_requisitions': lost_count,
+                'returned_and_lost_requisitions': returned_and_lost_count,
+                'returned_and_consumed_requisitions': returned_and_consumed_count,
+                'total_items_requested': total_items,
+                'unique_requesters': unique_requesters
             }
 
         except Exception as e:
@@ -220,8 +253,13 @@ class RequisitionsModel:
                 'active_requisitions': 0,
                 'returned_requisitions': 0,
                 'overdue_requisitions': 0,
-                'total_items_borrowed': 0,
-                'unique_borrowers': 0
+                'partially_returned_requisitions': 0,
+                'consumed_requisitions': 0,
+                'lost_requisitions': 0,
+                'returned_and_lost_requisitions': 0,
+                'returned_and_consumed_requisitions': 0,
+                'total_items_requested': 0,
+                'unique_requesters': 0
             }
 
     def delete_requisition(self, requisition_id: int, editor_name: str) -> bool:
@@ -250,17 +288,29 @@ class RequisitionsModel:
             if self.search_term:
                 filtered = self._filter_by_search_term(filtered)
 
-            # Apply borrower filter
-            if self.borrower_filter:
-                filtered = [r for r in filtered if self.borrower_filter in r.borrower.name.lower()]
+            # Apply requester filter
+            if self.requester_filter:
+                filtered = [r for r in filtered if self.requester_filter in r.requester.name.lower()]
 
             # Apply activity filter
             if self.activity_filter:
                 filtered = [r for r in filtered if self.activity_filter in r.requisition.lab_activity_name.lower()]
 
-            # Apply status filter
+            # Apply status filters
+            if self.workflow_status_filter:
+                filtered = [r for r in filtered if self._matches_workflow_status(r.status, self.workflow_status_filter)]
+
+            if self.processed_status_filter:
+                filtered = [r for r in filtered if self._matches_processed_status(r.status, self.processed_status_filter)]
+
+            # Legacy status filter (for backward compatibility)
             if self.status_filter:
-                filtered = [r for r in filtered if r.status == self.status_filter]
+                if self.status_filter == "partially returned":
+                    filtered = [r for r in filtered if "partially returned" in r.status]
+                elif self.status_filter in ["requested", "active", "overdue"]:
+                    filtered = [r for r in filtered if self._matches_workflow_status(r.status, self.status_filter)]
+                else:
+                    filtered = [r for r in filtered if self.status_filter in r.status]
 
             # Apply date range filter
             if self.date_from or self.date_to:
@@ -279,16 +329,16 @@ class RequisitionsModel:
         filtered = []
 
         for req in requisitions:
-            # Search in borrower information
-            if search_term in req.borrower.name.lower():
+            # Search in requester information
+            if search_term in req.requester.name.lower():
                 filtered.append(req)
                 continue
 
-            if search_term in req.borrower.affiliation.lower():
+            if search_term in req.requester.affiliation.lower():
                 filtered.append(req)
                 continue
 
-            if search_term in req.borrower.group_name.lower():
+            if search_term in req.requester.group_name.lower():
                 filtered.append(req)
                 continue
 
@@ -322,3 +372,26 @@ class RequisitionsModel:
             filtered.append(req)
 
         return filtered
+
+    def _matches_workflow_status(self, status_string: str, workflow_status: str) -> bool:
+        """Check if status string contains the specified workflow status."""
+        # Status format: "workflow_status, processed_status1 (X%), processed_status2 (Y%)"
+        # Or just "workflow_status" if no processed status
+        workflow_part = status_string.split(',')[0].strip()
+        return workflow_part == workflow_status
+
+    def _matches_processed_status(self, status_string: str, processed_status: str) -> bool:
+        """Check if status string contains the specified processed status."""
+        # Status format: "workflow_status, processed_status1 (X%), processed_status2 (Y%)"
+        parts = status_string.split(',')
+        if len(parts) < 2:
+            return False  # No processed status
+
+        # Check each processed status part
+        for part in parts[1:]:
+            part = part.strip()
+            # Extract the status name (remove percentage)
+            status_name = part.split(' (')[0] if ' (' in part else part
+            if status_name == processed_status:
+                return True
+        return False

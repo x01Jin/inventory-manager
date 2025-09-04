@@ -1,6 +1,6 @@
 """
 Requisitions controller - handles business logic for requisition management.
-Provides CRUD operations for requisitions, borrowers, and requisition items.
+Provides CRUD operations for requisitions, requesters, and requisition items.
 Uses composition pattern with DatabaseConnection.
 """
 
@@ -10,16 +10,16 @@ from dataclasses import dataclass
 import time
 
 from inventory_app.database.connection import db
-from inventory_app.database.models import Borrower, Requisition
+from inventory_app.database.models import Requester, Requisition
 from inventory_app.services import ItemService
 from inventory_app.utils.logger import logger
 
 
 @dataclass
 class RequisitionSummary:
-    """Summary data for a requisition including borrower and items."""
+    """Summary data for a requisition including requester and items."""
     requisition: Requisition
-    borrower: Borrower
+    requester: Requester
     items: List[Dict]  # List of item details with quantities
     total_items: int
     status: str  # 'Active', 'Returned', 'Overdue'
@@ -27,7 +27,7 @@ class RequisitionSummary:
 class RequisitionsController:
     """
     Controller for requisition management operations.
-    Handles business logic for borrowing workflow.
+    Handles business logic for requesting workflow.
     """
 
     def __init__(self):
@@ -39,7 +39,7 @@ class RequisitionsController:
 
     def get_all_requisitions(self) -> List[RequisitionSummary]:
         """
-        Get all requisitions with borrower and item details.
+        Get all requisitions with requester and item details.
 
         Returns:
             List of requisition summaries
@@ -53,10 +53,10 @@ class RequisitionsController:
                 if not req.id:
                     continue
 
-                # Get borrower details
-                borrower = Borrower.get_by_id(req.borrower_id)
-                if not borrower:
-                    logger.warning(f"Borrower {req.borrower_id} not found for requisition {req.id}")
+                # Get requester details
+                requester = Requester.get_by_id(req.requester_id)
+                if not requester:
+                    logger.warning(f"Requester {req.requester_id} not found for requisition {req.id}")
                     continue
 
                 # Get requisition items with details using ItemService
@@ -67,9 +67,9 @@ class RequisitionsController:
 
                 summary = RequisitionSummary(
                     requisition=req,
-                    borrower=borrower,
+                    requester=requester,
                     items=items,
-                    total_items=sum(item['quantity_borrowed'] for item in items),
+                    total_items=sum(item['quantity_requested'] for item in items),
                     status=status
                 )
                 summaries.append(summary)
@@ -118,40 +118,40 @@ class RequisitionsController:
             logger.error(f"Failed to delete requisition {requisition_id}: {e}")
             return False
 
-    def get_borrowers(self) -> List[Borrower]:
+    def get_requesters(self) -> List[Requester]:
         """
-        Get all borrowers.
+        Get all requesters.
 
         Returns:
-            List of borrowers
+            List of requesters
         """
         try:
-            return Borrower.get_all()
+            return Requester.get_all()
         except Exception as e:
-            logger.error(f"Failed to get borrowers: {e}")
+            logger.error(f"Failed to get requesters: {e}")
             return []
 
-    def get_borrowers_with_requisitions(self) -> List[Borrower]:
+    def get_requesters_with_requisitions(self) -> List[Requester]:
         """
-        Get only borrowers that have created requisitions.
+        Get only requesters that have created requisitions.
 
         Returns:
-            List of borrowers who have active requisitions
+            List of requesters who have active requisitions
         """
         try:
             query = """
-            SELECT DISTINCT b.* FROM Borrowers b
-            JOIN Requisitions r ON b.id = r.borrower_id
+            SELECT DISTINCT b.* FROM Requesters b
+            JOIN Requisitions r ON b.id = r.requester_id
             ORDER BY b.name
             """
             rows = db.execute_query(query)
-            borrowers = []
+            requesters = []
             for row in rows:
-                borrowers.append(Borrower(**dict(row)))
-            logger.info(f"Retrieved {len(borrowers)} borrowers with requisitions")
-            return borrowers
+                requesters.append(Requester(**dict(row)))
+            logger.info(f"Retrieved {len(requesters)} requesters with requisitions")
+            return requesters
         except Exception as e:
-            logger.error(f"Failed to get borrowers with requisitions: {e}")
+            logger.error(f"Failed to get requesters with requisitions: {e}")
             return []
 
     def _get_requisition_by_id(self, requisition_id: int) -> Optional[Requisition]:
@@ -164,8 +164,8 @@ class RequisitionsController:
 
             req_dict = dict(rows[0])
             # Convert dates
-            if req_dict.get('date_borrowed'):
-                req_dict['date_borrowed'] = date.fromisoformat(req_dict['date_borrowed'])
+            if req_dict.get('date_requested'):
+                req_dict['date_requested'] = date.fromisoformat(req_dict['date_requested'])
             if req_dict.get('lab_activity_date'):
                 req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
 

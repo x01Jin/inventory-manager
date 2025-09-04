@@ -1,6 +1,6 @@
 """
-Requisitions management page - Complete laboratory borrowing system.
-Provides full CRUD operations for requisitions with borrower management.
+Requisitions management page - Complete laboratory requesting system.
+Provides full CRUD operations for requisitions with requester management.
 """
 
 from typing import Optional
@@ -25,6 +25,7 @@ from inventory_app.gui.requisitions.requisition_preview import RequisitionPrevie
 from inventory_app.gui.requisitions.requisition_management import (
     NewRequisitionDialog,
     EditRequisitionDialog,
+    ItemReturnDialog,
 )
 from inventory_app.utils.internal_time import check_and_update_requisition_statuses
 from inventory_app.utils.logger import logger
@@ -33,7 +34,7 @@ from inventory_app.utils.logger import logger
 class RequisitionsPage(QWidget):
     """
     Main requisitions management page.
-    Provides complete laboratory borrowing workflow management.
+    Provides complete laboratory requesting workflow management.
     """
 
     # Signals for integration with main application
@@ -152,7 +153,7 @@ class RequisitionsPage(QWidget):
 
         # Filter signals - connect to both model and refresh
         self.filters.search_changed.connect(self._on_filter_changed)
-        self.filters.borrower_filter_changed.connect(self._on_filter_changed)
+        self.filters.requester_filter_changed.connect(self._on_filter_changed)
         self.filters.activity_filter_changed.connect(self._on_filter_changed)
         self.filters.status_filter_changed.connect(self._on_filter_changed)
         self.filters.date_range_changed.connect(self._on_filter_changed)
@@ -189,8 +190,8 @@ class RequisitionsPage(QWidget):
                     )
                     return
 
-            # Reload borrower options (in case new borrowers have requisitions)
-            self.filters._load_borrower_options()
+            # Reload requester options (in case new requesters have requisitions)
+            self.filters._load_requester_options()
 
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
@@ -294,7 +295,41 @@ class RequisitionsPage(QWidget):
 
     def return_items(self):
         """Open dialog to process item returns for the selected requisition."""
-        pass
+        try:
+            requisition_id = self.table.get_selected_requisition_id()
+            if not requisition_id:
+                QMessageBox.warning(
+                    self, "No Selection", "Please select a requisition to return items for."
+                )
+                return
+
+            # Get the requisition summary from the model
+            requisition_summary = self.model.get_requisition_by_id(requisition_id)
+            if not requisition_summary:
+                QMessageBox.warning(self, "Error", "Could not find requisition data.")
+                return
+
+            # Check if requisition has already been processed
+            if requisition_summary.status == "returned":
+                QMessageBox.information(
+                    self, "Already Processed",
+                    "This requisition has already been processed and is locked.\n"
+                    "Edit and Return buttons are disabled. Only deletion is allowed."
+                )
+                return
+
+            # Create and show the return dialog
+            dialog = ItemReturnDialog(requisition_id, parent=self)
+
+            # Show the dialog (returns True if processed successfully)
+            if dialog.exec():
+                # Refresh data after successful processing
+                self.refresh_data()
+                self.data_changed.emit()
+
+        except Exception as e:
+            logger.error(f"Failed to open return dialog: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open return dialog: {str(e)}")
 
     def delete_requisition(self):
         """Delete the currently selected requisition."""
@@ -310,7 +345,7 @@ class RequisitionsPage(QWidget):
             self,
             "Confirm Deletion",
             "Are you sure you want to delete this requisition?\n\n"
-            "This action cannot be undone and will remove all associated borrowing records.",
+            "This action cannot be undone and will remove all associated requesting records.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -354,8 +389,8 @@ class RequisitionsPage(QWidget):
             # Apply filters to model
             if "search_term" in current_filters:
                 self.model.filter_by_search(current_filters["search_term"])
-            if "borrower_filter" in current_filters:
-                self.model.filter_by_borrower(current_filters["borrower_filter"])
+            if "requester_filter" in current_filters:
+                self.model.filter_by_requester(current_filters["requester_filter"])
             if "activity_filter" in current_filters:
                 self.model.filter_by_activity(current_filters["activity_filter"])
             if "status_filter" in current_filters:
@@ -412,16 +447,35 @@ class RequisitionsPage(QWidget):
             self._update_action_button_states(None)
 
     def _update_action_button_states(self, requisition_id: Optional[int]):
-        """Update the enabled state of action buttons based on selection."""
+        """Update the enabled state of action buttons based on selection and status."""
         try:
             has_selection = requisition_id is not None
 
-            # Enable/disable action buttons based on selection
-            self.edit_button.setEnabled(has_selection)
-            self.return_button.setEnabled(has_selection)
-            self.delete_button.setEnabled(has_selection)
+            if has_selection:
+                # Get requisition status to determine button states
+                requisition_summary = self.model.get_requisition_by_id(requisition_id)
+                is_processed = (requisition_summary and
+                              requisition_summary.status == "returned")
 
-            logger.debug(f"Action buttons enabled: {has_selection}")
+                # Edit and Return buttons disabled for processed requisitions
+                self.edit_button.setEnabled(not is_processed)
+                self.return_button.setEnabled(not is_processed)
+                self.delete_button.setEnabled(True)  # Delete always enabled for selected items
+
+                # Update button tooltips to explain disabled state
+                if is_processed:
+                    self.edit_button.setToolTip("Cannot edit: Requisition has been processed and locked")
+                    self.return_button.setToolTip("Cannot return: Requisition has been processed and locked")
+                else:
+                    self.edit_button.setToolTip("")
+                    self.return_button.setToolTip("")
+            else:
+                # No selection - disable all buttons
+                self.edit_button.setEnabled(False)
+                self.return_button.setEnabled(False)
+                self.delete_button.setEnabled(False)
+
+            logger.debug(f"Action buttons updated for selection: {has_selection}")
 
         except Exception as e:
             logger.error(f"Failed to update action button states: {e}")

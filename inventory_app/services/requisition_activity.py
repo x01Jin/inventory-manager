@@ -25,7 +25,7 @@ class RequisitionActivityManager:
     def log_requisition_created(
         self,
         requisition_id: int,
-        borrower_name: str,
+        requester_name: str,
         activity_name: str,
         activity_description: str,
         items_summary: str,
@@ -36,10 +36,10 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the created requisition
-            borrower_name: Name of the borrower
+            requester_name: Name of the requester
             activity_name: Name of the laboratory activity
             activity_description: Detailed description from the form
-            items_summary: Summary of items being borrowed
+            items_summary: Summary of items being requested
             user_name: Name of the user performing the action
 
         Returns:
@@ -49,7 +49,7 @@ class RequisitionActivityManager:
             # Create rich activity description
             description = self._format_creation_description(
                 requisition_id,
-                borrower_name,
+                requester_name,
                 activity_name,
                 activity_description,
                 items_summary,
@@ -82,7 +82,7 @@ class RequisitionActivityManager:
     def log_requisition_updated(
         self,
         requisition_id: int,
-        borrower_name: str,
+        requester_name: str,
         activity_name: str,
         activity_description: str,
         items_summary: str,
@@ -94,10 +94,10 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the updated requisition
-            borrower_name: Name of the borrower
+            requester_name: Name of the requester
             activity_name: Name of the laboratory activity
             activity_description: Detailed description from the form
-            items_summary: Summary of items being borrowed
+            items_summary: Summary of items being requested
             changes_summary: Summary of what was changed (optional)
             user_name: Name of the user performing the action
 
@@ -108,7 +108,7 @@ class RequisitionActivityManager:
             # Create rich activity description
             description = self._format_update_description(
                 requisition_id,
-                borrower_name,
+                requester_name,
                 activity_name,
                 activity_description,
                 items_summary,
@@ -142,7 +142,7 @@ class RequisitionActivityManager:
     def log_requisition_returned(
         self,
         requisition_id: int,
-        borrower_name: str,
+        requester_name: str,
         returned_items: str,
         user_name: str = "System",
     ) -> bool:
@@ -151,7 +151,7 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the returned requisition
-            borrower_name: Name of the borrower
+            requester_name: Name of the requester
             returned_items: Summary of returned items
             user_name: Name of the user performing the action
 
@@ -159,7 +159,7 @@ class RequisitionActivityManager:
             bool: True if logged successfully
         """
         try:
-            description = f"Requisition #{requisition_id} items returned by {borrower_name}. Returned: {returned_items}"
+            description = f"Requisition #{requisition_id} items returned by {requester_name}. Returned: {returned_items}"
 
             success = activity_logger.log_activity(
                 activity_type=activity_logger.REQUISITION_RETURNED,
@@ -237,7 +237,7 @@ class RequisitionActivityManager:
     def _format_creation_description(
         self,
         requisition_id: int,
-        borrower_name: str,
+        requester_name: str,
         activity_name: str,
         activity_description: str,
         items_summary: str,
@@ -247,7 +247,7 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the requisition
-            borrower_name: Name of the borrower
+            requester_name: Name of the requester
             activity_name: Name of the activity
             activity_description: Detailed description
             items_summary: Summary of items
@@ -255,7 +255,7 @@ class RequisitionActivityManager:
         Returns:
             Formatted description string
         """
-        description = f"Requisition #{requisition_id} created by {borrower_name}: "
+        description = f"Requisition #{requisition_id} created by {requester_name}: "
         description += f"'{activity_name}'"
 
         if activity_description.strip():
@@ -269,7 +269,7 @@ class RequisitionActivityManager:
     def _format_update_description(
         self,
         requisition_id: int,
-        borrower_name: str,
+        requester_name: str,
         activity_name: str,
         activity_description: str,
         items_summary: str,
@@ -280,7 +280,7 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the requisition
-            borrower_name: Name of the borrower
+            requester_name: Name of the requester
             activity_name: Name of the activity
             activity_description: Detailed description
             items_summary: Summary of items
@@ -289,7 +289,7 @@ class RequisitionActivityManager:
         Returns:
             Formatted description string
         """
-        description = f"Requisition #{requisition_id} updated by {borrower_name}: "
+        description = f"Requisition #{requisition_id} updated by {requester_name}: "
         description += f"'{activity_name}'"
 
         if activity_description.strip():

@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
-from inventory_app.database.models import Requisition, Borrower
+from inventory_app.database.models import Requisition, Requester
 from inventory_app.business_logic.alert_engine import alert_engine
 from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.database.connection import db
@@ -80,16 +80,16 @@ class DashboardPage(QWidget):
 
         # Active requisitions
         active_reqs = len(Requisition.get_all())
-        reqs_metric = self.create_metric_card("📋 Active Requisitions", str(active_reqs), "Current borrowings")
+        reqs_metric = self.create_metric_card("📋 Active Requisitions", str(active_reqs), "Current requestings")
 
-        # Total borrowers
-        total_borrowers = len(Borrower.get_all())
-        borrowers_metric = self.create_metric_card("👥 Registered Borrowers", str(total_borrowers), "Students/Staff")
+        # Total requesters
+        total_requesters = len(Requester.get_all())
+        requesters_metric = self.create_metric_card("👥 Registered Requesters", str(total_requesters), "Students/Staff")
 
         metrics_layout.addWidget(inventory_metric)
         metrics_layout.addWidget(stock_metric)
         metrics_layout.addWidget(reqs_metric)
-        metrics_layout.addWidget(borrowers_metric)
+        metrics_layout.addWidget(requesters_metric)
 
         parent_layout.addLayout(metrics_layout)
 
@@ -197,13 +197,20 @@ class DashboardPage(QWidget):
     def get_batch_statistics(self):
         """Get statistics about batches and total stock."""
         try:
-            # Query to get batch count and total stock
+            # Query to get batch count and total stock (accounting for disposed quantities)
             query = """
             SELECT
                 COUNT(*) as total_batches,
-                COALESCE(SUM(quantity_received), 0) as total_stock
-            FROM Item_Batches
-            WHERE disposal_date IS NULL
+                COALESCE(SUM(ib.quantity_received), 0) as original_total_stock,
+                COALESCE(disposed.disposed_qty, 0) as total_disposed,
+                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(disposed.disposed_qty, 0) as total_stock
+            FROM Item_Batches ib
+            LEFT JOIN (
+                SELECT SUM(quantity) as disposed_qty
+                FROM Stock_Movements
+                WHERE movement_type = 'DISPOSAL'
+            ) disposed ON 1=1
+            WHERE ib.disposal_date IS NULL
             """
             rows = db.execute_query(query)
 

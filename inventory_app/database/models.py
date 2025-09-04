@@ -386,14 +386,14 @@ class Item:
             logger.error(f"Error details: {str(e)}")
 
     def delete(self, editor_name: str, reason: str) -> bool:
-        """Delete the item and all related records if not currently borrowed."""
+        """Delete the item and all related records if not currently requested."""
         try:
             if not self.id:
                 return False
 
-            # Check if item is currently borrowed (has unreturned requisitions)
-            borrowed_check = """
-            SELECT COUNT(*) as borrowed_count
+            # Check if item is currently requested (has unreturned requisitions)
+            requested_check = """
+            SELECT COUNT(*) as requested_count
             FROM Requisition_Items ri
             JOIN Requisitions r ON ri.requisition_id = r.id
             WHERE ri.item_id = ?
@@ -404,9 +404,9 @@ class Item:
                 AND sm.source_id = r.id
             )
             """
-            borrowed_result = db.execute_query(borrowed_check, (self.id,))
-            if borrowed_result and borrowed_result[0]['borrowed_count'] > 0:
-                logger.warning(f"Cannot delete item {self.id}: item is currently borrowed")
+            requested_result = db.execute_query(requested_check, (self.id,))
+            if requested_result and requested_result[0]['requested_count'] > 0:
+                logger.warning(f"Cannot delete item {self.id}: item is currently requested")
                 return False
 
             # Log to disposal history FIRST (before deleting related records)
@@ -533,55 +533,55 @@ class Item:
 
 
 @dataclass
-class Borrower:
-    """Represents a borrower."""
+class Requester:
+    """Represents a requester."""
     id: Optional[int] = None
     name: str = ""
     affiliation: str = ""
     group_name: str = ""
 
     def save(self) -> bool:
-        """Save or update the borrower."""
+        """Save or update the requester."""
         try:
             if self.id:
-                query = "UPDATE Borrowers SET name = ?, affiliation = ?, group_name = ? WHERE id = ?"
+                query = "UPDATE Requesters SET name = ?, affiliation = ?, group_name = ? WHERE id = ?"
                 db.execute_update(query, (self.name, self.affiliation, self.group_name, self.id))
             else:
-                query = "INSERT INTO Borrowers (name, affiliation, group_name) VALUES (?, ?, ?)"
+                query = "INSERT INTO Requesters (name, affiliation, group_name) VALUES (?, ?, ?)"
                 db.execute_update(query, (self.name, self.affiliation, self.group_name))
                 self.id = db.get_last_insert_id()
             return True
         except Exception as e:
-            logger.error(f"Failed to save borrower: {e}")
+            logger.error(f"Failed to save requester: {e}")
             return False
 
     @classmethod
-    def get_all(cls) -> List['Borrower']:
-        """Get all borrowers."""
+    def get_all(cls) -> List['Requester']:
+        """Get all requesters."""
         try:
-            rows = db.execute_query("SELECT * FROM Borrowers ORDER BY name")
+            rows = db.execute_query("SELECT * FROM Requesters ORDER BY name")
             return [cls(**dict(row)) for row in rows]
         except Exception as e:
-            logger.error(f"Failed to get borrowers: {e}")
+            logger.error(f"Failed to get requesters: {e}")
             return []
 
     @classmethod
-    def get_by_id(cls, borrower_id: int) -> Optional['Borrower']:
-        """Get borrower by ID."""
+    def get_by_id(cls, requester_id: int) -> Optional['Requester']:
+        """Get requester by ID."""
         try:
-            rows = db.execute_query("SELECT * FROM Borrowers WHERE id = ?", (borrower_id,))
+            rows = db.execute_query("SELECT * FROM Requesters WHERE id = ?", (requester_id,))
             return cls(**dict(rows[0])) if rows else None
         except Exception as e:
-            logger.error(f"Failed to get borrower {borrower_id}: {e}")
+            logger.error(f"Failed to get requester {requester_id}: {e}")
             return None
 
 @dataclass
 class Requisition:
-    """Represents a borrowing requisition."""
+    """Represents a requesting requisition."""
     id: Optional[int] = None
-    borrower_id: int = 0
-    datetime_borrowed: Optional[datetime] = None  # NULL for reservations not yet picked up
-    expected_borrow: datetime = datetime.now()
+    requester_id: int = 0
+    datetime_requested: Optional[datetime] = None  # NULL for reservations not yet picked up
+    expected_request: datetime = datetime.now()
     expected_return: datetime = datetime.now()
     status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
     lab_activity_name: str = ""
@@ -602,15 +602,15 @@ class Requisition:
 
                 # Update requisition
                 query = """
-                UPDATE Requisitions SET borrower_id = ?, datetime_borrowed = ?,
-                expected_borrow = ?, expected_return = ?, status = ?,
+                UPDATE Requisitions SET requester_id = ?, datetime_requested = ?,
+                expected_request = ?, expected_return = ?, status = ?,
                 lab_activity_name = ?, lab_activity_date = ?, num_students = ?, num_groups = ?
                 WHERE id = ?
                 """
                 db.execute_update(query, (
-                    self.borrower_id,
-                    self.datetime_borrowed.isoformat() if self.datetime_borrowed else None,
-                    self.expected_borrow.isoformat(),
+                    self.requester_id,
+                    self.datetime_requested.isoformat() if self.datetime_requested else None,
+                    self.expected_request.isoformat(),
                     self.expected_return.isoformat(),
                     self.status,
                     self.lab_activity_name,
@@ -622,14 +622,14 @@ class Requisition:
             else:
                 # Insert new
                 query = """
-                INSERT INTO Requisitions (borrower_id, datetime_borrowed, expected_borrow,
+                INSERT INTO Requisitions (requester_id, datetime_requested, expected_request,
                 expected_return, status, lab_activity_name, lab_activity_date, num_students, num_groups)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(query, (
-                    self.borrower_id,
-                    self.datetime_borrowed.isoformat() if self.datetime_borrowed else None,
-                    self.expected_borrow.isoformat(),
+                    self.requester_id,
+                    self.datetime_requested.isoformat() if self.datetime_requested else None,
+                    self.expected_request.isoformat(),
                     self.expected_return.isoformat(),
                     self.status,
                     self.lab_activity_name,
@@ -681,15 +681,15 @@ class Requisition:
     def get_all(cls) -> List['Requisition']:
         """Get all requisitions."""
         try:
-            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY expected_borrow DESC")
+            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY expected_request DESC")
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
                 # Convert dates
-                if req_dict.get('datetime_borrowed'):
-                    req_dict['datetime_borrowed'] = datetime.fromisoformat(req_dict['datetime_borrowed'])
-                if req_dict.get('expected_borrow'):
-                    req_dict['expected_borrow'] = datetime.fromisoformat(req_dict['expected_borrow'])
+                if req_dict.get('datetime_requested'):
+                    req_dict['datetime_requested'] = datetime.fromisoformat(req_dict['datetime_requested'])
+                if req_dict.get('expected_request'):
+                    req_dict['expected_request'] = datetime.fromisoformat(req_dict['expected_request'])
                 if req_dict.get('expected_return'):
                     req_dict['expected_return'] = datetime.fromisoformat(req_dict['expected_return'])
                 if req_dict.get('lab_activity_date'):
@@ -706,20 +706,20 @@ class RequisitionItem:
     id: Optional[int] = None
     requisition_id: int = 0
     item_id: int = 0
-    quantity_borrowed: int = 0
+    quantity_requested: int = 0
 
     def save(self) -> bool:
         """Save or update the requisition item."""
         try:
             if self.id:
                 query = """
-                UPDATE Requisition_Items SET requisition_id = ?, item_id = ?, quantity_borrowed = ?
+                UPDATE Requisition_Items SET requisition_id = ?, item_id = ?, quantity_requested = ?
                 WHERE id = ?
                 """
-                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_borrowed, self.id))
+                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_requested, self.id))
             else:
-                query = "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_borrowed) VALUES (?, ?, ?)"
-                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_borrowed))
+                query = "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)"
+                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_requested))
                 self.id = db.get_last_insert_id()
             return True
         except Exception as e:

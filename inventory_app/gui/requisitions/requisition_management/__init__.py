@@ -10,6 +10,8 @@ from .item_selection_manager import ItemSelectionManager
 from .requisition_validator import RequisitionValidator
 from .new_requisition import NewRequisitionDialog
 from .edit_requisition import EditRequisitionDialog
+from .return_processor import ReturnProcessor, ReturnItem, return_processor
+from .item_return_dialog import ItemReturnDialog
 
 __all__ = [
     "BaseRequisitionDialog",
@@ -17,4 +19,8 @@ __all__ = [
     "RequisitionValidator",
     "NewRequisitionDialog",
     "EditRequisitionDialog",
+    "ReturnProcessor",
+    "ReturnItem",
+    "return_processor",
+    "ItemReturnDialog",
 ]

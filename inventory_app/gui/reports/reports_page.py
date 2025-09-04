@@ -83,13 +83,13 @@ class ReportsPage(QWidget):
         try:
             from inventory_app.database.connection import db
 
-            # Query for min and max date_borrowed from requisitions
+            # Query for min and max date_requested from requisitions
             query = """
             SELECT
-                MIN(date_borrowed) as min_date,
-                MAX(date_borrowed) as max_date
+                MIN(date_requested) as min_date,
+                MAX(date_requested) as max_date
             FROM Requisitions
-            WHERE date_borrowed IS NOT NULL
+            WHERE date_requested IS NOT NULL
             """
             result = db.execute_query(query)
 

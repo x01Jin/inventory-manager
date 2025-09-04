@@ -97,7 +97,7 @@ CREATE TABLE Stock_Movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
     batch_id INTEGER,              -- Nullable for non-batch items
-    movement_type TEXT NOT NULL,   -- 'CONSUMPTION','BORROW','DISPOSAL','RETURN'
+    movement_type TEXT NOT NULL,   -- 'CONSUMPTION','REQUEST','DISPOSAL','RETURN'
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     source_id INTEGER,             -- e.g., requisition_id for usage
@@ -109,39 +109,39 @@ CREATE TABLE Stock_Movements (
 -- Indexes
 CREATE INDEX idx_movements_item_date ON Stock_Movements(item_id, movement_date);
 
--- 8. Borrowers: Borrower information
-CREATE TABLE Borrowers (
+-- 8. Requesters: Requester information
+CREATE TABLE Requesters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     affiliation TEXT NOT NULL,
     group_name TEXT NOT NULL
 );
 
--- 9. Requisitions: Borrowing records with reservation support
+-- 9. Requisitions: Requesting records with reservation support
 CREATE TABLE Requisitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    borrower_id INTEGER NOT NULL,
-    datetime_borrowed DATETIME,  -- NULL for reservations not yet picked up
-    expected_borrow DATETIME NOT NULL,
+    requester_id INTEGER NOT NULL,
+    datetime_requested DATETIME,  -- NULL for reservations not yet picked up
+    expected_request DATETIME NOT NULL,
     expected_return DATETIME NOT NULL,
     status TEXT NOT NULL DEFAULT 'requested',  -- 'requested', 'active', 'returned', 'overdue'
     lab_activity_name TEXT NOT NULL,
     lab_activity_date DATE NOT NULL,
     num_students INTEGER,
     num_groups INTEGER,
-    FOREIGN KEY (borrower_id) REFERENCES Borrowers(id)
+    FOREIGN KEY (requester_id) REFERENCES Requesters(id)
 );
 
 -- Indexes
 CREATE INDEX idx_requisitions_activity_date ON Requisitions(lab_activity_date);
-CREATE INDEX idx_requisitions_borrower ON Requisitions(borrower_id);
+CREATE INDEX idx_requisitions_requester ON Requisitions(requester_id);
 
 -- 10. Requisition_Items: Items in requisitions
 CREATE TABLE Requisition_Items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requisition_id INTEGER NOT NULL,
     item_id INTEGER NOT NULL,
-    quantity_borrowed INTEGER NOT NULL CHECK (quantity_borrowed > 0),
+    quantity_requested INTEGER NOT NULL CHECK (quantity_requested > 0),
     FOREIGN KEY (requisition_id) REFERENCES Requisitions(id),
     FOREIGN KEY (item_id) REFERENCES Items(id)
 );
@@ -192,10 +192,10 @@ CREATE INDEX idx_disposal_item ON Disposal_History(item_id);
 -- 14. Activity_Log: Recent activity tracking for dashboard
 CREATE TABLE Activity_Log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_type TEXT NOT NULL,  -- 'ITEM_ADDED', 'ITEM_EDITED', 'ITEM_DELETED', 'REQUISITION_CREATED', 'BORROWER_ADDED', etc.
+    activity_type TEXT NOT NULL,  -- 'ITEM_ADDED', 'ITEM_EDITED', 'ITEM_DELETED', 'REQUISITION_CREATED', 'REQUESTER_ADDED', etc.
     description TEXT NOT NULL,
-    entity_id INTEGER,            -- ID of the related entity (item, requisition, borrower, etc.)
-    entity_type TEXT,             -- 'item', 'requisition', 'borrower', etc.
+    entity_id INTEGER,            -- ID of the related entity (item, requisition, requester, etc.)
+    entity_type TEXT,             -- 'item', 'requisition', 'requester', etc.
     user_name TEXT,               -- Name of the user who performed the action
     timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -222,7 +222,7 @@ SELECT
     ri.item_id,
     i.name AS item_name,
     r.lab_activity_date,
-    SUM(ri.quantity_borrowed) AS total_used
+    SUM(ri.quantity_requested) AS total_used
 FROM Requisition_Items ri
 JOIN Requisitions r ON ri.requisition_id = r.id
 JOIN Items i ON ri.item_id = i.id

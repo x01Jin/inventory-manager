@@ -1,6 +1,6 @@
 """
 Requisitions filters - search and filter controls for requisitions.
-Provides filtering by borrower, activity, status, and date range.
+Provides filtering by requester, activity, status, and date range.
 Uses composition pattern with RequisitionsModel.
 """
 
@@ -22,7 +22,7 @@ class RequisitionsFilters(QWidget):
 
     # Signals emitted when filters change
     search_changed = pyqtSignal(str)  # Search term changed
-    borrower_filter_changed = pyqtSignal(str)  # Borrower filter changed
+    requester_filter_changed = pyqtSignal(str)  # Requester filter changed
     activity_filter_changed = pyqtSignal(str)  # Activity filter changed
     status_filter_changed = pyqtSignal(str)  # Status filter changed
     date_range_changed = pyqtSignal(object, object)  # Date range changed (from_date, to_date)
@@ -49,19 +49,19 @@ class RequisitionsFilters(QWidget):
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("Search:"))
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by borrower name, activity, or items...")
+        self.search_input.setPlaceholderText("Search by requester name, activity, or items...")
         self.search_input.textChanged.connect(self._on_search_changed)
         search_row.addWidget(self.search_input)
         search_layout.addLayout(search_row)
 
-        # Filter row 1: Borrower and Activity
+        # Filter row 1: Requester and Activity
         filter_row1 = QHBoxLayout()
 
-        filter_row1.addWidget(QLabel("Borrower:"))
-        self.borrower_combo = QComboBox()
-        self.borrower_combo.addItem("All Borrowers", "")
-        self.borrower_combo.currentTextChanged.connect(self._on_borrower_changed)
-        filter_row1.addWidget(self.borrower_combo)
+        filter_row1.addWidget(QLabel("Requester:"))
+        self.requester_combo = QComboBox()
+        self.requester_combo.addItem("All Requesters", "")
+        self.requester_combo.currentTextChanged.connect(self._on_requester_changed)
+        filter_row1.addWidget(self.requester_combo)
 
         filter_row1.addWidget(QLabel("Activity:"))
         self.activity_input = QLineEdit()
@@ -123,26 +123,26 @@ class RequisitionsFilters(QWidget):
     def set_model(self, model: RequisitionsModel):
         """Set the model reference for accessing data."""
         self.model = model
-        self._load_borrower_options()
+        self._load_requester_options()
 
-    def _load_borrower_options(self):
-        """Load borrower names for the filter dropdown."""
+    def _load_requester_options(self):
+        """Load requester names for the filter dropdown."""
         if not self.model:
             return
 
         try:
-            # Clear existing items except "All Borrowers"
-            while self.borrower_combo.count() > 1:
-                self.borrower_combo.removeItem(1)
+            # Clear existing items except "All Requesters"
+            while self.requester_combo.count() > 1:
+                self.requester_combo.removeItem(1)
 
-            # Add borrower names (only those with requisitions)
-            borrowers = self.model.controller.get_borrowers_with_requisitions()
-            for borrower in borrowers:
-                display_text = f"{borrower.name} ({borrower.affiliation})"
-                self.borrower_combo.addItem(display_text, borrower.name.lower())
+            # Add requester names (only those with requisitions)
+            requesters = self.model.controller.get_requesters_with_requisitions()
+            for requester in requesters:
+                display_text = f"{requester.name} ({requester.affiliation})"
+                self.requester_combo.addItem(display_text, requester.name.lower())
 
         except Exception as e:
-            logger.error(f"Failed to load borrower options: {e}")
+            logger.error(f"Failed to load requester options: {e}")
 
     def update_summary(self, total_count: int, filtered_count: int):
         """Update the filter summary label."""
@@ -162,7 +162,7 @@ class RequisitionsFilters(QWidget):
         try:
             return {
                 'search_term': self.search_input.text().strip(),
-                'borrower_filter': self.borrower_combo.currentData() or "",
+                'requester_filter': self.requester_combo.currentData() or "",
                 'activity_filter': self.activity_input.text().strip(),
                 'status_filter': self.status_combo.currentData() or "",
                 'date_from': self.date_from.date().toPyDate() if self.date_from.date().isValid() else None,
@@ -179,11 +179,11 @@ class RequisitionsFilters(QWidget):
             if 'search_term' in filters:
                 self.search_input.setText(filters['search_term'])
 
-            # Borrower filter
-            if 'borrower_filter' in filters:
-                index = self.borrower_combo.findData(filters['borrower_filter'])
+            # Requester filter
+            if 'requester_filter' in filters:
+                index = self.requester_combo.findData(filters['requester_filter'])
                 if index >= 0:
-                    self.borrower_combo.setCurrentIndex(index)
+                    self.requester_combo.setCurrentIndex(index)
 
             # Activity filter
             if 'activity_filter' in filters:
@@ -213,7 +213,7 @@ class RequisitionsFilters(QWidget):
         """Clear all filter inputs."""
         try:
             self.search_input.clear()
-            self.borrower_combo.setCurrentIndex(0)  # "All Borrowers"
+            self.requester_combo.setCurrentIndex(0)  # "All Requesters"
             self.activity_input.clear()
             self.status_combo.setCurrentIndex(0)  # "All Statuses"
 
@@ -232,10 +232,10 @@ class RequisitionsFilters(QWidget):
         """Handle search input changes."""
         self.search_changed.emit(text)
 
-    def _on_borrower_changed(self, borrower_name: str):
-        """Handle borrower filter changes."""
-        borrower_filter = self.borrower_combo.currentData() or ""
-        self.borrower_filter_changed.emit(borrower_filter)
+    def _on_requester_changed(self, requester_name: str):
+        """Handle requester filter changes."""
+        requester_filter = self.requester_combo.currentData() or ""
+        self.requester_filter_changed.emit(requester_filter)
 
     def _on_activity_changed(self, text: str):
         """Handle activity filter changes."""
@@ -261,7 +261,7 @@ class RequisitionsFilters(QWidget):
         """Handle apply filters button."""
         # Emit all current filter values to ensure they're applied
         self._on_search_changed(self.search_input.text())
-        self._on_borrower_changed(self.borrower_combo.currentText())
+        self._on_requester_changed(self.requester_combo.currentText())
         self._on_activity_changed(self.activity_input.text())
         self._on_status_changed(self.status_combo.currentText())
         self._on_date_range_changed()

@@ -21,7 +21,7 @@ class StockMovementService:
 
     def record_consumption(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
         """
-        Record item consumption (borrowing).
+        Record item consumption (requesting).
 
         Args:
             item_id: ID of the item
@@ -44,6 +44,34 @@ class StockMovementService:
             batch_id: Specific batch being returned (optional)
         """
         self._record_movement(item_id, 'RETURN', quantity, source_id, note, batch_id)
+
+    def record_disposal(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+        """
+        Record item disposal (lost or damaged non-consumable items).
+
+        Args:
+            item_id: ID of the item
+            quantity: Quantity disposed
+            source_id: Requisition ID
+            note: Description/note for the movement
+            batch_id: Specific batch being disposed (optional)
+        """
+        self._record_movement(item_id, 'DISPOSAL', quantity, source_id, note, batch_id)
+
+    def record_lost(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+        """
+        Record item loss (deprecated - use record_disposal for non-consumables, record_consumption for consumables).
+
+        Args:
+            item_id: ID of the item
+            quantity: Quantity lost
+            source_id: Requisition ID
+            note: Description/note for the movement
+            batch_id: Specific batch being lost (optional)
+        """
+        # For backward compatibility, map LOST to DISPOSAL
+        # In future versions, this should be removed and callers should use appropriate methods
+        self._record_movement(item_id, 'DISPOSAL', quantity, source_id, note, batch_id)
 
     def process_return(self, requisition_id: int, return_data: List[Dict], editor_name: str) -> bool:
         """
@@ -140,7 +168,10 @@ class StockMovementService:
                 CASE
                     WHEN movement_type = 'RECEIPT' THEN quantity
                     WHEN movement_type = 'CONSUMPTION' THEN -quantity
+                    WHEN movement_type = 'REQUEST' THEN -quantity
                     WHEN movement_type = 'RETURN' THEN quantity
+                    WHEN movement_type = 'DISPOSAL' THEN -quantity
+                    WHEN movement_type = 'LOST' THEN -quantity  -- Backward compatibility
                     ELSE 0
                 END
             ), 0) as current_stock

@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt
 from inventory_app.gui.requisitions.requisitions_model import RequisitionSummary
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.logger import logger
+from inventory_app.gui.requisitions.requisition_management.return_processor import ReturnProcessor
 
 
 class RequisitionPreview(QWidget):
@@ -106,7 +107,7 @@ class RequisitionPreview(QWidget):
     def populate_details(self, req_summary: RequisitionSummary):
         """Populate the preview with detailed requisition information."""
         req = req_summary.requisition
-        borrower = req_summary.borrower
+        requester = req_summary.requester
 
         # Header
         header = QLabel("📋 Requisition Details")
@@ -117,11 +118,11 @@ class RequisitionPreview(QWidget):
         status_frame = self.create_status_section(req.status)
         self.container_layout.addWidget(status_frame)
 
-        # Borrower Information
-        borrower_section = self.create_borrower_section(borrower)
-        self.container_layout.addWidget(borrower_section)
+        # Requester Information
+        requester_section = self.create_requester_section(requester)
+        self.container_layout.addWidget(requester_section)
 
-        # Timeline (below borrower info as requested)
+        # Timeline (below requester info as requested)
         timeline_section = self.create_timeline_section(req)
         self.container_layout.addWidget(timeline_section)
 
@@ -129,9 +130,14 @@ class RequisitionPreview(QWidget):
         activity_section = self.create_activity_section(req)
         self.container_layout.addWidget(activity_section)
 
-        # Borrowed Items
+        # Requested Items
         items_section = self.create_items_section(req_summary.items, req_summary.total_items)
         self.container_layout.addWidget(items_section)
+
+        # Return Details (only show for processed requisitions)
+        if req.status == "returned" and req.id is not None:
+            return_details_section = self.create_return_details_section(req.id)
+            self.container_layout.addWidget(return_details_section)
 
     def create_status_section(self, status: str) -> QFrame:
         """Create the status section at the top."""
@@ -149,22 +155,22 @@ class RequisitionPreview(QWidget):
 
         return frame
 
-    def create_borrower_section(self, borrower) -> QGroupBox:
-        """Create the borrower information section."""
-        group = QGroupBox("👤 Borrower Information")
+    def create_requester_section(self, requester) -> QGroupBox:
+        """Create the requester information section."""
+        group = QGroupBox("👤 Requester Information")
         group.setStyleSheet(self._get_group_style())
 
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        name_label = QLabel(f"• Name: {borrower.name}")
+        name_label = QLabel(f"• Name: {requester.name}")
         name_label.setStyleSheet(f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(name_label)
 
-        affiliation_label = QLabel(f"• Affiliation: {borrower.affiliation}")
+        affiliation_label = QLabel(f"• Affiliation: {requester.affiliation}")
         layout.addWidget(affiliation_label)
 
-        group_label = QLabel(f"• Group: {borrower.group_name}")
+        group_label = QLabel(f"• Group: {requester.group_name}")
         layout.addWidget(group_label)
 
         return group
@@ -177,22 +183,22 @@ class RequisitionPreview(QWidget):
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        # Expected Borrow
-        if req.expected_borrow:
-            expected_borrow_str = req.expected_borrow.strftime("%Y-%m-%d %H:%M")
-            expected_borrow_label = QLabel(f"• Expected Borrow: {expected_borrow_str}")
-            layout.addWidget(expected_borrow_label)
+        # Expected Request
+        if req.expected_request:
+            expected_request_str = req.expected_request.strftime("%Y-%m-%d %H:%M")
+            expected_request_label = QLabel(f"• Expected Request: {expected_request_str}")
+            layout.addWidget(expected_request_label)
 
-        # Borrowed Date
-        if req.datetime_borrowed:
-            borrowed_str = req.datetime_borrowed.strftime("%Y-%m-%d %H:%M")
-            borrowed_label = QLabel(f"• Borrowed Date: {borrowed_str}")
-            borrowed_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
-            layout.addWidget(borrowed_label)
+        # Requested Date
+        if req.datetime_requested:
+            requested_str = req.datetime_requested.strftime("%Y-%m-%d %H:%M")
+            requested_label = QLabel(f"• Requested Date: {requested_str}")
+            requested_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
+            layout.addWidget(requested_label)
         else:
-            not_borrowed_label = QLabel("• Borrowed Date:  Reserved")
-            not_borrowed_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.WARNING_COLOR};")
-            layout.addWidget(not_borrowed_label)
+            not_requested_label = QLabel("• Requested Date:  Reserved")
+            not_requested_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.WARNING_COLOR};")
+            layout.addWidget(not_requested_label)
 
         # Expected Return
         if req.expected_return:
@@ -230,20 +236,20 @@ class RequisitionPreview(QWidget):
         return group
 
     def create_items_section(self, items: list, total_count: int) -> QGroupBox:
-        """Create the borrowed items section."""
-        group = QGroupBox(f"📦 Borrowed Items ({total_count})")
+        """Create the Requested Items section."""
+        group = QGroupBox(f"📦 Requested Items ({total_count})")
         group.setStyleSheet(self._get_group_style())
 
         layout = QVBoxLayout(group)
         layout.setSpacing(5)
 
         if not items:
-            no_items_label = QLabel("No items borrowed")
+            no_items_label = QLabel("No items requested")
             no_items_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.TEXT_MUTED};")
             layout.addWidget(no_items_label)
         else:
             for item in items:
-                item_text = f"• {item['name']} (x{item['quantity_borrowed']})"
+                item_text = f"• {item['name']} (x{item['quantity_requested']})"
                 item_label = QLabel(item_text)
                 item_label.setStyleSheet("font-size: 9pt;")
                 layout.addWidget(item_label)
@@ -281,6 +287,67 @@ class RequisitionPreview(QWidget):
                 background-color: transparent;
             }}
         """
+
+    def create_return_details_section(self, requisition_id: int) -> QGroupBox:
+        """Create the Return Details section for processed requisitions."""
+        group = QGroupBox("🔒 Final Return Details")
+        group.setStyleSheet(self._get_group_style())
+
+        layout = QVBoxLayout(group)
+        layout.setSpacing(8)
+
+        try:
+            # Get return summary from processor
+            return_processor = ReturnProcessor()
+            summary = return_processor.get_requisition_return_summary(requisition_id)
+
+            if not summary or (summary['total_returned'] == 0 and summary['total_lost'] == 0):
+                no_returns_label = QLabel("No return details available")
+                no_returns_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.TEXT_MUTED};")
+                layout.addWidget(no_returns_label)
+                return group
+
+            # Display consumables returned
+            if summary['returned_consumables']:
+                returned_section = QLabel("✅ Consumables Returned:")
+                returned_section.setStyleSheet("font-weight: bold; font-size: 10pt; margin-top: 5px;")
+                layout.addWidget(returned_section)
+
+                for item in summary['returned_consumables']:
+                    item_label = QLabel(f"  • {item['item_name']} (x{item['quantity']})")
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+            # Display non-consumables lost
+            if summary['lost_non_consumables']:
+                lost_section = QLabel("❌ Non-Consumables Lost/Damaged:")
+                lost_section.setStyleSheet("font-weight: bold; font-size: 10pt; margin-top: 5px;")
+                layout.addWidget(lost_section)
+
+                for item in summary['lost_non_consumables']:
+                    item_label = QLabel(f"  • {item['item_name']} (x{item['quantity']})")
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+            # Summary totals
+            totals_label = QLabel(
+                f"📊 Totals: {summary['total_returned']} returned, {summary['total_lost']} lost"
+            )
+            totals_label.setStyleSheet(f"font-weight: bold; font-size: 10pt; color: {DarkTheme.SUCCESS_COLOR}; margin-top: 8px;")
+            layout.addWidget(totals_label)
+
+            # Lock notice
+            lock_notice = QLabel("🔒 This requisition has been processed and is locked from further editing.")
+            lock_notice.setStyleSheet(f"font-size: 9pt; color: {DarkTheme.WARNING_COLOR}; font-style: italic; margin-top: 5px;")
+            layout.addWidget(lock_notice)
+
+        except Exception as e:
+            logger.error(f"Failed to create return details section: {e}")
+            error_label = QLabel("Error loading return details")
+            error_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.ERROR_COLOR};")
+            layout.addWidget(error_label)
+
+        return group
 
     def get_current_requisition_id(self) -> Optional[int]:
         """Get the ID of the currently displayed requisition."""

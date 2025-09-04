@@ -35,7 +35,7 @@ class InventoryController:
                 i.last_modified,
                 ib.date_received as first_batch_date,
                 COALESCE(stock.total_stock, 0) as total_stock,
-                COALESCE(stock.total_stock, 0) - COALESCE(borrowed.borrowed_qty, 0) as available_stock,
+                COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
                     WHEN i.expiration_date IS NOT NULL
                          AND i.expiration_date <= DATE('now', '+6 months')
@@ -58,7 +58,7 @@ class InventoryController:
                         )
                     ) THEN 1
                     ELSE 0
-                END as is_borrowed
+                END as is_requested
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
@@ -68,12 +68,22 @@ class InventoryController:
                 GROUP BY item_id
             ) ib ON i.id = ib.item_id
             LEFT JOIN (
-                SELECT item_id, SUM(quantity_received) as total_stock
-                FROM Item_Batches
-                GROUP BY item_id
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) as original_stock,
+                    COALESCE(disposed.disposed_qty, 0) as disposed_qty,
+                    SUM(ib.quantity_received) - COALESCE(disposed.disposed_qty, 0) as total_stock
+                FROM Item_Batches ib
+                LEFT JOIN (
+                    SELECT item_id, SUM(quantity) as disposed_qty
+                    FROM Stock_Movements
+                    WHERE movement_type = 'DISPOSAL'
+                    GROUP BY item_id
+                ) disposed ON ib.item_id = disposed.item_id
+                GROUP BY ib.item_id
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                SELECT ri.item_id, SUM(ri.quantity_borrowed) as borrowed_qty
+                SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
                 FROM Requisition_Items ri
                 JOIN Requisitions r ON ri.requisition_id = r.id
                 WHERE NOT EXISTS (
@@ -83,7 +93,7 @@ class InventoryController:
                     AND sm.source_id = r.id
                 )
                 GROUP BY ri.item_id
-            ) borrowed ON i.id = borrowed.item_id
+            ) requested ON i.id = requested.item_id
             ORDER BY c.name, i.name
             """
 
@@ -108,7 +118,7 @@ class InventoryController:
                 i.expiration_date, i.calibration_date, i.is_consumable,
                 i.acquisition_date, i.last_modified,
                 COALESCE(stock.total_stock, 0) as total_stock,
-                COALESCE(stock.total_stock, 0) - COALESCE(borrowed.borrowed_qty, 0) as available_stock,
+                COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
                     WHEN EXISTS (
                         SELECT 1 FROM Requisition_Items ri
@@ -122,17 +132,27 @@ class InventoryController:
                         )
                     ) THEN 1
                     ELSE 0
-                END as is_borrowed
+                END as is_requested
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
             LEFT JOIN (
-                SELECT item_id, SUM(quantity_received) as total_stock
-                FROM Item_Batches
-                GROUP BY item_id
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) as original_stock,
+                    COALESCE(disposed.disposed_qty, 0) as disposed_qty,
+                    SUM(ib.quantity_received) - COALESCE(disposed.disposed_qty, 0) as total_stock
+                FROM Item_Batches ib
+                LEFT JOIN (
+                    SELECT item_id, SUM(quantity) as disposed_qty
+                    FROM Stock_Movements
+                    WHERE movement_type = 'DISPOSAL'
+                    GROUP BY item_id
+                ) disposed ON ib.item_id = disposed.item_id
+                GROUP BY ib.item_id
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                SELECT ri.item_id, SUM(ri.quantity_borrowed) as borrowed_qty
+                SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
                 FROM Requisition_Items ri
                 JOIN Requisitions r ON ri.requisition_id = r.id
                 WHERE NOT EXISTS (
@@ -142,7 +162,7 @@ class InventoryController:
                     AND sm.source_id = r.id
                 )
                 GROUP BY ri.item_id
-            ) borrowed ON i.id = borrowed.item_id
+            ) requested ON i.id = requested.item_id
             WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ?
             ORDER BY c.name, i.name
             """
@@ -163,7 +183,7 @@ class InventoryController:
             query = """
             SELECT
                 COUNT(ri.id) as total_requisitions,
-                SUM(ri.quantity_borrowed) as total_quantity_used,
+                SUM(ri.quantity_requested) as total_quantity_used,
                 MIN(r.lab_activity_date) as first_used,
                 MAX(r.lab_activity_date) as last_used
             FROM Requisition_Items ri
@@ -212,14 +232,15 @@ class InventoryController:
             query = """
             SELECT
                 COUNT(*) as total_batches,
-                COALESCE(SUM(quantity_received), 0) as total_stock,
-                COALESCE(SUM(
-                    CASE
-                        WHEN ib.disposal_date IS NULL THEN quantity_received
-                        ELSE 0
-                    END
-                ), 0) as active_total_stock
+                COALESCE(SUM(ib.quantity_received), 0) as original_total_stock,
+                COALESCE(disposed.disposed_qty, 0) as total_disposed,
+                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(disposed.disposed_qty, 0) as active_total_stock
             FROM Item_Batches ib
+            LEFT JOIN (
+                SELECT SUM(quantity) as disposed_qty
+                FROM Stock_Movements
+                WHERE movement_type = 'DISPOSAL'
+            ) disposed ON 1=1
             """
 
             rows = db.execute_query(query)
@@ -228,9 +249,9 @@ class InventoryController:
 
             batch_stats = rows[0]
 
-            # Calculate available stock (total - currently borrowed)
+            # Calculate available stock (total - currently requested)
             available_query = """
-            SELECT COALESCE(SUM(ri.quantity_borrowed), 0) as total_borrowed
+            SELECT COALESCE(SUM(ri.quantity_requested), 0) as total_requested
             FROM Requisition_Items ri
             JOIN Requisitions r ON ri.requisition_id = r.id
             WHERE NOT EXISTS (
@@ -241,13 +262,13 @@ class InventoryController:
             )
             """
 
-            borrowed_rows = db.execute_query(available_query)
-            total_borrowed = borrowed_rows[0]['total_borrowed'] if borrowed_rows else 0
+            requested_rows = db.execute_query(available_query)
+            total_requested = requested_rows[0]['total_requested'] if requested_rows else 0
 
             return {
                 'total_batches': batch_stats['total_batches'] or 0,
                 'total_stock': batch_stats['active_total_stock'] or 0,
-                'available_stock': max(0, (batch_stats['active_total_stock'] or 0) - total_borrowed)
+                'available_stock': max(0, (batch_stats['active_total_stock'] or 0) - total_requested)
             }
 
         except Exception as e:

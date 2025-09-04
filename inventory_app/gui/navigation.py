@@ -35,7 +35,7 @@ class NavigationPanel(QWidget):
             ("🏠", "Dashboard", 0),
             ("📦", "Inventory", 1),
             ("📋", "Requisitions", 2),
-            ("👥", "Borrowers", 3),
+            ("👥", "Requesters", 3),
             ("📊", "Reports", 4),
             ("⚙️", "Settings", 5)
         ]

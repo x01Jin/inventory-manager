@@ -1,6 +1,6 @@
 """
-Borrower editor dialog for adding and editing borrower information.
-Provides form for borrower management in laboratory requisitions.
+Requester editor dialog for adding and editing requester information.
+Provides form for requester management in laboratory requisitions.
 """
 
 from typing import Optional
@@ -8,41 +8,41 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QGroupBox, QMessageBox
 )
-from inventory_app.database.models import Borrower
+from inventory_app.database.models import Requester
 from inventory_app.utils.logger import logger
 
 
-class BorrowerEditor(QDialog):
-    """Dialog for adding and editing borrower information."""
+class RequesterEditor(QDialog):
+    """Dialog for adding and editing requester information."""
 
-    def __init__(self, parent=None, borrower_id: Optional[int] = None):
+    def __init__(self, parent=None, requester_id: Optional[int] = None):
         super().__init__(parent)
-        self.borrower_id = borrower_id
-        self.existing_borrower = None
+        self.requester_id = requester_id
+        self.existing_requester = None
 
-        if borrower_id:
-            self.existing_borrower = Borrower.get_by_id(borrower_id)
-            self.setWindowTitle("Edit Borrower")
+        if requester_id:
+            self.existing_requester = Requester.get_by_id(requester_id)
+            self.setWindowTitle("Edit Requester")
         else:
-            self.setWindowTitle("Add New Borrower")
+            self.setWindowTitle("Add New Requester")
 
         self.setup_ui()
-        self.load_borrower_data()
+        self.load_requester_data()
 
     def setup_ui(self):
         """Setup the dialog UI."""
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
 
-        # Borrower Information Group
-        info_group = QGroupBox("Borrower Information")
+        # Requester Information Group
+        info_group = QGroupBox("Requester Information")
         info_layout = QVBoxLayout(info_group)
 
         # Name (required)
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("Full Name:"))
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Enter borrower's full name...")
+        self.name_input.setPlaceholderText("Enter requester's full name...")
         name_layout.addWidget(self.name_input)
         info_layout.addLayout(name_layout)
 
@@ -77,8 +77,8 @@ class BorrowerEditor(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        self.save_button = QPushButton("Save Borrower")
-        self.save_button.clicked.connect(self.save_borrower)
+        self.save_button = QPushButton("Save Requester")
+        self.save_button.clicked.connect(self.save_requester)
         self.save_button.setDefault(True)  # Enter key activates save
         button_layout.addWidget(self.save_button)
 
@@ -93,27 +93,27 @@ class BorrowerEditor(QDialog):
         self.setMinimumHeight(300)
         self.setModal(True)  # Block interaction with parent window
 
-    def load_borrower_data(self):
-        """Load existing borrower data for editing."""
-        if not self.existing_borrower:
+    def load_requester_data(self):
+        """Load existing requester data for editing."""
+        if not self.existing_requester:
             return
 
         try:
-            self.name_input.setText(self.existing_borrower.name)
-            self.affiliation_input.setText(self.existing_borrower.affiliation)
-            self.group_input.setText(self.existing_borrower.group_name)
+            self.name_input.setText(self.existing_requester.name)
+            self.affiliation_input.setText(self.existing_requester.affiliation)
+            self.group_input.setText(self.existing_requester.group_name)
 
-            logger.debug(f"Loaded data for borrower {self.borrower_id}")
+            logger.debug(f"Loaded data for requester {self.requester_id}")
 
         except Exception as e:
-            logger.error(f"Failed to load borrower data: {e}")
-            QMessageBox.warning(self, "Data Load Error", "Failed to load borrower information.")
+            logger.error(f"Failed to load requester data: {e}")
+            QMessageBox.warning(self, "Data Load Error", "Failed to load requester information.")
 
     def validate_input(self) -> bool:
         """Validate user input."""
         # Check required fields
         if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Borrower name is required.")
+            QMessageBox.warning(self, "Validation Error", "Requester name is required.")
             self.name_input.setFocus()
             return False
 
@@ -134,24 +134,24 @@ class BorrowerEditor(QDialog):
 
         return True
 
-    def save_borrower(self):
-        """Save the borrower data."""
+    def save_requester(self):
+        """Save the requester data."""
         try:
             # Validate input
             if not self.validate_input():
                 return
 
-            # Check for duplicate borrower (same name, affiliation, group)
+            # Check for duplicate requester (same name, affiliation, group)
             name = self.name_input.text().strip()
             affiliation = self.affiliation_input.text().strip()
             group_name = self.group_input.text().strip()
 
-            # Look for existing borrower with same details
-            existing_check = self._find_existing_borrower(name, affiliation, group_name)
-            if existing_check and (not self.existing_borrower or existing_check.id != self.existing_borrower.id):
+            # Look for existing requester with same details
+            existing_check = self._find_existing_requester(name, affiliation, group_name)
+            if existing_check and (not self.existing_requester or existing_check.id != self.existing_requester.id):
                 reply = QMessageBox.question(
-                    self, "Duplicate Borrower",
-                    f"A borrower with the same name, affiliation, and group already exists.\n\n"
+                    self, "Duplicate Requester",
+                    f"A requester with the same name, affiliation, and group already exists.\n\n"
                     f"Name: {existing_check.name}\n"
                     f"Affiliation: {existing_check.affiliation}\n"
                     f"Group: {existing_check.group_name}\n\n"
@@ -162,63 +162,63 @@ class BorrowerEditor(QDialog):
                 if reply == QMessageBox.StandardButton.No:
                     return
 
-            # Create or update borrower
-            if self.existing_borrower:
-                borrower = self.existing_borrower
+            # Create or update requester
+            if self.existing_requester:
+                requester = self.existing_requester
             else:
-                borrower = Borrower()
+                requester = Requester()
 
-            borrower.name = name
-            borrower.affiliation = affiliation
-            borrower.group_name = group_name
+            requester.name = name
+            requester.affiliation = affiliation
+            requester.group_name = group_name
 
-            # Save borrower
-            success = borrower.save()
+            # Save requester
+            success = requester.save()
 
             if success:
-                action = "updated" if self.existing_borrower else "created"
-                logger.info(f"Successfully {action} borrower: {borrower.name}")
-                QMessageBox.information(self, "Success", f"Borrower {action} successfully!")
+                action = "updated" if self.existing_requester else "created"
+                logger.info(f"Successfully {action} requester: {requester.name}")
+                QMessageBox.information(self, "Success", f"Requester {action} successfully!")
                 self.accept()
             else:
-                QMessageBox.critical(self, "Error", "Failed to save borrower. Please try again.")
+                QMessageBox.critical(self, "Error", "Failed to save requester. Please try again.")
 
         except Exception as e:
-            logger.error(f"Error saving borrower: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to save borrower: {str(e)}")
+            logger.error(f"Error saving requester: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to save requester: {str(e)}")
 
-    def _find_existing_borrower(self, name: str, affiliation: str, group_name: str) -> Optional[Borrower]:
-        """Find existing borrower with same details."""
+    def _find_existing_requester(self, name: str, affiliation: str, group_name: str) -> Optional[Requester]:
+        """Find existing requester with same details."""
         try:
             from inventory_app.database.connection import db
 
             query = """
-            SELECT * FROM Borrowers
+            SELECT * FROM Requesters
             WHERE name = ? AND affiliation = ? AND group_name = ?
             """
             rows = db.execute_query(query, (name, affiliation, group_name))
             if rows:
-                return Borrower(**dict(rows[0]))
+                return Requester(**dict(rows[0]))
 
         except Exception as e:
-            logger.error(f"Error checking for duplicate borrower: {e}")
+            logger.error(f"Error checking for duplicate requester: {e}")
 
         return None
 
     @staticmethod
-    def get_borrower_data(parent=None, borrower_id: Optional[int] = None) -> Optional[Borrower]:
+    def get_requester_data(parent=None, requester_id: Optional[int] = None) -> Optional[Requester]:
         """
-        Static method to get borrower data from dialog.
-        Returns the borrower object if saved, None if cancelled.
+        Static method to get requester data from dialog.
+        Returns the requester object if saved, None if cancelled.
         """
-        dialog = BorrowerEditor(parent, borrower_id)
+        dialog = RequesterEditor(parent, requester_id)
         result = dialog.exec()
 
         if result == QDialog.DialogCode.Accepted:
-            if borrower_id:
-                return Borrower.get_by_id(borrower_id)
+            if requester_id:
+                return Requester.get_by_id(requester_id)
             else:
-                # For new borrowers, we need to find the one we just created
+                # For new requesters, we need to find the one we just created
                 # This is a simplified approach - in practice, you'd return the created object
                 return None
 

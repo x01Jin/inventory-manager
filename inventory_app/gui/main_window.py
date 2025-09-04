@@ -11,7 +11,7 @@ from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
-from inventory_app.gui.borrowers.borrowers_page import BorrowersPage
+from inventory_app.gui.requesters.requesters_page import RequestersPage
 from inventory_app.gui.reports.reports_page import ReportsPage
 from inventory_app.gui.settings.settings_page import SettingsPage
 from inventory_app.utils.logger import logger
@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         self.inventory_page = InventoryPage()
         self.requisitions_page = RequisitionsPage()
-        self.borrowers_page = BorrowersPage()
+        self.requesters_page = RequestersPage()
         self.reports_page = ReportsPage()
         self.settings_page = SettingsPage()
 
@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.dashboard_page)    # Index 0
         self.content_stack.addWidget(self.inventory_page)    # Index 1
         self.content_stack.addWidget(self.requisitions_page) # Index 2
-        self.content_stack.addWidget(self.borrowers_page)    # Index 3
+        self.content_stack.addWidget(self.requesters_page)    # Index 3
         self.content_stack.addWidget(self.reports_page)      # Index 4
         self.content_stack.addWidget(self.settings_page)     # Index 5
 
@@ -82,9 +82,9 @@ class MainWindow(QMainWindow):
             elif page_index == 2 and hasattr(self.requisitions_page, 'refresh_data'):  # Requisitions
                 self.requisitions_page.refresh_data()
                 logger.info("Refreshed requisitions data")
-            elif page_index == 3 and hasattr(self.borrowers_page, 'refresh_data'):  # Borrowers
-                self.borrowers_page.refresh_data()
-                logger.info("Refreshed borrowers data")
+            elif page_index == 3 and hasattr(self.requesters_page, 'refresh_data'):  # Requesters
+                self.requesters_page.refresh_data()
+                logger.info("Refreshed requesters data")
             elif page_index == 4 and hasattr(self.reports_page, 'refresh_data'):  # Reports
                 self.reports_page.refresh_data()
                 logger.info("Refreshed reports data")

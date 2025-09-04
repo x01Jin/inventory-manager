@@ -2,7 +2,7 @@
 New Requisition Dialog - Create mode implementation.
 
 Thin wrapper around BaseRequisitionDialog for creating new requisitions.
-Handles borrower selection and requisition creation workflow.
+Handles requester selection and requisition creation workflow.
 """
 
 from PyQt6.QtWidgets import (
@@ -27,7 +27,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
     Dialog for creating new laboratory requisitions.
 
     Thin wrapper around BaseRequisitionDialog that implements
-    create-specific functionality like borrower selection.
+    create-specific functionality like requester selection.
     """
 
     # Signal emitted when requisition is successfully created
@@ -50,26 +50,26 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         layout.addWidget(header)
 
     def _create_requisition_details_panel(self):
-        """Create requisition details panel with borrower selection for create mode."""
+        """Create requisition details panel with requester selection for create mode."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setSpacing(15)
 
-        # Borrower selection (create mode only)
-        borrower_group = QGroupBox("👥 Borrower Information")
-        borrower_layout = QVBoxLayout(borrower_group)
+        # Requester selection (create mode only)
+        requester_group = QGroupBox("👥 Requester Information")
+        requester_layout = QVBoxLayout(requester_group)
 
-        # Borrower display
-        self.borrower_info = QLabel("No borrower selected")
-        self.borrower_info.setStyleSheet("font-weight: bold; padding: 5px;")
-        borrower_layout.addWidget(self.borrower_info)
+        # Requester display
+        self.requester_info = QLabel("No requester selected")
+        self.requester_info.setStyleSheet("font-weight: bold; padding: 5px;")
+        requester_layout.addWidget(self.requester_info)
 
-        # Borrower selection button
-        select_borrower_btn = QPushButton("Select Borrower")
-        select_borrower_btn.clicked.connect(self.select_borrower)
-        borrower_layout.addWidget(select_borrower_btn)
+        # Requester selection button
+        select_requester_btn = QPushButton("Select Requester")
+        select_requester_btn.clicked.connect(self.select_requester)
+        requester_layout.addWidget(select_requester_btn)
 
-        layout.addWidget(borrower_group)
+        layout.addWidget(requester_group)
 
         # Activity details
         activity_group = QGroupBox("📝 Activity Details")
@@ -142,41 +142,41 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
     def update_create_button_state(self):
         """Update create button enabled state based on form completeness."""
-        has_borrower = self.selected_borrower is not None
+        has_requester = self.selected_requester is not None
         has_activity = self.activity_name.text().strip() != ""
         has_items = len(self.selected_items) > 0
 
-        self.create_button.setEnabled(has_borrower and has_activity and has_items)
+        self.create_button.setEnabled(has_requester and has_activity and has_items)
 
-    def select_borrower(self):
-        """Open borrower selection dialog."""
+    def select_requester(self):
+        """Open requester selection dialog."""
         try:
-            from inventory_app.gui.borrowers.borrower_selector import BorrowerSelector
+            from inventory_app.gui.requesters.requester_selector import RequesterSelector
 
-            selector = BorrowerSelector(parent=self)
-            if selector.exec() == BorrowerSelector.DialogCode.Accepted:
-                selected_borrower_id = selector.get_selected_borrower_id()
-                if selected_borrower_id:
-                    # Get the borrower object from the model
-                    from inventory_app.gui.borrowers.borrower_model import BorrowerModel
+            selector = RequesterSelector(parent=self)
+            if selector.exec() == RequesterSelector.DialogCode.Accepted:
+                selected_requester_id = selector.get_selected_requester_id()
+                if selected_requester_id:
+                    # Get the requester object from the model
+                    from inventory_app.gui.requesters.requester_model import RequesterModel
 
-                    borrower_model = BorrowerModel()
-                    borrower_model.load_data()
-                    selected_borrower = borrower_model.get_borrower_by_id(
-                        selected_borrower_id
+                    requester_model = RequesterModel()
+                    requester_model.load_data()
+                    selected_requester = requester_model.get_requester_by_id(
+                        selected_requester_id
                     )
 
-                    if selected_borrower:
-                        self.selected_borrower = selected_borrower
-                        self.borrower_info.setText(
-                            f"{selected_borrower.name} ({selected_borrower.affiliation})"
+                    if selected_requester:
+                        self.selected_requester = selected_requester
+                        self.requester_info.setText(
+                            f"{selected_requester.name} ({selected_requester.affiliation})"
                         )
                         self.update_create_button_state()
-                        logger.info(f"Borrower selected: {selected_borrower.name}")
+                        logger.info(f"Requester selected: {selected_requester.name}")
 
         except Exception as e:
-            logger.error(f"Failed to select borrower: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to select borrower: {str(e)}")
+            logger.error(f"Failed to select requester: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to select requester: {str(e)}")
 
     def create_requisition(self):
         """Create the new requisition."""
@@ -186,13 +186,13 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             activity_description = self.activity_description.toPlainText().strip()
             activity_date = self.datetime_manager.get_selected_date_iso()
 
-            expected_borrow = self.schedule_manager.get_borrow_datetime()
+            expected_request = self.schedule_manager.get_request_datetime()
             expected_return = self.schedule_manager.get_return_datetime()
 
-            # Validate borrow/return times are set
-            if not expected_borrow or not expected_return:
+            # Validate request/return times are set
+            if not expected_request or not expected_return:
                 QMessageBox.warning(
-                    self, "Validation Error", "Please set both borrow and return times."
+                    self, "Validation Error", "Please set both request and return times."
                 )
                 return
 
@@ -222,19 +222,19 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                     )
                     return
 
-            # Validate borrower
-            if not self.selected_borrower or not self.selected_borrower.id:
+            # Validate requester
+            if not self.selected_requester or not self.selected_requester.id:
                 QMessageBox.warning(
-                    self, "Validation Error", "Please select a borrower."
+                    self, "Validation Error", "Please select a requester."
                 )
                 return
 
             # Convert to QDateTime for validation (handle None case)
             from inventory_app.utils.date_utils import datetime_to_qdatetime
-            expected_borrow_qt = datetime_to_qdatetime(expected_borrow)
+            expected_request_qt = datetime_to_qdatetime(expected_request)
             expected_return_qt = datetime_to_qdatetime(expected_return)
 
-            if expected_borrow_qt is None or expected_return_qt is None:
+            if expected_request_qt is None or expected_return_qt is None:
                 QMessageBox.warning(
                     self, "Validation Error", "Invalid date/time format selected."
                 )
@@ -242,9 +242,9 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
             # Validate data
             if not self.validator.validate_requisition_data(
-                self.selected_borrower,
+                self.selected_requester,
                 self.selected_items,
-                expected_borrow_qt,
+                expected_request_qt,
                 expected_return_qt,
                 activity_name,
             ):
@@ -264,8 +264,8 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
             # Create main requisition
             requisition = Requisition()
-            requisition.borrower_id = self.selected_borrower.id
-            requisition.expected_borrow = expected_borrow
+            requisition.requester_id = self.selected_requester.id
+            requisition.expected_request = expected_request
             requisition.expected_return = expected_return
             requisition.status = "requested"
             requisition.lab_activity_name = activity_name
@@ -292,7 +292,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 req_item = RequisitionItem()
                 req_item.requisition_id = requisition_id
                 req_item.item_id = item["item_id"]
-                req_item.quantity_borrowed = item["quantity"]
+                req_item.quantity_requested = item["quantity"]
 
                 if not req_item.save():
                     logger.error(
@@ -311,7 +311,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 item_result = db.execute_query(item_query, (item["item_id"],))
                 is_consumable = item_result[0]["is_consumable"] if item_result else 1
 
-                movement_type = "CONSUMPTION" if is_consumable else "BORROW"
+                movement_type = "CONSUMPTION" if is_consumable else "REQUEST"
 
                 movement_query = """
                 INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id)
@@ -342,7 +342,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             )
             requisition_activity_manager.log_requisition_created(
                 requisition_id=requisition_id,
-                borrower_name=self.selected_borrower.name,
+                requester_name=self.selected_requester.name,
                 activity_name=activity_name,
                 activity_description=activity_description,
                 items_summary=items_summary,

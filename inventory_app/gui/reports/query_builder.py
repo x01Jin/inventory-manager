@@ -80,13 +80,13 @@ class ReportQueryBuilder:
             i.size,
             i.brand,
             i.other_specifications,
-            SUM(ri.quantity_borrowed) AS qty,
-            r.date_borrowed
+            SUM(ri.quantity_requested) AS qty,
+            r.date_requested
           FROM Requisition_Items ri
           JOIN Requisitions r ON r.id = ri.requisition_id
           JOIN Items i ON i.id = ri.item_id
           JOIN Categories c ON c.id = i.category_id
-          WHERE r.date_borrowed BETWEEN ? AND ?
+          WHERE r.date_requested BETWEEN ? AND ?
         """
 
         # Start with base parameters (date range will be added later)
@@ -94,15 +94,15 @@ class ReportQueryBuilder:
 
         # Add filters
         if grade_filter:
-            base_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?)"
+            base_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE affiliation = ?)"
             params.append(grade_filter)
         if section_filter:
-            base_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?)"
+            base_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE group_name = ?)"
             params.append(section_filter)
         if not include_consumables:
             base_query += " AND i.is_consumable = 0"
 
-        base_query += " GROUP BY i.id, r.date_borrowed)"
+        base_query += " GROUP BY i.id, r.date_requested)"
         return base_query, params
 
     def _build_period_query(self, granularity: str, start_date: Optional[date] = None, end_date: Optional[date] = None) -> str:
@@ -116,7 +116,7 @@ class ReportQueryBuilder:
             for period_key, date_ranges in period_mappings.items():
                 conditions = []
                 for start_range, end_range in date_ranges:
-                    conditions.append(f"(date_borrowed BETWEEN '{start_range}' AND '{end_range}')")
+                    conditions.append(f"(date_requested BETWEEN '{start_range}' AND '{end_range}')")
                 if conditions:
                     case_conditions.append(f"WHEN {' OR '.join(conditions)} THEN '{period_key}'")
 
@@ -125,7 +125,7 @@ class ReportQueryBuilder:
             period_queries = {
                 'daily': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y-%m-%d', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y-%m-%d', date_requested) AS period_key FROM base
                     )
                 """,
                 'weekly': f"""
@@ -141,26 +141,26 @@ class ReportQueryBuilder:
                 """,
                 'monthly': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y-%m', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y-%m', date_requested) AS period_key FROM base
                     )
                 """,
                 'quarterly': """
                     ,dynamic_periods AS (
                       SELECT
                         *,
-                        strftime('%Y', date_borrowed) || '-Q' ||
-                        CAST(((CAST(strftime('%m', date_borrowed) AS INTEGER) - 1) / 3) + 1 AS TEXT) AS period_key
+                        strftime('%Y', date_requested) || '-Q' ||
+                        CAST(((CAST(strftime('%m', date_requested) AS INTEGER) - 1) / 3) + 1 AS TEXT) AS period_key
                       FROM base
                     )
                 """,
                 'yearly': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y', date_requested) AS period_key FROM base
                     )
                 """,
                 'multi_year': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y', date_requested) AS period_key FROM base
                     )
                 """
             }
@@ -169,36 +169,36 @@ class ReportQueryBuilder:
             period_queries = {
                 'daily': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y-%m-%d', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y-%m-%d', date_requested) AS period_key FROM base
                     )
                 """,
                 'weekly': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y-%W', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y-%W', date_requested) AS period_key FROM base
                     )
                 """,
                 'monthly': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y-%m', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y-%m', date_requested) AS period_key FROM base
                     )
                 """,
                 'quarterly': """
                     ,dynamic_periods AS (
                       SELECT
                         *,
-                        strftime('%Y', date_borrowed) || '-Q' ||
-                        CAST(((CAST(strftime('%m', date_borrowed) AS INTEGER) - 1) / 3) + 1 AS TEXT) AS period_key
+                        strftime('%Y', date_requested) || '-Q' ||
+                        CAST(((CAST(strftime('%m', date_requested) AS INTEGER) - 1) / 3) + 1 AS TEXT) AS period_key
                       FROM base
                     )
                 """,
                 'yearly': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y', date_requested) AS period_key FROM base
                     )
                 """,
                 'multi_year': """
                     ,dynamic_periods AS (
-                      SELECT *, strftime('%Y', date_borrowed) AS period_key FROM base
+                      SELECT *, strftime('%Y', date_requested) AS period_key FROM base
                     )
                 """
             }
@@ -339,20 +339,20 @@ class ReportStatisticsBuilder:
         """Build query to get usage statistics."""
         # Total items used
         total_query = """
-        SELECT SUM(ri.quantity_borrowed) as total_used
+        SELECT SUM(ri.quantity_requested) as total_used
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
-        WHERE r.date_borrowed BETWEEN ? AND ?
+        WHERE r.date_requested BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
-            total_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?)"
+            total_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE affiliation = ?)"
             params.append(grade_filter)
         if section_filter:
-            total_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?)"
+            total_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE group_name = ?)"
             params.append(section_filter)
 
         return total_query, tuple(params)
@@ -363,22 +363,22 @@ class ReportStatisticsBuilder:
                                       section_filter: str = "") -> Tuple[str, Tuple]:
         """Build query to get category statistics."""
         category_query = """
-        SELECT c.name as category, SUM(ri.quantity_borrowed) as qty
+        SELECT c.name as category, SUM(ri.quantity_requested) as qty
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
         JOIN Categories c ON c.id = i.category_id
-        WHERE r.date_borrowed BETWEEN ? AND ?
+        WHERE r.date_requested BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
-            category_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?)"
+            category_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE affiliation = ?)"
             params.append(grade_filter)
         if section_filter:
-            category_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?)"
+            category_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE group_name = ?)"
             params.append(section_filter)
 
         category_query += " GROUP BY c.id, c.name ORDER BY qty DESC"
@@ -392,21 +392,21 @@ class ReportStatisticsBuilder:
                             limit: int = 10) -> Tuple[str, Tuple]:
         """Build query to get top used items."""
         top_items_query = """
-        SELECT i.name as item_name, SUM(ri.quantity_borrowed) as qty
+        SELECT i.name as item_name, SUM(ri.quantity_requested) as qty
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
-        WHERE r.date_borrowed BETWEEN ? AND ?
+        WHERE r.date_requested BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
-            top_items_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE affiliation = ?)"
+            top_items_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE affiliation = ?)"
             params.append(grade_filter)
         if section_filter:
-            top_items_query += " AND r.borrower_id IN (SELECT id FROM Borrowers WHERE group_name = ?)"
+            top_items_query += " AND r.requester_id IN (SELECT id FROM Requesters WHERE group_name = ?)"
             params.append(section_filter)
 
         top_items_query += f" GROUP BY i.id, i.name ORDER BY qty DESC LIMIT {limit}"

@@ -1,6 +1,6 @@
 """
 Requisitions table - displays requisition data in a table format.
-Provides table widget for showing requisitions with borrower and item information.
+Provides table widget for showing requisitions with requester and item information.
 Uses composition pattern with RequisitionsModel.
 """
 
@@ -19,7 +19,7 @@ from inventory_app.utils.logger import logger
 class RequisitionsTable(QTableWidget):
     """
     Table widget for displaying requisition information.
-    Shows borrower details, activity info, and borrowed items.
+    Shows requester details, activity info, requested items, and returned info.
     """
 
     # Signals
@@ -34,8 +34,8 @@ class RequisitionsTable(QTableWidget):
         self.setColumnCount(3)
         self.setHorizontalHeaderLabels([
             "Status",               # 1. Status (Active/Returned)
-            "Borrower",             # 2. Borrower name
-            "Borrowed Date"         # 3. Date when items were borrowed (or "Reserved")
+            "Requester",             # 2. Requester name
+            "Requested Date"         # 3. Date when items were requested (or "Reserved")
         ])
 
         # Configure table appearance and behavior
@@ -54,18 +54,27 @@ class RequisitionsTable(QTableWidget):
         # Disable cell editing on double-click
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
-        # Header properties - Responsive design
+        # Enable word wrapping for better content display
+        self.setWordWrap(True)
+
+        # Header properties - Responsive design with constraints
         header = self.horizontalHeader()
         if header:
-            header.setStretchLastSection(True)
-            # Set responsive column sizing
-            for col in range(self.columnCount()):
-                header.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+            header.setStretchLastSection(False)  # Don't stretch last section
+            # Set column sizing modes
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Status - allow resize but constrain
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Requester - allow resize but constrain
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)        # Date - fixed width
 
-        # Set minimum widths for readability
-        self.setColumnWidth(0, 80)   # Status
-        self.setColumnWidth(1, 200)  # Borrower (more space for names)
-        self.setColumnWidth(2, 150)  # Borrowed Date
+        # Set column widths with constraints for word wrapping
+        self.setColumnWidth(0, 200)  # Status - wider to accommodate multiple statuses
+        self.setColumnWidth(1, 240)  # Requester - reasonable width for names
+        self.setColumnWidth(2, 150)  # Requested Date - fixed width for consistency
+
+        # Enable automatic row height adjustment for wrapped content
+        vertical_header = self.verticalHeader()
+        if vertical_header:
+            vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
         # Connect signals
         self.itemSelectionChanged.connect(self._on_selection_changed)
@@ -93,18 +102,21 @@ class RequisitionsTable(QTableWidget):
                 self.setItem(row_position, 0, status_item)
                 self._color_status_item(status_item, row_data.status)
 
-                # Borrower (Column 1)
-                borrower_item = QTableWidgetItem(row_data.borrower_name)
-                borrower_item.setData(Qt.ItemDataRole.UserRole, row_data.id)  # Store ID for selection
-                self.setItem(row_position, 1, borrower_item)
+                # Requester (Column 1)
+                requester_item = QTableWidgetItem(row_data.requester_name)
+                requester_item.setData(Qt.ItemDataRole.UserRole, row_data.id)  # Store ID for selection
+                self.setItem(row_position, 1, requester_item)
 
-                # Borrowed Date (Column 2) - Show actual date or "Reserved"
-                if row_data.datetime_borrowed:
-                    borrowed_date_str = row_data.datetime_borrowed.strftime("%Y-%m-%d %H:%M")
+                # Requested Date (Column 2) - Show actual date or "Reserved"
+                if row_data.datetime_requested:
+                    requested_date_str = row_data.datetime_requested.strftime("%Y-%m-%d %H:%M")
                 else:
-                    borrowed_date_str = "Reserved"
-                borrowed_item = QTableWidgetItem(borrowed_date_str)
-                self.setItem(row_position, 2, borrowed_item)
+                    requested_date_str = "Reserved"
+                requested_item = QTableWidgetItem(requested_date_str)
+                self.setItem(row_position, 2, requested_item)
+
+            # After populating all data, resize columns to fit content with constraints
+            self.resize_columns_to_contents()
 
         except Exception as e:
             logger.error(f"Failed to populate requisitions table: {e}")
@@ -119,9 +131,9 @@ class RequisitionsTable(QTableWidget):
         """
         current_row = self.currentRow()
         if current_row >= 0:
-            borrower_item = self.item(current_row, 1)  # Borrower is in column 1
-            if borrower_item:
-                return borrower_item.data(Qt.ItemDataRole.UserRole)
+            requester_item = self.item(current_row, 1)  # Requester is in column 1
+            if requester_item:
+                return requester_item.data(Qt.ItemDataRole.UserRole)
         return None
 
     def select_requisition_by_id(self, requisition_id: int) -> bool:
@@ -135,8 +147,8 @@ class RequisitionsTable(QTableWidget):
             bool: True if found and selected, False otherwise
         """
         for row in range(self.rowCount()):
-            borrower_item = self.item(row, 1)  # Borrower is in column 1
-            if borrower_item and borrower_item.data(Qt.ItemDataRole.UserRole) == requisition_id:
+            requester_item = self.item(row, 1)  # Requester is in column 1
+            if requester_item and requester_item.data(Qt.ItemDataRole.UserRole) == requisition_id:
                 self.selectRow(row)
                 return True
         return False
@@ -156,13 +168,13 @@ class RequisitionsTable(QTableWidget):
         for row in range(self.rowCount()):
             # Get items for each column (3 columns only)
             status_item = self.item(row, 0)
-            borrower_item = self.item(row, 1)
-            borrowed_date_item = self.item(row, 2)
+            requester_item = self.item(row, 1)
+            requested_date_item = self.item(row, 2)
 
             row_data = {
                 'status': status_item.text() if status_item else "",
-                'borrower': borrower_item.text() if borrower_item else "",
-                'borrowed_date': borrowed_date_item.text() if borrowed_date_item else ""
+                'requester': requester_item.text() if requester_item else "",
+                'requested_date': requested_date_item.text() if requested_date_item else ""
             }
             data.append(row_data)
         return data
@@ -202,11 +214,33 @@ class RequisitionsTable(QTableWidget):
             self.requisition_double_clicked.emit(requisition_id)
 
     def resize_columns_to_contents(self) -> None:
-        """Resize columns to fit their contents."""
+        """Resize columns to fit their contents with word wrapping constraints."""
+        # Temporarily disable word wrap to get accurate content width measurements
+        original_word_wrap = self.wordWrap()
+        self.setWordWrap(False)
+
+        # Resize columns to contents
         for column in range(self.columnCount()):
             self.resizeColumnToContents(column)
 
-        # Ensure some columns have reasonable minimum widths
-        self.setColumnWidth(0, max(self.columnWidth(0), 80))    # Status (column 0)
-        self.setColumnWidth(1, max(self.columnWidth(1), 200))   # Borrower (column 1)
-        self.setColumnWidth(2, max(self.columnWidth(2), 150))   # Borrowed Date (column 2)
+        # Restore word wrap
+        self.setWordWrap(original_word_wrap)
+
+        # Apply constraints to prevent excessive width while allowing word wrapping
+        current_width_0 = self.columnWidth(0)
+        current_width_1 = self.columnWidth(1)
+
+        # Constrain status column (allow some growth but not excessive)
+        if current_width_0 > 250:
+            self.setColumnWidth(0, 250)
+        elif current_width_0 < 180:
+            self.setColumnWidth(0, 180)
+
+        # Constrain requester column (allow some growth but not excessive)
+        if current_width_1 > 280:
+            self.setColumnWidth(1, 280)
+        elif current_width_1 < 200:
+            self.setColumnWidth(1, 200)
+
+        # Keep date column fixed
+        self.setColumnWidth(2, 150)
