@@ -25,6 +25,8 @@ class ItemRow:
     is_consumable: bool
     acquisition_date: Optional[date]
     last_modified: Optional[datetime]
+    total_stock: int = 0
+    available_stock: int = 0
     alert_status: str = ""  # "expiration", "calibration", or ""
 
     def format_expiration_date(self) -> str:

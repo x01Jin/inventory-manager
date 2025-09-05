@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QInputDialog,
     QSplitter,
+    QSizePolicy,
 )
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -110,9 +111,11 @@ class RequisitionsPage(QWidget):
 
         # Create main horizontal splitter for (filters + table) + preview
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Left panel: Filters + Table (vertical layout)
         left_panel = QWidget()
+        left_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(15)
@@ -123,6 +126,7 @@ class RequisitionsPage(QWidget):
 
         # Table section
         table_group = QGroupBox("Laboratory Requisitions")
+        table_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table_layout = QVBoxLayout(table_group)
         table_layout.addWidget(self.table)
         left_layout.addWidget(table_group)
@@ -131,6 +135,7 @@ class RequisitionsPage(QWidget):
 
         # Right panel: Preview
         preview_group = QGroupBox("Requisition Details")
+        preview_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.addWidget(self.preview)
         main_splitter.addWidget(preview_group)
@@ -154,7 +159,6 @@ class RequisitionsPage(QWidget):
         # Filter signals - connect to both model and refresh
         self.filters.search_changed.connect(self._on_filter_changed)
         self.filters.requester_filter_changed.connect(self._on_filter_changed)
-        self.filters.activity_filter_changed.connect(self._on_filter_changed)
         self.filters.status_filter_changed.connect(self._on_filter_changed)
         self.filters.date_range_changed.connect(self._on_filter_changed)
         self.filters.clear_filters_requested.connect(self._on_filters_cleared)
@@ -391,8 +395,6 @@ class RequisitionsPage(QWidget):
                 self.model.filter_by_search(current_filters["search_term"])
             if "requester_filter" in current_filters:
                 self.model.filter_by_requester(current_filters["requester_filter"])
-            if "activity_filter" in current_filters:
-                self.model.filter_by_activity(current_filters["activity_filter"])
             if "status_filter" in current_filters:
                 self.model.filter_by_status(current_filters["status_filter"])
             if "date_from" in current_filters or "date_to" in current_filters:

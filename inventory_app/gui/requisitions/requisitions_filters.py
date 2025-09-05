@@ -23,7 +23,6 @@ class RequisitionsFilters(QWidget):
     # Signals emitted when filters change
     search_changed = pyqtSignal(str)  # Search term changed
     requester_filter_changed = pyqtSignal(str)  # Requester filter changed
-    activity_filter_changed = pyqtSignal(str)  # Activity filter changed
     status_filter_changed = pyqtSignal(str)  # Status filter changed
     date_range_changed = pyqtSignal(object, object)  # Date range changed (from_date, to_date)
     clear_filters_requested = pyqtSignal()  # Clear all filters
@@ -54,7 +53,7 @@ class RequisitionsFilters(QWidget):
         search_row.addWidget(self.search_input)
         search_layout.addLayout(search_row)
 
-        # Filter row 1: Requester and Activity
+        # Filter row 1: Requester and Status
         filter_row1 = QHBoxLayout()
 
         filter_row1.addWidget(QLabel("Requester:"))
@@ -63,25 +62,19 @@ class RequisitionsFilters(QWidget):
         self.requester_combo.currentTextChanged.connect(self._on_requester_changed)
         filter_row1.addWidget(self.requester_combo)
 
-        filter_row1.addWidget(QLabel("Activity:"))
-        self.activity_input = QLineEdit()
-        self.activity_input.setPlaceholderText("Filter by activity name...")
-        self.activity_input.textChanged.connect(self._on_activity_changed)
-        filter_row1.addWidget(self.activity_input)
-
-        search_layout.addLayout(filter_row1)
-
-        # Filter row 2: Status and Date Range
-        filter_row2 = QHBoxLayout()
-
-        filter_row2.addWidget(QLabel("Status:"))
+        filter_row1.addWidget(QLabel("Status:"))
         self.status_combo = QComboBox()
         self.status_combo.addItem("All Statuses", "")
         self.status_combo.addItem("Active", "Active")
         self.status_combo.addItem("Returned", "Returned")
         self.status_combo.addItem("Overdue", "Overdue")
         self.status_combo.currentTextChanged.connect(self._on_status_changed)
-        filter_row2.addWidget(self.status_combo)
+        filter_row1.addWidget(self.status_combo)
+
+        search_layout.addLayout(filter_row1)
+
+        # Filter row 2: Date Range and Clear Filters
+        filter_row2 = QHBoxLayout()
 
         filter_row2.addWidget(QLabel("From:"))
         self.date_from = QDateEdit()
@@ -97,21 +90,13 @@ class RequisitionsFilters(QWidget):
         self.date_to.dateChanged.connect(self._on_date_range_changed)
         filter_row2.addWidget(self.date_to)
 
-        search_layout.addLayout(filter_row2)
-
-        # Buttons row
-        button_row = QHBoxLayout()
-        button_row.addStretch()
+        filter_row2.addStretch()
 
         self.clear_button = QPushButton("🗑️ Clear Filters")
         self.clear_button.clicked.connect(self._on_clear_filters)
-        button_row.addWidget(self.clear_button)
+        filter_row2.addWidget(self.clear_button)
 
-        self.apply_button = QPushButton("🔍 Apply Filters")
-        self.apply_button.clicked.connect(self._on_apply_filters)
-        button_row.addWidget(self.apply_button)
-
-        search_layout.addLayout(button_row)
+        search_layout.addLayout(filter_row2)
 
         layout.addWidget(search_group)
 
@@ -163,7 +148,6 @@ class RequisitionsFilters(QWidget):
             return {
                 'search_term': self.search_input.text().strip(),
                 'requester_filter': self.requester_combo.currentData() or "",
-                'activity_filter': self.activity_input.text().strip(),
                 'status_filter': self.status_combo.currentData() or "",
                 'date_from': self.date_from.date().toPyDate() if self.date_from.date().isValid() else None,
                 'date_to': self.date_to.date().toPyDate() if self.date_to.date().isValid() else None
@@ -184,10 +168,6 @@ class RequisitionsFilters(QWidget):
                 index = self.requester_combo.findData(filters['requester_filter'])
                 if index >= 0:
                     self.requester_combo.setCurrentIndex(index)
-
-            # Activity filter
-            if 'activity_filter' in filters:
-                self.activity_input.setText(filters['activity_filter'])
 
             # Status filter
             if 'status_filter' in filters:
@@ -214,7 +194,6 @@ class RequisitionsFilters(QWidget):
         try:
             self.search_input.clear()
             self.requester_combo.setCurrentIndex(0)  # "All Requesters"
-            self.activity_input.clear()
             self.status_combo.setCurrentIndex(0)  # "All Statuses"
 
             # Reset date range to defaults
@@ -237,10 +216,6 @@ class RequisitionsFilters(QWidget):
         requester_filter = self.requester_combo.currentData() or ""
         self.requester_filter_changed.emit(requester_filter)
 
-    def _on_activity_changed(self, text: str):
-        """Handle activity filter changes."""
-        self.activity_filter_changed.emit(text)
-
     def _on_status_changed(self, status: str):
         """Handle status filter changes."""
         status_filter = self.status_combo.currentData() or ""
@@ -256,12 +231,3 @@ class RequisitionsFilters(QWidget):
         """Handle clear filters button."""
         self.clear_all_filters()
         self.clear_filters_requested.emit()
-
-    def _on_apply_filters(self):
-        """Handle apply filters button."""
-        # Emit all current filter values to ensure they're applied
-        self._on_search_changed(self.search_input.text())
-        self._on_requester_changed(self.requester_combo.currentText())
-        self._on_activity_changed(self.activity_input.text())
-        self._on_status_changed(self.status_combo.currentText())
-        self._on_date_range_changed()

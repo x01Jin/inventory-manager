@@ -143,6 +143,8 @@ class InventoryPage(QWidget):
                     acquisition_date=self._parse_date(row.get('acquisition_date')),
                     last_modified=self._parse_datetime(row.get('last_modified')),
                     is_consumable=bool(row.get('is_consumable', 1)),
+                    total_stock=row.get('total_stock', 0),
+                    available_stock=row.get('available_stock', 0),
                     alert_status=row.get('alert_status', '')
                 )
                 items.append(item)
@@ -307,6 +309,8 @@ class InventoryPage(QWidget):
                 'acquisition_date': item.acquisition_date.isoformat() if item.acquisition_date else None,
                 'last_modified': item.last_modified.isoformat() if item.last_modified else None,
                 'is_consumable': item.is_consumable,
+                'total_stock': item.total_stock,
+                'available_stock': item.available_stock,
                 'alert_status': item.alert_status
             }
             table_data.append(row)

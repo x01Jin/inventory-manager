@@ -7,7 +7,7 @@ Uses composition pattern with RequisitionsModel.
 from typing import List, Optional, Dict, Any
 from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QMessageBox
+    QAbstractItemView, QMessageBox, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -51,6 +51,9 @@ class RequisitionsTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setSortingEnabled(True)
+
+        # Set size policy to allow vertical expansion
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Disable cell editing on double-click
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

@@ -12,6 +12,7 @@ from PyQt6.QtCore import pyqtSignal
 from inventory_app.gui.requesters.requester_model import RequesterModel
 from inventory_app.gui.requesters.requester_table import RequesterTable
 from inventory_app.gui.requesters.requester_editor import RequesterEditor
+from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.logger import logger
 
 
@@ -249,7 +250,7 @@ class RequestersPage(QWidget):
             # Update search input styling based on filter state
             has_filter = bool(self.search_input.text().strip())
             if has_filter:
-                self.search_input.setStyleSheet("background-color: #e8f4fd; border: 1px solid #0078d4;")
+                self.search_input.setStyleSheet(f"background-color: {DarkTheme.PRIMARY_DARK}; border: 1px solid {DarkTheme.ACCENT_COLOR};")
             else:
                 self.search_input.setStyleSheet("")
 
