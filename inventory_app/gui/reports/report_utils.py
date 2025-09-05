@@ -1,33 +1,17 @@
 """
-Enhanced date utilities for the inventory management system.
-Provides comprehensive date formatting, granularity calculation, and period handling.
+Report utilities for the inventory management system.
+Uses centralized date utilities from inventory_app.utils.date_utils.
 """
 
 from datetime import date, timedelta
-from typing import List, Tuple
-from calendar import monthrange
+from typing import List
+from inventory_app.utils.date_utils import (
+    format_date_long, get_month_name, get_day_name
+)
 
 
-class EnhancedDateFormatter:
-    """Advanced date formatting utilities with smart granularity."""
-
-    # Constants for month and day names
-    MONTH_NAMES = {
-        1: "Jan",
-        2: "Feb",
-        3: "Mar",
-        4: "Apr",
-        5: "May",
-        6: "Jun",
-        7: "Jul",
-        8: "Aug",
-        9: "Sep",
-        10: "Oct",
-        11: "Nov",
-        12: "Dec",
-    }
-
-    DAY_NAMES = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+class ReportDateFormatter:
+    """Date formatting utilities for reports using centralized date utilities."""
 
     @staticmethod
     def get_smart_granularity(start_date: date, end_date: date) -> str:
@@ -59,7 +43,7 @@ class EnhancedDateFormatter:
     @staticmethod
     def format_period_header(date_obj: date, granularity: str) -> str:
         """
-        Format a date according to the specified granularity.
+        Format a date according to the specified granularity using centralized utilities.
 
         Args:
             date_obj: Date to format
@@ -70,17 +54,17 @@ class EnhancedDateFormatter:
         """
         if granularity == "daily":
             # Format: (Mon - Jan 01, 2020)
-            day_name = EnhancedDateFormatter.DAY_NAMES.get(date_obj.weekday(), "Mon")
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
+            day_name = get_day_name(date_obj.weekday())
+            month_name = get_month_name(date_obj.month)
             return f"({day_name} - {month_name} {date_obj.day:02d}, {date_obj.year})"
         elif granularity == "weekly":
             # Format: (W1 - Jan/2020) - Month-based weeks
             week_num = ((date_obj.day - 1) // 7) + 1
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
+            month_name = get_month_name(date_obj.month)
             return f"(W{week_num} - {month_name}/{date_obj.year})"
         elif granularity == "monthly":
             # Format: (Jan/2020)
-            month_name = EnhancedDateFormatter.MONTH_NAMES.get(date_obj.month, "Jan")
+            month_name = get_month_name(date_obj.month)
             return f"({month_name}/{date_obj.year})"
         elif granularity == "quarterly":
             # Format: (Jan-Mar/2020)
@@ -89,12 +73,8 @@ class EnhancedDateFormatter:
             quarter_start_month = (quarter - 1) * 3 + 1
             quarter_end_month = quarter * 3
 
-            start_month_name = EnhancedDateFormatter.MONTH_NAMES.get(
-                quarter_start_month, "Jan"
-            )
-            end_month_name = EnhancedDateFormatter.MONTH_NAMES.get(
-                quarter_end_month, "Mar"
-            )
+            start_month_name = get_month_name(quarter_start_month)
+            end_month_name = get_month_name(quarter_end_month)
             return f"({start_month_name}-{end_month_name}/{date_obj.year})"
         elif granularity in ["yearly", "multi_year"]:
             # Format: (2020)
@@ -103,62 +83,7 @@ class EnhancedDateFormatter:
             return date_obj.strftime("%Y-%m-%d")
 
     @staticmethod
-    def calculate_periods_with_excess(
-        start_date: date, end_date: date, granularity: str
-    ) -> Tuple[List[date], List[date]]:
-        """
-        Calculate main periods and any excess time that doesn't fit the granularity.
-
-        Args:
-            start_date: Start date of the period
-            end_date: End date of the period
-            granularity: Granularity level
-
-        Returns:
-            Tuple of (main_periods, excess_periods)
-        """
-        main_periods = []
-        excess_periods = []
-        current = start_date
-
-        while current <= end_date:
-            main_periods.append(current)
-
-            if granularity == "daily":
-                current += timedelta(days=1)
-            elif granularity == "weekly":
-                current += timedelta(weeks=1)
-            elif granularity == "monthly":
-                # Move to next month
-                if current.month == 12:
-                    current = current.replace(year=current.year + 1, month=1)
-                else:
-                    current = current.replace(month=current.month + 1)
-            elif granularity == "quarterly":
-                # Move to next quarter
-                quarter_months = 3
-                new_month = current.month + quarter_months
-                if new_month > 12:
-                    current = current.replace(
-                        year=current.year + 1, month=new_month - 12
-                    )
-                else:
-                    current = current.replace(month=new_month)
-            elif granularity == "yearly":
-                current = current.replace(year=current.year + 1)
-            else:  # multi_year
-                current = current.replace(year=current.year + 1)
-
-        # Check for excess periods
-        if current <= end_date:
-            excess_periods.append(current)
-
-        return main_periods, excess_periods
-
-    @staticmethod
-    def get_period_keys(
-        start_date: date, end_date: date, granularity: str
-    ) -> List[str]:
+    def get_period_keys(start_date: date, end_date: date, granularity: str) -> List[str]:
         """
         Generate comprehensive period keys including excess periods for complete data coverage.
 
@@ -182,19 +107,19 @@ class EnhancedDateFormatter:
         elif granularity == "weekly":
             # Weekly: Include excess days + main weeks + excess days
             period_keys.extend(
-                EnhancedDateFormatter._get_weekly_period_keys(start_date, end_date)
+                ReportDateFormatter._get_weekly_period_keys(start_date, end_date)
             )
 
         elif granularity == "monthly":
             # Monthly: Include excess days + main months + excess days
             period_keys.extend(
-                EnhancedDateFormatter._get_monthly_period_keys(start_date, end_date)
+                ReportDateFormatter._get_monthly_period_keys(start_date, end_date)
             )
 
         elif granularity == "quarterly":
             # Quarterly: Include excess days + main quarters + excess days
             period_keys.extend(
-                EnhancedDateFormatter._get_quarterly_period_keys(start_date, end_date)
+                ReportDateFormatter._get_quarterly_period_keys(start_date, end_date)
             )
 
         elif granularity in ["yearly", "multi_year"]:
@@ -341,60 +266,9 @@ class EnhancedDateFormatter:
         return list(dict.fromkeys(period_keys))  # Remove duplicates
 
     @staticmethod
-    def get_days_in_period(date_obj: date, granularity: str) -> int:
-        """
-        Get the number of days in a period for accurate calculations.
-
-        Args:
-            date_obj: Date within the period
-            granularity: Granularity level
-
-        Returns:
-            Number of days in the period
-        """
-        if granularity == "daily":
-            return 1
-        elif granularity == "weekly":
-            # Calculate days until end of week (Sunday)
-            days_to_end = 6 - date_obj.weekday()
-            return days_to_end + 1
-        elif granularity == "monthly":
-            return monthrange(date_obj.year, date_obj.month)[1]
-        elif granularity == "quarterly":
-            # Calculate days in quarter
-            quarter_start_month = ((date_obj.month - 1) // 3) * 3 + 1
-            days = 0
-            for month in range(quarter_start_month, quarter_start_month + 3):
-                days += monthrange(date_obj.year, month)[1]
-            return days
-        elif granularity in ["yearly", "multi_year"]:
-            return 365 + (
-                1
-                if date_obj.year % 4 == 0
-                and (date_obj.year % 100 != 0 or date_obj.year % 400 == 0)
-                else 0
-            )
-        else:
-            return 1
-
-    @staticmethod
-    def validate_date_range(start_date: date, end_date: date) -> bool:
-        """
-        Validate that the date range is logical.
-
-        Args:
-            start_date: Start date
-            end_date: End date
-
-        Returns:
-            True if valid, False otherwise
-        """
-        return start_date <= end_date
-
-    @staticmethod
     def get_date_range_description(start_date: date, end_date: date) -> str:
         """
-        Get a human-readable description of the date range.
+        Get a human-readable description of the date range using centralized utilities.
 
         Args:
             start_date: Start date
@@ -404,10 +278,10 @@ class EnhancedDateFormatter:
             Description string
         """
         days_diff = (end_date - start_date).days + 1
-        granularity = EnhancedDateFormatter.get_smart_granularity(start_date, end_date)
+        granularity = ReportDateFormatter.get_smart_granularity(start_date, end_date)
 
         if days_diff == 1:
-            return f"Single day: {start_date.strftime('%B %d, %Y')}"
+            return f"Single day: {format_date_long(start_date)}"
         elif days_diff <= 7:
             return f"{days_diff} days ({granularity} view)"
         elif days_diff <= 30:
@@ -426,4 +300,4 @@ class EnhancedDateFormatter:
 
 
 # Global instance for convenience
-date_formatter = EnhancedDateFormatter()
+date_formatter = ReportDateFormatter()

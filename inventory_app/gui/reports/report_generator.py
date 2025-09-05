@@ -424,5 +424,218 @@ class ReportGenerator:
             }
 
 
+    def generate_inventory_report(self, report_type: str, start_date: date, end_date: date,
+                                category_filter: str = "", output_path: Optional[str] = None) -> str:
+        """
+        Generate inventory report based on type.
+
+        Args:
+            report_type: Type of inventory report ('stock_levels', 'expiration', 'low_stock', 'acquisition_history', 'calibration_due')
+            start_date: Start date for the report period
+            end_date: End date for the report period
+            category_filter: Category filter
+            output_path: Optional output file path
+
+        Returns:
+            Path to generated Excel file
+        """
+        try:
+            logger.info(f"Generating {report_type} report from {start_date} to {end_date}")
+
+            # Get report data based on type
+            if report_type == "Stock Levels Report":
+                report_data = self._get_stock_levels_data(category_filter)
+                title = "Stock Levels Report"
+            elif report_type == "Expiration Report":
+                report_data = self._get_expiration_data(start_date, end_date, category_filter)
+                title = "Expiration Report"
+            elif report_type == "Low Stock Alert":
+                report_data = self._get_low_stock_data(category_filter)
+                title = "Low Stock Alert Report"
+            elif report_type == "Acquisition History":
+                report_data = self._get_acquisition_history_data(start_date, end_date, category_filter)
+                title = "Acquisition History Report"
+            elif report_type == "Calibration Due Report":
+                report_data = self._get_calibration_due_data(start_date, end_date, category_filter)
+                title = "Calibration Due Report"
+            else:
+                return f"Unknown inventory report type: {report_type}"
+
+            if not report_data:
+                error_msg = f"Failed to generate {report_type}\nReason: No data found for the specified criteria"
+                logger.warning(f"No data found for {report_type}")
+                return error_msg
+
+            # Create Excel file
+            if not output_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = f"inventory_{report_type.lower().replace(' ', '_')}_{timestamp}.xlsx"
+
+            output_path_obj = Path(output_path)
+            self._create_excel_report(report_data, output_path_obj, title, start_date, end_date)
+
+            logger.info(f"{report_type} report generated: {output_path}")
+            return str(output_path)
+
+        except Exception as e:
+            logger.error(f"Failed to generate {report_type} report: {e}")
+            return ""
+
+    def _get_stock_levels_data(self, category_filter: str = "") -> List[Dict]:
+        """Get current stock levels data."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(SUM(sm.quantity), 0) AS "Current Stock",
+                i.other_specifications AS "Specifications"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
+            """
+
+            params = []
+            if category_filter:
+                query += " WHERE c.name = ?"
+                params.append(category_filter)
+
+            query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications ORDER BY c.name, i.name"
+
+            return db.execute_query(query, tuple(params)) or []
+
+        except Exception as e:
+            logger.error(f"Failed to get stock levels data: {e}")
+            return []
+
+    def _get_expiration_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+        """Get items expiring within date range."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                i.expiration_date AS "Expiration Date",
+                COALESCE(SUM(ib.quantity_received), 0) AS "Stock Quantity",
+                i.other_specifications AS "Specifications"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
+            WHERE i.expiration_date BETWEEN ? AND ?
+            """
+
+            params = [start_date.isoformat(), end_date.isoformat()]
+
+            if category_filter:
+                query += " AND c.name = ?"
+                params.append(category_filter)
+
+            query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.expiration_date, i.other_specifications ORDER BY i.expiration_date"
+
+            return db.execute_query(query, tuple(params)) or []
+
+        except Exception as e:
+            logger.error(f"Failed to get expiration data: {e}")
+            return []
+
+    def _get_low_stock_data(self, category_filter: str = "") -> List[Dict]:
+        """Get items with low stock (less than 10 units)."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(SUM(sm.quantity), 0) AS "Current Stock",
+                i.other_specifications AS "Specifications"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
+            """
+
+            params = []
+            if category_filter:
+                query += " WHERE c.name = ?"
+                params.append(category_filter)
+
+            query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications HAVING \"Current Stock\" < 10 ORDER BY \"Current Stock\" ASC"
+
+            return db.execute_query(query, tuple(params)) or []
+
+        except Exception as e:
+            logger.error(f"Failed to get low stock data: {e}")
+            return []
+
+    def _get_acquisition_history_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+        """Get acquisition history within date range."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                ib.date_received AS "Acquisition Date",
+                ib.quantity_received AS "Quantity Received",
+                ib.batch_number AS "Batch Number",
+                s.name AS "Supplier",
+                i.other_specifications AS "Specifications"
+            FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
+            WHERE ib.date_received BETWEEN ? AND ?
+            """
+
+            params = [start_date.isoformat(), end_date.isoformat()]
+
+            if category_filter:
+                query += " AND c.name = ?"
+                params.append(category_filter)
+
+            query += " ORDER BY ib.date_received DESC, i.name"
+
+            return db.execute_query(query, tuple(params)) or []
+
+        except Exception as e:
+            logger.error(f"Failed to get acquisition history data: {e}")
+            return []
+
+    def _get_calibration_due_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+        """Get items needing calibration within date range."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                i.calibration_date AS "Calibration Date",
+                i.other_specifications AS "Specifications"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            WHERE i.calibration_date BETWEEN ? AND ?
+            """
+
+            params = [start_date.isoformat(), end_date.isoformat()]
+
+            if category_filter:
+                query += " AND c.name = ?"
+                params.append(category_filter)
+
+            query += " ORDER BY i.calibration_date"
+
+            return db.execute_query(query, tuple(params)) or []
+
+        except Exception as e:
+            logger.error(f"Failed to get calibration due data: {e}")
+            return []
+
+
 # Global report generator instance
 report_generator = ReportGenerator()

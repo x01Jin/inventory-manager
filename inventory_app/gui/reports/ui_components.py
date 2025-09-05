@@ -6,7 +6,7 @@ Extracts UI creation logic into reusable, focused components.
 from typing import Tuple, Optional
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QPushButton,
-    QGroupBox, QProgressBar, QTextEdit, QSplitter
+    QGroupBox, QProgressBar, QTextEdit, QSplitter, QListWidget
 )
 
 from inventory_app.gui.styles import DarkTheme
@@ -167,9 +167,10 @@ class ReportStyler:
 class ReportUIUpdater:
     """Handles UI updates for the reports page."""
 
-    def __init__(self, status_text: QTextEdit, recent_reports_text: QTextEdit):
+    def __init__(self, status_text: QTextEdit, results_list: Optional[QListWidget] = None, recent_reports_text: Optional[QTextEdit] = None):
         """Initialize with UI components."""
         self.status_text = status_text
+        self.results_list = results_list
         self.recent_reports_text = recent_reports_text
 
     def update_status(self, message: str):
@@ -182,10 +183,16 @@ class ReportUIUpdater:
 
     def add_recent_report(self, file_path: str, timestamp: str):
         """Add a report to the recent reports list."""
-        report_info = f"[{timestamp}] {file_path}\n"
-        current_text = self.recent_reports_text.toPlainText()
+        if self.recent_reports_text:
+            report_info = f"[{timestamp}] {file_path}\n"
+            current_text = self.recent_reports_text.toPlainText()
 
-        if current_text == "No recent reports generated.":
-            self.recent_reports_text.setPlainText(report_info)
-        else:
-            self.recent_reports_text.setPlainText(report_info + current_text)
+            if current_text == "No recent reports generated.":
+                self.recent_reports_text.setPlainText(report_info)
+            else:
+                self.recent_reports_text.setPlainText(report_info + current_text)
+
+    def add_to_results(self, result_text: str):
+        """Add a result to the results list."""
+        if self.results_list:
+            self.results_list.addItem(result_text)

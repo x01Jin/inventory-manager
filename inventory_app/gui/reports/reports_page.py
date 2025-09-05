@@ -1,236 +1,648 @@
 """
-Reports page for generating usage reports.
-Provides UI for date range selection and Excel report generation. reports include all data.
+Reports Page for Laboratory Inventory Management.
+Provides comprehensive reporting with multiple report types and modern UI.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+    QLabel, QPushButton, QProgressBar, QTextEdit, QComboBox,
+    QCheckBox, QListWidget, QSplitter, QMessageBox, QTabWidget
 )
-from PyQt6.QtCore import QDate
+from PyQt6.QtCore import Qt, QDate
 
-from inventory_app.gui.reports.report_config import ReportConfig, ReportMessages
-from inventory_app.gui.reports.ui_components import ReportUIComponents, ReportStyler, ReportUIUpdater
+from inventory_app.gui.reports.ui_components import ReportUIUpdater
 from inventory_app.gui.reports.report_worker import ReportWorker
 from inventory_app.utils.logger import logger
-from inventory_app.gui.reports.report_utils import date_formatter
+from inventory_app.gui.widgets.date_selector import DateRangeSelector
+from inventory_app.gui.styles import DarkTheme
 
 import os
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 
 class ReportsPage(QWidget):
-    """Reports page with date range selection and report generation capabilities."""
+    """Reports page with multiple report types and modern UI."""
 
     def __init__(self):
         super().__init__()
         self.worker = None
-        self.ui_updater = None  # Will be initialized in setup_ui
+        self.ui_updater = None
+        self.current_report_type = "usage"
+        self.apply_dark_theme()
         self.setup_ui()
 
+    def apply_dark_theme(self):
+        """Apply dark theme to the reports page."""
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app and isinstance(app, QApplication):
+            DarkTheme.apply_dark_theme(app)
+
     def setup_ui(self):
-        """Setup the user interface using modular components."""
+        """Setup the modern interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout.setSpacing(15)
 
-        # Header using UI component
-        header = ReportUIComponents.create_header()
+        # Header
+        header = self.create_header()
         layout.addWidget(header)
 
-        # Create main splitter
-        splitter = ReportUIComponents.create_main_splitter()
-        layout.addWidget(splitter)
+        # Main content with splitter
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left panel - Report Configuration
-        config_widget = self.create_config_panel()
-        splitter.addWidget(config_widget)
+        config_panel = self.create_config_panel()
+        main_splitter.addWidget(config_panel)
 
-        # Right panel - Report Preview/Status
-        status_widget, status_text, recent_reports_text = ReportUIComponents.create_status_panel()
-        splitter.addWidget(status_widget)
+        # Right panel - Status and Results
+        status_panel = self.create_status_panel()
+        main_splitter.addWidget(status_panel)
+
+        main_splitter.setSizes([500, 500])
+        layout.addWidget(main_splitter)
 
         # Initialize UI updater
-        self.ui_updater = ReportUIUpdater(status_text, recent_reports_text)
-        self.status_text = status_text
-        self.recent_reports_text = recent_reports_text
-
-        # Set splitter proportions
-        splitter.setSizes(ReportConfig.SPLITTER_PROPORTIONS)
-
-    def create_config_panel(self):
-        """Create the report configuration panel using modular components."""
-        config_group = ReportUIComponents.create_config_panel()
-        layout = QVBoxLayout(config_group)
-
-        # Dynamic Granularity Info using UI components
-        self.granularity_info = ReportUIComponents.create_granularity_info_section(layout)
-
-        # Date Range Selection using UI components
-        self.date_range_selector, self.date_range_info = ReportUIComponents.create_date_range_section(
-            layout, self.update_granularity_info
+        self.ui_updater = ReportUIUpdater(
+            self.status_text, self.results_list, self.recent_reports_text
         )
 
-        # Generate Button using UI components
-        self.generate_btn = ReportUIComponents.create_generate_button(layout, self.generate_report)
+        # Connect date range changes to update acquisitions checkbox
+        self.date_range_selector.dateRangeChanged.connect(self.update_acquisitions_checkbox)
+        self.update_acquisitions_checkbox()  # Initial update
 
-        # Progress Bar using UI components
-        self.progress_bar = ReportUIComponents.create_progress_bar(layout)
+    def create_header(self) -> QWidget:
+        """Create the page header."""
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
 
-        return config_group
+        title = QLabel("📊 Reports")
+        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
 
-    def load_available_date_range(self):
-        """Load the available date range from requisition data and set date picker limits."""
+        refresh_btn = QPushButton("🔄 Refresh")
+        refresh_btn.clicked.connect(self.refresh_data)
+
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        header_layout.addWidget(refresh_btn)
+
+        return header_widget
+
+    def create_config_panel(self) -> QWidget:
+        """Create the configuration panel with tabs."""
+        config_widget = QWidget()
+        config_layout = QVBoxLayout(config_widget)
+
+        # Report Type Tabs
+        self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_report_type_changed)
+
+        # Usage Reports Tab
+        usage_tab = self.create_usage_tab()
+        self.tab_widget.addTab(usage_tab, "📈 Usage Reports")
+
+        # Inventory Reports Tab
+        inventory_tab = self.create_inventory_tab()
+        self.tab_widget.addTab(inventory_tab, "📦 Inventory Reports")
+
+        # Requisition Reports Tab
+        requisition_tab = self.create_requisition_tab()
+        self.tab_widget.addTab(requisition_tab, "📋 Requisition Reports")
+
+        # Statistics Reports Tab
+        statistics_tab = self.create_statistics_tab()
+        self.tab_widget.addTab(statistics_tab, "📊 Statistics")
+
+        config_layout.addWidget(self.tab_widget)
+
+        # Generate Button
+        self.generate_btn = QPushButton("🚀 Generate Report")
+        self.generate_btn.clicked.connect(self.generate_report)
+        config_layout.addWidget(self.generate_btn)
+
+        # Progress Bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        config_layout.addWidget(self.progress_bar)
+
+        return config_widget
+
+    def create_usage_tab(self) -> QWidget:
+        """Create usage reports configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Date Range Section
+        date_group = QGroupBox("📅 Date Range")
+        date_layout = QVBoxLayout(date_group)
+
+        self.date_range_selector = DateRangeSelector()
+        date_layout.addWidget(self.date_range_selector)
+
+        # Preset date ranges
+        preset_layout = QHBoxLayout()
+        preset_layout.addWidget(QLabel("Quick Select:"))
+
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItems([
+            "Custom Range",
+            "Last 7 Days",
+            "Last 30 Days",
+            "Last 90 Days",
+            "This Month",
+            "Last Month",
+            "This Year",
+            "Last Year"
+        ])
+        self.preset_combo.currentTextChanged.connect(self.on_preset_changed)
+        preset_layout.addWidget(self.preset_combo)
+
+        date_layout.addLayout(preset_layout)
+        layout.addWidget(date_group)
+
+        # Filters Section
+        filters_group = QGroupBox("🔍 Filters")
+        filters_layout = QVBoxLayout(filters_group)
+
+        # Category filter
+        category_layout = QHBoxLayout()
+        category_layout.addWidget(QLabel("Category:"))
+        self.category_combo = QComboBox()
+        self.category_combo.addItem("All Categories")
+        self.load_categories()
+        category_layout.addWidget(self.category_combo)
+        filters_layout.addLayout(category_layout)
+
+        # Supplier filter
+        supplier_layout = QHBoxLayout()
+        supplier_layout.addWidget(QLabel("Supplier:"))
+        self.supplier_combo = QComboBox()
+        self.supplier_combo.addItem("All Suppliers")
+        self.load_suppliers()
+        supplier_layout.addWidget(self.supplier_combo)
+        filters_layout.addLayout(supplier_layout)
+
+        # Consumable filter
+        self.consumable_check = QCheckBox("Include consumable items")
+        self.consumable_check.setChecked(True)
+        filters_layout.addWidget(self.consumable_check)
+
+        layout.addWidget(filters_group)
+
+        # Report Options
+        options_group = QGroupBox("⚙️ Options")
+        options_layout = QVBoxLayout(options_group)
+
+        self.include_acquisitions = QCheckBox("Include yearly acquisitions")
+        self.include_acquisitions.setChecked(True)
+        options_layout.addWidget(self.include_acquisitions)
+
+        layout.addWidget(options_group)
+
+        layout.addStretch()
+        return tab
+
+    def create_inventory_tab(self) -> QWidget:
+        """Create inventory reports configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Report Type Selection
+        type_group = QGroupBox("📋 Report Type")
+        type_layout = QVBoxLayout(type_group)
+
+        self.inventory_report_type = QComboBox()
+        self.inventory_report_type.addItems([
+            "Stock Levels Report",
+            "Expiration Report",
+            "Low Stock Alert",
+            "Acquisition History",
+            "Calibration Due Report"
+        ])
+        type_layout.addWidget(self.inventory_report_type)
+        layout.addWidget(type_group)
+
+        # Date Range (for acquisition history)
+        date_group = QGroupBox("📅 Date Range (for History Reports)")
+        date_layout = QVBoxLayout(date_group)
+
+        self.inventory_date_selector = DateRangeSelector()
+        date_layout.addWidget(self.inventory_date_selector)
+        layout.addWidget(date_group)
+
+        # Filters
+        filters_group = QGroupBox("🔍 Filters")
+        filters_layout = QVBoxLayout(filters_group)
+
+        # Category filter
+        category_layout = QHBoxLayout()
+        category_layout.addWidget(QLabel("Category:"))
+        self.inv_category_combo = QComboBox()
+        self.inv_category_combo.addItem("All Categories")
+        self.load_categories(self.inv_category_combo)
+        category_layout.addWidget(self.inv_category_combo)
+        filters_layout.addLayout(category_layout)
+
+        layout.addWidget(filters_group)
+
+        layout.addStretch()
+        return tab
+
+    def create_requisition_tab(self) -> QWidget:
+        """Create requisition reports configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Report Type
+        type_group = QGroupBox("📋 Report Type")
+        type_layout = QVBoxLayout(type_group)
+
+        self.req_report_type = QComboBox()
+        self.req_report_type.addItems([
+            "Requisition Summary",
+            "Requester Analysis",
+            "Activity Patterns",
+            "Overdue Items",
+            "Return History"
+        ])
+        type_layout.addWidget(self.req_report_type)
+        layout.addWidget(type_group)
+
+        # Date Range
+        date_group = QGroupBox("📅 Date Range")
+        date_layout = QVBoxLayout(date_group)
+
+        self.req_date_selector = DateRangeSelector()
+        date_layout.addWidget(self.req_date_selector)
+        layout.addWidget(date_group)
+
+        # Filters
+        filters_group = QGroupBox("🔍 Filters")
+        filters_layout = QVBoxLayout(filters_group)
+
+        # Status filter
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(QLabel("Status:"))
+        self.req_status_combo = QComboBox()
+        self.req_status_combo.addItems([
+            "All Statuses",
+            "Requested",
+            "Active",
+            "Returned",
+            "Overdue"
+        ])
+        status_layout.addWidget(self.req_status_combo)
+        filters_layout.addLayout(status_layout)
+
+        layout.addWidget(filters_group)
+
+        layout.addStretch()
+        return tab
+
+    def create_statistics_tab(self) -> QWidget:
+        """Create statistics reports configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Report Type
+        type_group = QGroupBox("📊 Report Type")
+        type_layout = QVBoxLayout(type_group)
+
+        self.stat_report_type = QComboBox()
+        self.stat_report_type.addItems([
+            "Usage Statistics",
+            "Top Items Report",
+            "Category Analysis",
+            "Monthly Trends",
+            "Yearly Summary"
+        ])
+        type_layout.addWidget(self.stat_report_type)
+        layout.addWidget(type_group)
+
+        # Date Range
+        date_group = QGroupBox("📅 Date Range")
+        date_layout = QVBoxLayout(date_group)
+
+        self.stat_date_selector = DateRangeSelector()
+        date_layout.addWidget(self.stat_date_selector)
+        layout.addWidget(date_group)
+
+        # Options
+        options_group = QGroupBox("⚙️ Options")
+        options_layout = QVBoxLayout(options_group)
+
+        self.stat_top_n = QComboBox()
+        self.stat_top_n.addItems(["10", "25", "50", "100"])
+        self.stat_top_n.setCurrentText("25")
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(QLabel("Top N items:"))
+        top_layout.addWidget(self.stat_top_n)
+        options_layout.addLayout(top_layout)
+
+        layout.addWidget(options_group)
+
+        layout.addStretch()
+        return tab
+
+    def create_status_panel(self) -> QWidget:
+        """Create the status and results panel."""
+        status_widget = QWidget()
+        status_layout = QVBoxLayout(status_widget)
+
+        # Status Section
+        status_group = QGroupBox("📝 Status")
+        status_layout_inner = QVBoxLayout(status_group)
+
+        self.status_text = QTextEdit()
+        self.status_text.setReadOnly(True)
+        self.status_text.setMaximumHeight(150)
+        self.status_text.setPlainText("Ready to generate reports.\n\nSelect your parameters and click 'Generate Report'.")
+        status_layout_inner.addWidget(self.status_text)
+
+        status_layout.addWidget(status_group)
+
+        # Results Section
+        results_group = QGroupBox("📄 Generated Reports")
+        results_layout = QVBoxLayout(results_group)
+
+        self.results_list = QListWidget()
+        self.results_list.setMaximumHeight(200)
+        results_layout.addWidget(self.results_list)
+
+        status_layout.addWidget(results_group)
+
+        # Recent Reports
+        recent_group = QGroupBox("🕒 Recent Reports")
+        recent_layout = QVBoxLayout(recent_group)
+
+        self.recent_reports_text = QTextEdit()
+        self.recent_reports_text.setReadOnly(True)
+        self.recent_reports_text.setMaximumHeight(150)
+        self.recent_reports_text.setPlainText("No recent reports generated.")
+        recent_layout.addWidget(self.recent_reports_text)
+
+        status_layout.addWidget(recent_group)
+
+        return status_widget
+
+    def load_categories(self, combo_box=None):
+        """Load categories from database."""
+        if combo_box is None:
+            combo_box = self.category_combo
+
         try:
             from inventory_app.database.connection import db
-
-            # Query for min and max date_requested from requisitions
-            query = """
-            SELECT
-                MIN(date_requested) as min_date,
-                MAX(date_requested) as max_date
-            FROM Requisitions
-            WHERE date_requested IS NOT NULL
-            """
-            result = db.execute_query(query)
-
-            if result and result[0]['min_date'] and result[0]['max_date']:
-                min_date_str = result[0]['min_date']
-                max_date_str = result[0]['max_date']
-
-                # Convert to QDate
-                min_qdate = QDate.fromString(min_date_str, "yyyy-MM-dd")
-                max_qdate = QDate.fromString(max_date_str, "yyyy-MM-dd")
-
-                # Set date range limits for the date selector
-                self.date_range_selector.start_date_selector.setMinimumDate(min_qdate)
-                self.date_range_selector.start_date_selector.setMaximumDate(max_qdate)
-                self.date_range_selector.end_date_selector.setMinimumDate(min_qdate)
-                self.date_range_selector.end_date_selector.setMaximumDate(max_qdate)
-
-                # Set default dates to show recent data
-                today = QDate.currentDate()
-                default_start = today.addDays(-30)
-
-                # Ensure default start is within available range
-                if default_start < min_qdate:
-                    default_start = min_qdate
-                elif default_start > max_qdate:
-                    default_start = max_qdate
-
-                # Set default dates
-                self.date_range_selector.set_date_range(default_start, max_qdate)
-
-                # Update info label
-                self.date_range_info.setText(f"Available: {min_qdate.toString('MM/dd/yyyy')} to {max_qdate.toString('MM/dd/yyyy')}")
-
-                logger.info(f"Set date range limits: {min_date_str} to {max_date_str}")
-            else:
-                # No requisition data available
-                self.date_range_info.setText("No requisition data available - date selection unrestricted")
-                logger.warning("No requisition data found for date range limiting")
-
+            categories = db.execute_query("SELECT name FROM Categories ORDER BY name")
+            if categories:
+                for cat in categories:
+                    combo_box.addItem(cat['name'])
         except Exception as e:
-            logger.error(f"Failed to load available date range: {e}")
-            self.date_range_info.setText("Error loading date range - date selection unrestricted")
+            logger.error(f"Failed to load categories: {e}")
+
+    def load_suppliers(self):
+        """Load suppliers from database."""
+        try:
+            from inventory_app.database.connection import db
+            suppliers = db.execute_query("SELECT name FROM Suppliers ORDER BY name")
+            if suppliers:
+                for sup in suppliers:
+                    self.supplier_combo.addItem(sup['name'])
+        except Exception as e:
+            logger.error(f"Failed to load suppliers: {e}")
+
+    def on_report_type_changed(self, index):
+        """Handle report type tab changes."""
+        report_types = ["usage", "inventory", "requisition", "statistics"]
+        self.current_report_type = report_types[index]
+
+    def on_preset_changed(self, preset):
+        """Handle preset date range selection."""
+        today = date.today()
+        if preset == "Last 7 Days":
+            start_date = today - timedelta(days=7)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(today.year, today.month, today.day)
+            )
+        elif preset == "Last 30 Days":
+            start_date = today - timedelta(days=30)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(today.year, today.month, today.day)
+            )
+        elif preset == "Last 90 Days":
+            start_date = today - timedelta(days=90)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(today.year, today.month, today.day)
+            )
+        elif preset == "This Month":
+            start_date = today.replace(day=1)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(today.year, today.month, today.day)
+            )
+        elif preset == "Last Month":
+            # Get first day of last month
+            first_of_this_month = today.replace(day=1)
+            last_month_end = first_of_this_month - timedelta(days=1)
+            start_date = last_month_end.replace(day=1)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(last_month_end.year, last_month_end.month, last_month_end.day)
+            )
+        elif preset == "This Year":
+            start_date = today.replace(month=1, day=1)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(today.year, today.month, today.day)
+            )
+        elif preset == "Last Year":
+            start_date = today.replace(year=today.year - 1, month=1, day=1)
+            end_date = start_date.replace(month=12, day=31)
+            self.date_range_selector.set_date_range(
+                QDate(start_date.year, start_date.month, start_date.day),
+                QDate(end_date.year, end_date.month, end_date.day)
+            )
+
+        # Update acquisitions checkbox after preset change
+        self.update_acquisitions_checkbox()
 
     def generate_report(self):
-        """Generate the dynamic report using configuration and messaging."""
+        """Generate the selected report type."""
         try:
-            # Get dates from the new date range selector
-            start_date, end_date = self.date_range_selector.to_py_dates()
-
-            if start_date > end_date:
-                QMessageBox.warning(self, "Invalid Date Range", ReportMessages.invalid_date_range())
-                return
-
-            # Determine granularity for status message using new date formatter
-            granularity = date_formatter.get_smart_granularity(start_date, end_date)
-
             # Disable generate button and show progress
-            ReportStyler.apply_button_state(self.generate_btn, False, ReportConfig.GENERATE_BUTTON_LOADING)
+            self.generate_btn.setEnabled(False)
+            self.generate_btn.setText("Generating Report...")
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, 0)  # Indeterminate progress
 
-            # Update status using UI updater
+            # Clear previous status
             if self.ui_updater:
                 self.ui_updater.clear_status()
-                self.ui_updater.update_status(ReportMessages.generation_started(granularity))
-                self.ui_updater.update_status(f"Date range: {start_date} to {end_date}")
+                self.ui_updater.update_status(f"Generating {self.current_report_type} report...")
 
-
-                self.ui_updater.update_status(ReportMessages.generation_progress("Please wait..."))
-
-            # Start background worker
-            self.worker = ReportWorker(start_date, end_date)
-            self.worker.progress.connect(self.update_progress)
-            self.worker.finished.connect(self.on_report_finished)
-            self.worker.error.connect(self.on_report_error)
-            self.worker.start()
+            # Generate based on current tab
+            if self.current_report_type == "usage":
+                self.generate_usage_report()
+            elif self.current_report_type == "inventory":
+                self.generate_inventory_report()
+            elif self.current_report_type == "requisition":
+                self.generate_requisition_report()
+            elif self.current_report_type == "statistics":
+                self.generate_statistics_report()
 
         except Exception as e:
             logger.error(f"Failed to start report generation: {e}")
             QMessageBox.critical(self, "Error", f"Failed to start report generation: {str(e)}")
             self.reset_ui()
 
+    def generate_usage_report(self):
+        """Generate usage report with current configuration."""
+        start_date, end_date = self.date_range_selector.to_py_dates()
+
+        if start_date > end_date:
+            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            self.reset_ui()
+            return
+
+        # Get filter values
+        category_filter = self.category_combo.currentText()
+        if category_filter == "All Categories":
+            category_filter = ""
+
+        supplier_filter = self.supplier_combo.currentText()
+        if supplier_filter == "All Suppliers":
+            supplier_filter = ""
+
+        include_consumables = self.consumable_check.isChecked()
+        include_yearly = self.include_acquisitions.isChecked()
+
+        # Start background worker
+        self.worker = ReportWorker(
+            "usage",
+            start_date,
+            end_date,
+            category_filter=category_filter,
+            supplier_filter=supplier_filter,
+            include_consumables=include_consumables,
+            include_yearly=include_yearly
+        )
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_report_finished)
+        self.worker.error.connect(self.on_report_error)
+        self.worker.start()
+
+    def generate_inventory_report(self):
+        """Generate inventory report."""
+        start_date, end_date = self.inventory_date_selector.to_py_dates()
+
+        if start_date > end_date:
+            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            self.reset_ui()
+            return
+
+        # Get filter values
+        category_filter = self.inv_category_combo.currentText()
+        if category_filter == "All Categories":
+            category_filter = ""
+
+        inventory_report_type = self.inventory_report_type.currentText()
+
+        # Start background worker
+        self.worker = ReportWorker(
+            "inventory",
+            start_date,
+            end_date,
+            category_filter=category_filter,
+            inventory_report_type=inventory_report_type
+        )
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_report_finished)
+        self.worker.error.connect(self.on_report_error)
+        self.worker.start()
+
+    def generate_requisition_report(self):
+        """Generate requisition report."""
+        # Implementation for requisition reports
+        QMessageBox.information(self, "Coming Soon", "Requisition reports will be implemented in the next update.")
+        self.reset_ui()
+
+    def generate_statistics_report(self):
+        """Generate statistics report."""
+        # Implementation for statistics reports
+        QMessageBox.information(self, "Coming Soon", "Statistics reports will be implemented in the next update.")
+        self.reset_ui()
+
     def update_progress(self, message):
         """Update progress message."""
-        self.status_text.append(f"\n{message}")
+        if self.ui_updater:
+            self.ui_updater.update_status(message)
 
     def on_report_finished(self, file_path):
-        """Handle successful report generation using UI updater."""
+        """Handle successful report generation."""
         if self.ui_updater is None:
             return
 
-        # Update status using UI updater
-        self.ui_updater.update_status(ReportMessages.generation_progress("✅ Report generated successfully!"))
-        self.ui_updater.update_status(ReportMessages.file_saved(file_path))
+        # Update status
+        self.ui_updater.update_status("✅ Report generated successfully!")
+        self.ui_updater.update_status(f"📁 File saved to: {file_path}")
 
-        # Update recent reports using UI updater
+        # Add to results list
+        self.results_list.addItem(f"✅ {os.path.basename(file_path)}")
+
+        # Update recent reports
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.ui_updater.add_recent_report(os.path.basename(file_path), timestamp)
 
         # Try to open the file
         try:
             os.startfile(file_path)  # Windows specific
-            self.ui_updater.update_status(ReportMessages.file_opening())
+            self.ui_updater.update_status("📂 Opening Excel file...")
         except Exception as e:
-            self.ui_updater.update_status(ReportMessages.generation_failed(f"Could not auto-open file: {str(e)}"))
+            self.ui_updater.update_status(f"Could not auto-open file: {str(e)}")
 
         self.reset_ui()
 
     def on_report_error(self, error_message):
-        """Handle report generation error using standardized messages."""
+        """Handle report generation error."""
         if self.ui_updater is None:
             return
 
-        self.ui_updater.update_status(ReportMessages.generation_failed(error_message))
+        self.ui_updater.update_status(f"❌ Error: {error_message}")
         QMessageBox.critical(self, "Report Generation Failed", error_message)
         self.reset_ui()
 
     def reset_ui(self):
         """Reset UI after report generation completes."""
         self.generate_btn.setEnabled(True)
-        self.generate_btn.setText("📊 Generate Report")
+        self.generate_btn.setText("🚀 Generate Report")
         self.progress_bar.setVisible(False)
         self.worker = None
 
-    def update_granularity_info(self):
-        """Update the granularity information display using ReportStyler."""
-        try:
-            start_date, end_date = self.date_range_selector.to_py_dates()
-            granularity = date_formatter.get_smart_granularity(start_date, end_date)
-            description = date_formatter.get_date_range_description(start_date, end_date)
-
-            # Update granularity display using styler (eliminates repetitive string manipulation)
-            ReportStyler.update_granularity_display(self.granularity_info, granularity)
-
-            # Update date range display
-            ReportStyler.update_date_range_display(self.date_range_info, f"Selected: {description}")
-
-        except Exception as e:
-            logger.error(f"Failed to update granularity info: {e}")
-            self.granularity_info.setText("Error calculating granularity")
-
     def refresh_data(self):
-            """Refresh data on the reports page."""
-            pass
+        """Refresh data on the reports page."""
+        pass
+
+    def update_acquisitions_checkbox(self):
+        """Update the acquisitions checkbox based on date range."""
+        start_date, end_date = self.date_range_selector.to_py_dates()
+        days_diff = (end_date - start_date).days + 1
+
+        # Check if date range is >= 2 years (730 days approximately)
+        should_enable = days_diff >= 730
+
+        if should_enable:
+            # Enable checkbox and set to checked for long date ranges
+            self.include_acquisitions.setEnabled(True)
+            self.include_acquisitions.setChecked(True)
+            self.include_acquisitions.setToolTip("")
+        else:
+            # Disable checkbox and uncheck for short date ranges
+            self.include_acquisitions.setEnabled(False)
+            self.include_acquisitions.setChecked(False)
+            self.include_acquisitions.setToolTip(
+                "This option is only available for reports with date ranges of 2 years or more.\n"
+                "The yearly acquisitions column provides meaningful data only for longer time periods."
+            )

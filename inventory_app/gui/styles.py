@@ -602,4 +602,15 @@ class DarkTheme:
                 border-color: {DarkTheme.ACCENT_COLOR};
                 background-color: {DarkTheme.PRIMARY_DARK};
             }}
+
+            /* Tooltips */
+            QToolTip {{
+                background-color: {DarkTheme.SECONDARY_DARK};
+                color: {DarkTheme.TEXT_PRIMARY};
+                border: 1px solid {DarkTheme.BORDER_COLOR};
+                border-radius: 6px;
+                padding: 8px;
+                font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
+                font-family: {DarkTheme.FONT_FAMILY};
+            }}
         """
