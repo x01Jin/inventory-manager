@@ -603,6 +603,7 @@ class Requisition:
     expected_return: datetime = datetime.now()
     status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
     lab_activity_name: str = ""
+    lab_activity_description: Optional[str] = None  # For detailed activity information stored for reports
     lab_activity_date: date = date.today()
     num_students: Optional[int] = None
     num_groups: Optional[int] = None
@@ -622,8 +623,8 @@ class Requisition:
                 query = """
                 UPDATE Requisitions SET requester_id = ?, datetime_requested = ?,
                 expected_request = ?, expected_return = ?, status = ?,
-                lab_activity_name = ?, lab_activity_date = ?, num_students = ?, num_groups = ?
-                WHERE id = ?
+                lab_activity_name = ?, lab_activity_description = ?, lab_activity_date = ?,
+                num_students = ?, num_groups = ? WHERE id = ?
                 """
                 db.execute_update(query, (
                     self.requester_id,
@@ -632,6 +633,7 @@ class Requisition:
                     self.expected_return.isoformat(),
                     self.status,
                     self.lab_activity_name,
+                    self.lab_activity_description,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
                     self.num_groups,
@@ -641,8 +643,8 @@ class Requisition:
                 # Insert new
                 query = """
                 INSERT INTO Requisitions (requester_id, datetime_requested, expected_request,
-                expected_return, status, lab_activity_name, lab_activity_date, num_students, num_groups)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                expected_return, status, lab_activity_name, lab_activity_description, lab_activity_date,
+                num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(query, (
                     self.requester_id,
@@ -651,6 +653,7 @@ class Requisition:
                     self.expected_return.isoformat(),
                     self.status,
                     self.lab_activity_name,
+                    self.lab_activity_description,
                     self.lab_activity_date.isoformat(),
                     self.num_students,
                     self.num_groups

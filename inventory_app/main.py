@@ -12,7 +12,7 @@ sys.path.insert(0, parent_dir)
 
 from inventory_app.database.connection import db  # noqa: E402
 from inventory_app.utils.logger import logger  # noqa: E402
-from inventory_app.business_logic.alert_engine import alert_engine  # noqa: E402
+from inventory_app.services.alert_engine import alert_engine  # noqa: E402
 
 def initialize_laboratory_database():
     """Initialize database with laboratory schema and seed data."""

@@ -126,6 +126,7 @@ CREATE TABLE Requisitions (
     expected_return DATETIME NOT NULL,
     status TEXT NOT NULL DEFAULT 'requested',  -- 'requested', 'active', 'returned', 'overdue'
     lab_activity_name TEXT NOT NULL,
+    lab_activity_description TEXT,  -- For detailed activity information stored for reports
     lab_activity_date DATE NOT NULL,
     num_students INTEGER,
     num_groups INTEGER,

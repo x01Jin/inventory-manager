@@ -3,9 +3,8 @@ Activity management for the dashboard.
 Handles recent activity display.
 """
 
-from PyQt6.QtWidgets import QTextEdit, QTableWidget, QTableWidgetItem, QWidget, QVBoxLayout, QLabel, QStyledItemDelegate
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QWidget, QVBoxLayout, QStyledItemDelegate
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QFontMetrics
 
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.activity_logger import activity_logger

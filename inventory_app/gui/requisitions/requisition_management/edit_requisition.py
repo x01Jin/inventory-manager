@@ -208,7 +208,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                 self.activity_name.setText(req.lab_activity_name)
 
             # Activity description
-            if hasattr(self.requisition_summary, "activity_description"):
+            if hasattr(req, "lab_activity_description") and req.lab_activity_description:
+                self.activity_description.setText(req.lab_activity_description)
+            elif hasattr(self.requisition_summary, "activity_description"):
                 self.activity_description.setText(
                     self.requisition_summary.activity_description or ""
                 )
@@ -343,6 +345,7 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             req.expected_request = expected_request
             req.expected_return = expected_return
             req.lab_activity_name = activity_name
+            req.lab_activity_description = activity_description
             req.lab_activity_date = date.fromisoformat(activity_date) if activity_date else date.today()
             req.num_students = num_students
             req.num_groups = num_groups
@@ -382,13 +385,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
             # Log activity
             from inventory_app.services.requisition_activity import requisition_activity_manager
-            items_summary = requisition_activity_manager.format_items_summary(self.selected_items)
             requisition_activity_manager.log_requisition_updated(
                 requisition_id=self.requisition_id,
                 requester_name=self.selected_requester.name,
-                activity_name=activity_name,
-                activity_description=activity_description,
-                items_summary=items_summary,
             )
 
             logger.info(f"Requisition {self.requisition_id} updated successfully")

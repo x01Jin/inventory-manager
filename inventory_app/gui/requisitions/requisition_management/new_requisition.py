@@ -269,6 +269,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             requisition.expected_return = expected_return
             requisition.status = "requested"
             requisition.lab_activity_name = activity_name
+            requisition.lab_activity_description = activity_description
             requisition.lab_activity_date = (
                 date.fromisoformat(activity_date) if activity_date else date.today()
             )
@@ -315,20 +316,14 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                     "Please verify stock levels manually."
                 )
 
-            # Log rich activity description
+            # Log activity
             from inventory_app.services.requisition_activity import (
                 requisition_activity_manager,
             )
 
-            items_summary = requisition_activity_manager.format_items_summary(
-                self.selected_items
-            )
             requisition_activity_manager.log_requisition_created(
                 requisition_id=requisition_id,
                 requester_name=self.selected_requester.name,
-                activity_name=activity_name,
-                activity_description=activity_description,
-                items_summary=items_summary,
             )
 
             logger.info(f"New requisition created with ID: {requisition_id}")

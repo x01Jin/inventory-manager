@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt6.QtGui import QColor
 
 from inventory_app.gui.styles import DarkTheme
-from inventory_app.business_logic.alert_engine import alert_engine
+from inventory_app.services.alert_engine import alert_engine
 from inventory_app.utils.logger import logger
 
 

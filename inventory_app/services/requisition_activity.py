@@ -26,20 +26,14 @@ class RequisitionActivityManager:
         self,
         requisition_id: int,
         requester_name: str,
-        activity_name: str = "",
-        activity_description: str = "",
-        items_summary: str = "",
         user_name: str = "System",
     ) -> bool:
         """
-        Log a detailed requisition creation activity.
+        Log a requisition creation activity.
 
         Args:
             requisition_id: ID of the created requisition
             requester_name: Name of the requester
-            activity_name: Name of the laboratory activity
-            activity_description: Detailed description from the form
-            items_summary: Summary of items being requested
             user_name: Name of the user performing the action
 
         Returns:
@@ -82,15 +76,11 @@ class RequisitionActivityManager:
         user_name: str = "System",
     ) -> bool:
         """
-        Log a detailed requisition update activity.
+        Log a requisition update activity.
 
         Args:
             requisition_id: ID of the updated requisition
             requester_name: Name of the requester
-            activity_name: Name of the laboratory activity
-            activity_description: Detailed description from the form
-            items_summary: Summary of items being requested
-            changes_summary: Summary of what was changed (optional)
             user_name: Name of the user performing the action
 
         Returns:
