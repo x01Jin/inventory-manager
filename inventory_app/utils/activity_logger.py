@@ -85,23 +85,22 @@ class ActivityLogger:
             activities = []
 
             for row in rows:
-                # Format timestamp for display
+                # Parse timestamp to datetime object
                 timestamp = row['timestamp']
                 if timestamp:
                     try:
                         dt = datetime.fromisoformat(timestamp)
-                        formatted_time = dt.strftime("%m/%d %H:%M")
                     except (ValueError, TypeError):
-                        formatted_time = timestamp
+                        dt = None
                 else:
-                    formatted_time = "Unknown"
+                    dt = None
 
                 activities.append({
                     'type': row['activity_type'],
                     'description': row['description'],
                     'entity_type': row['entity_type'],
                     'user': row['user_name'] or 'System',
-                    'time': formatted_time
+                    'time': dt
                 })
 
             return activities

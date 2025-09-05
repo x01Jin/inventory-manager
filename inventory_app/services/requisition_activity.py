@@ -26,9 +26,9 @@ class RequisitionActivityManager:
         self,
         requisition_id: int,
         requester_name: str,
-        activity_name: str,
-        activity_description: str,
-        items_summary: str,
+        activity_name: str = "",
+        activity_description: str = "",
+        items_summary: str = "",
         user_name: str = "System",
     ) -> bool:
         """
@@ -48,11 +48,7 @@ class RequisitionActivityManager:
         try:
             # Create rich activity description
             description = self._format_creation_description(
-                requisition_id,
                 requester_name,
-                activity_name,
-                activity_description,
-                items_summary,
             )
 
             # Log using existing activity logger
@@ -83,10 +79,6 @@ class RequisitionActivityManager:
         self,
         requisition_id: int,
         requester_name: str,
-        activity_name: str,
-        activity_description: str,
-        items_summary: str,
-        changes_summary: str = "",
         user_name: str = "System",
     ) -> bool:
         """
@@ -107,12 +99,7 @@ class RequisitionActivityManager:
         try:
             # Create rich activity description
             description = self._format_update_description(
-                requisition_id,
                 requester_name,
-                activity_name,
-                activity_description,
-                items_summary,
-                changes_summary,
             )
 
             # Log using existing activity logger
@@ -143,7 +130,6 @@ class RequisitionActivityManager:
         self,
         requisition_id: int,
         requester_name: str,
-        returned_items: str,
         user_name: str = "System",
     ) -> bool:
         """
@@ -159,7 +145,7 @@ class RequisitionActivityManager:
             bool: True if logged successfully
         """
         try:
-            description = f"Requisition #{requisition_id} items returned by {requester_name}. Returned: {returned_items}"
+            description = f"finalized requisition for {requester_name}"
 
             success = activity_logger.log_activity(
                 activity_type=activity_logger.REQUISITION_RETURNED,
@@ -236,11 +222,7 @@ class RequisitionActivityManager:
 
     def _format_creation_description(
         self,
-        requisition_id: int,
         requester_name: str,
-        activity_name: str,
-        activity_description: str,
-        items_summary: str,
     ) -> str:
         """
         Format a rich description for requisition creation.
@@ -255,25 +237,11 @@ class RequisitionActivityManager:
         Returns:
             Formatted description string
         """
-        description = f"Requisition #{requisition_id} created by {requester_name}: "
-        description += f"'{activity_name}'"
-
-        if activity_description.strip():
-            description += f" - {activity_description}"
-
-        if items_summary:
-            description += f". Items: {items_summary}"
-
-        return description
+        return f"added requisition for {requester_name}"
 
     def _format_update_description(
         self,
-        requisition_id: int,
         requester_name: str,
-        activity_name: str,
-        activity_description: str,
-        items_summary: str,
-        changes_summary: str = "",
     ) -> str:
         """
         Format a rich description for requisition updates.
@@ -289,19 +257,7 @@ class RequisitionActivityManager:
         Returns:
             Formatted description string
         """
-        description = f"Requisition #{requisition_id} updated by {requester_name}: "
-        description += f"'{activity_name}'"
-
-        if activity_description.strip():
-            description += f" - {activity_description}"
-
-        if items_summary:
-            description += f". Items: {items_summary}"
-
-        if changes_summary:
-            description += f". Changes: {changes_summary}"
-
-        return description
+        return f"edited requisition for {requester_name}"
 
     def format_items_summary(self, selected_items: List[Dict]) -> str:
         """

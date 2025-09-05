@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSt
 
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.gui.navigation import NavigationPanel
-from inventory_app.gui.dashboard import DashboardPage
+from inventory_app.gui.dashboard.dashboard_page import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
 from inventory_app.gui.requesters.requesters_page import RequestersPage
@@ -29,6 +29,9 @@ class MainWindow(QMainWindow):
         app_instance = QApplication.instance()
         if app_instance and isinstance(app_instance, QApplication):
             DarkTheme.apply_dark_theme(app_instance)
+
+        # Center the window
+        self.center_window()
 
         # Create central widget
         central_widget = QWidget()
@@ -65,6 +68,17 @@ class MainWindow(QMainWindow):
 
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
+
+    def center_window(self):
+        """Center the window on the screen."""
+        from PyQt6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            screen_geometry = screen.availableGeometry()
+            window_geometry = self.frameGeometry()
+            center_point = screen_geometry.center()
+            window_geometry.moveCenter(center_point)
+            self.move(window_geometry.topLeft())
 
     def on_page_changed(self, page_index: int):
         """Handle page changes and refresh page data."""
@@ -119,7 +133,7 @@ def main():
     try:
         app = QApplication(sys.argv)
         window = MainWindow()
-        window.show()
+        window.showMaximized()
 
         logger.info("Laboratory Inventory Application started successfully")
         return app.exec()
