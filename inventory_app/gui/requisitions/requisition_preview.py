@@ -13,6 +13,7 @@ from PyQt6.QtCore import Qt
 from inventory_app.gui.requisitions.requisitions_model import RequisitionSummary
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.logger import logger
+from inventory_app.utils.date_utils import format_date_short, format_time_12h
 from inventory_app.gui.requisitions.requisition_management.return_processor import ReturnProcessor
 
 
@@ -112,6 +113,7 @@ class RequisitionPreview(QWidget):
         # Header
         header = QLabel("📋 Requisition Details")
         header.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; margin-bottom: 10px;")
+        header.setWordWrap(True)
         self.container_layout.addWidget(header)
 
         # Status at the very top
@@ -151,6 +153,7 @@ class RequisitionPreview(QWidget):
         color = self._get_status_color(status)
         status_label = QLabel(f"📊 Status: {status.upper()}")
         status_label.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-weight: bold; color: {color};")
+        status_label.setWordWrap(True)
         layout.addWidget(status_label)
 
         return frame
@@ -165,12 +168,15 @@ class RequisitionPreview(QWidget):
 
         name_label = QLabel(f"• Name: {requester.name}")
         name_label.setStyleSheet(f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
+        name_label.setWordWrap(True)
         layout.addWidget(name_label)
 
         affiliation_label = QLabel(f"• Affiliation: {requester.affiliation}")
+        affiliation_label.setWordWrap(True)
         layout.addWidget(affiliation_label)
 
         group_label = QLabel(f"• Group: {requester.group_name}")
+        group_label.setWordWrap(True)
         layout.addWidget(group_label)
 
         return group
@@ -185,13 +191,13 @@ class RequisitionPreview(QWidget):
 
         # Expected Request
         if req.expected_request:
-            expected_request_str = req.expected_request.strftime("%Y-%m-%d %H:%M")
+            expected_request_str = format_date_short(req.expected_request) + " - " + format_time_12h(req.expected_request.time())
             expected_request_label = QLabel(f"• Expected Request: {expected_request_str}")
             layout.addWidget(expected_request_label)
 
         # Requested Date
         if req.datetime_requested:
-            requested_str = req.datetime_requested.strftime("%Y-%m-%d %H:%M")
+            requested_str = format_date_short(req.datetime_requested) + " - " + format_time_12h(req.datetime_requested.time())
             requested_label = QLabel(f"• Requested Date: {requested_str}")
             requested_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
             layout.addWidget(requested_label)
@@ -202,7 +208,7 @@ class RequisitionPreview(QWidget):
 
         # Expected Return
         if req.expected_return:
-            expected_return_str = req.expected_return.strftime("%Y-%m-%d %H:%M")
+            expected_return_str = format_date_short(req.expected_return) + " - " + format_time_12h(req.expected_return.time())
             expected_return_label = QLabel(f"• Expected Return: {expected_return_str}")
             layout.addWidget(expected_return_label)
 
@@ -218,10 +224,11 @@ class RequisitionPreview(QWidget):
 
         activity_label = QLabel(f"• Activity: {req.lab_activity_name}")
         activity_label.setStyleSheet(f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
+        activity_label.setWordWrap(True)
         layout.addWidget(activity_label)
 
         if req.lab_activity_date:
-            date_str = req.lab_activity_date.strftime("%Y-%m-%d")
+            date_str = format_date_short(req.lab_activity_date)
             date_label = QLabel(f"• Activity Date: {date_str}")
             layout.addWidget(date_label)
 
@@ -301,7 +308,7 @@ class RequisitionPreview(QWidget):
             return_processor = ReturnProcessor()
             summary = return_processor.get_requisition_return_summary(requisition_id)
 
-            if not summary or (summary['total_returned'] == 0 and summary['total_lost'] == 0):
+            if not summary or (summary['total_returned'] == 0 and summary['total_lost'] == 0 and summary['total_consumed'] == 0):
                 no_returns_label = QLabel("No return details available")
                 no_returns_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.TEXT_MUTED};")
                 layout.addWidget(no_returns_label)
@@ -314,6 +321,28 @@ class RequisitionPreview(QWidget):
                 layout.addWidget(returned_section)
 
                 for item in summary['returned_consumables']:
+                    item_label = QLabel(f"  • {item['item_name']} (x{item['quantity']})")
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+            # Display consumables consumed
+            if summary['consumed_items']:
+                consumed_section = QLabel("🔥 Consumables Consumed:")
+                consumed_section.setStyleSheet("font-weight: bold; font-size: 10pt; margin-top: 5px;")
+                layout.addWidget(consumed_section)
+
+                for item in summary['consumed_items']:
+                    item_label = QLabel(f"  • {item['item_name']} (x{item['quantity']})")
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+            # Display non-consumables returned
+            if summary['returned_non_consumables']:
+                returned_non_cons_section = QLabel("↩️ Non-Consumables Returned:")
+                returned_non_cons_section.setStyleSheet("font-weight: bold; font-size: 10pt; margin-top: 5px;")
+                layout.addWidget(returned_non_cons_section)
+
+                for item in summary['returned_non_consumables']:
                     item_label = QLabel(f"  • {item['item_name']} (x{item['quantity']})")
                     item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
                     layout.addWidget(item_label)

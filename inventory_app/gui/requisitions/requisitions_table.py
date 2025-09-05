@@ -14,6 +14,7 @@ from PyQt6.QtGui import QColor
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionRow
 from inventory_app.utils.logger import logger
+from inventory_app.utils.date_utils import format_date_short, format_time_12h
 
 
 class RequisitionsTable(QTableWidget):
@@ -54,22 +55,22 @@ class RequisitionsTable(QTableWidget):
         # Disable cell editing on double-click
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
-        # Enable word wrapping for better content display
-        self.setWordWrap(True)
+        # Disable global word wrapping - we'll enable it per cell for requester column
+        self.setWordWrap(False)
 
-        # Header properties - Responsive design with constraints
+        # Header properties - Fixed widths for status and date, interactive for requester
         header = self.horizontalHeader()
         if header:
             header.setStretchLastSection(False)  # Don't stretch last section
             # Set column sizing modes
-            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Status - allow resize but constrain
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Requester - allow resize but constrain
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)        # Status - fixed width
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Requester - allow resize with constraints
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)        # Date - fixed width
 
-        # Set column widths with constraints for word wrapping
-        self.setColumnWidth(0, 200)  # Status - wider to accommodate multiple statuses
-        self.setColumnWidth(1, 240)  # Requester - reasonable width for names
-        self.setColumnWidth(2, 150)  # Requested Date - fixed width for consistency
+        # Set column widths
+        self.setColumnWidth(0, 150)  # Status - fixed
+        self.setColumnWidth(1, 240)  # Requester - max width with word wrap
+        self.setColumnWidth(2, 220)  # Requested Date - fixed
 
         # Enable automatic row height adjustment for wrapped content
         vertical_header = self.verticalHeader()
@@ -102,14 +103,16 @@ class RequisitionsTable(QTableWidget):
                 self.setItem(row_position, 0, status_item)
                 self._color_status_item(status_item, row_data.status)
 
-                # Requester (Column 1)
+                # Requester (Column 1) - Word wrapping will be enabled globally
                 requester_item = QTableWidgetItem(row_data.requester_name)
                 requester_item.setData(Qt.ItemDataRole.UserRole, row_data.id)  # Store ID for selection
                 self.setItem(row_position, 1, requester_item)
 
                 # Requested Date (Column 2) - Show actual date or "Reserved"
                 if row_data.datetime_requested:
-                    requested_date_str = row_data.datetime_requested.strftime("%Y-%m-%d %H:%M")
+                    date_str = format_date_short(row_data.datetime_requested)
+                    time_str = format_time_12h(row_data.datetime_requested.time())
+                    requested_date_str = f"{date_str}   -   {time_str}"
                 else:
                     requested_date_str = "Reserved"
                 requested_item = QTableWidgetItem(requested_date_str)
@@ -214,33 +217,14 @@ class RequisitionsTable(QTableWidget):
             self.requisition_double_clicked.emit(requisition_id)
 
     def resize_columns_to_contents(self) -> None:
-        """Resize columns to fit their contents with word wrapping constraints."""
-        # Temporarily disable word wrap to get accurate content width measurements
-        original_word_wrap = self.wordWrap()
-        self.setWordWrap(False)
+        """Resize requester column to fit content with word wrapping."""
+        # Enable word wrapping for proper text display in requester column
+        self.setWordWrap(True)
 
-        # Resize columns to contents
-        for column in range(self.columnCount()):
-            self.resizeColumnToContents(column)
+        # Only resize the requester column (column 1) since others are fixed width
+        # This allows the column to expand to fit content but won't exceed max width
+        self.resizeColumnToContents(1)
 
-        # Restore word wrap
-        self.setWordWrap(original_word_wrap)
-
-        # Apply constraints to prevent excessive width while allowing word wrapping
-        current_width_0 = self.columnWidth(0)
-        current_width_1 = self.columnWidth(1)
-
-        # Constrain status column (allow some growth but not excessive)
-        if current_width_0 > 250:
-            self.setColumnWidth(0, 250)
-        elif current_width_0 < 180:
-            self.setColumnWidth(0, 180)
-
-        # Constrain requester column (allow some growth but not excessive)
-        if current_width_1 > 280:
-            self.setColumnWidth(1, 280)
-        elif current_width_1 < 200:
-            self.setColumnWidth(1, 200)
-
-        # Keep date column fixed
-        self.setColumnWidth(2, 150)
+        # Ensure requester column doesn't exceed maximum width
+        if self.columnWidth(1) > 240:
+            self.setColumnWidth(1, 240)

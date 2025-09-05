@@ -68,6 +68,9 @@ class InventoryTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSortingEnabled(True)
 
+        # Disable cell editing on double-click
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
         # Configure header
         header = self.horizontalHeader()
         if header:

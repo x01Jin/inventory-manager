@@ -262,7 +262,7 @@ class BaseRequisitionDialog(QDialog):
         )
         self.setModal(True)
         self.setMinimumSize(900, 600)  # Set minimum size for usability
-        self.resize(1000, 700)  # Default window size
+        self.resize(1280, 700)  # Default window size
 
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
@@ -277,7 +277,7 @@ class BaseRequisitionDialog(QDialog):
 
         # Left section: Vertical splitter containing left/middle panels and schedule
         left_section = QWidget()
-        left_section.setMinimumWidth(600)  # Ensure minimum width for left section
+        left_section.setMinimumWidth(500)  # Ensure minimum width for left section
         left_layout = QVBoxLayout(left_section)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
@@ -289,17 +289,17 @@ class BaseRequisitionDialog(QDialog):
 
         # Left panel
         left_panel = self._create_requisition_details_panel()
-        left_panel.setMinimumWidth(300)  # Minimum width for details panel
+        left_panel.setMinimumWidth(200)  # Minimum width for details panel
         top_splitter.addWidget(left_panel)
 
         # Middle panel
         middle_panel = self._create_item_selection_panel()
-        middle_panel.setMinimumWidth(350)  # Minimum width for item selection panel
+        middle_panel.setMinimumWidth(400)  # Minimum width for item selection panel
         top_splitter.addWidget(middle_panel)
 
-        # Set top splitter to equal proportions initially
-        top_splitter.setStretchFactor(0, 1)
-        top_splitter.setStretchFactor(1, 1)
+        # Set top splitter proportions (25% left, 35% middle)
+        top_splitter.setStretchFactor(0, 25)
+        top_splitter.setStretchFactor(1, 35)
 
         # Schedule panel below left and middle panels
         schedule_panel = self._create_requisition_schedule_panel()
@@ -314,12 +314,12 @@ class BaseRequisitionDialog(QDialog):
 
         # Right section: Right panel spanning full height
         right_panel = self._create_selected_items_summary()
-        right_panel.setMinimumWidth(250)  # Minimum width for summary panel
+        right_panel.setMinimumWidth(400)  # Minimum width for summary panel
         main_splitter.addWidget(right_panel)
 
-        # Set main splitter proportions (70% left, 30% right)
-        main_splitter.setStretchFactor(0, 7)
-        main_splitter.setStretchFactor(1, 3)
+        # Set main splitter proportions (65% left, 35% right)
+        main_splitter.setStretchFactor(0, 65)
+        main_splitter.setStretchFactor(1, 35)
 
         # Buttons (abstract - implemented by subclasses)
         self._setup_buttons(layout)
@@ -363,6 +363,7 @@ class BaseRequisitionDialog(QDialog):
         self.available_items_list = QListWidget()
         self.available_items_list.setMinimumHeight(100)  # Minimum height for list
         self.available_items_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.available_items_list.setWordWrap(True)  # Enable text wrapping for long item names
         self.available_items_list.itemDoubleClicked.connect(self.add_item_to_selection)
         items_layout.addWidget(self.available_items_list)
 
@@ -391,6 +392,7 @@ class BaseRequisitionDialog(QDialog):
         self.selected_items_list = QListWidget()
         self.selected_items_list.setMinimumHeight(100)  # Minimum height for list
         self.selected_items_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.selected_items_list.setWordWrap(True)  # Enable text wrapping for long item names
         self.selected_items_list.itemDoubleClicked.connect(
             self.edit_selected_item_amount
         )
@@ -400,6 +402,7 @@ class BaseRequisitionDialog(QDialog):
         self.items_summary = QLabel("No items selected")
         self.items_summary.setStyleSheet("font-weight: bold; padding: 5px;")
         self.items_summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.items_summary.setWordWrap(True)  # Enable text wrapping for long summaries
         layout.addWidget(self.items_summary)
 
         # Edit amount button
@@ -457,9 +460,8 @@ class BaseRequisitionDialog(QDialog):
 
                 display_text = (
                     f"{item['item_name']} "
-                    f"(Batch #{item['batch_number']}) - "
-                    f"Available: {real_time_stock} "
-                    f"[{item['category_name']}]"
+                    f"[{item['category_name']}] - "
+                    f"available: {real_time_stock}"
                 )
 
                 # Update item data with real-time stock for use in selection
@@ -586,8 +588,9 @@ class BaseRequisitionDialog(QDialog):
         total_quantity = 0
         for item in self.selected_items:
             display_text = (
-                f"{item['item_name']} (Batch #{item['batch_number']}) - "
-                f"Qty: {item['quantity']} [{item['category_name']}]"
+                f"{item['item_name']} "
+                f"[{item['category_name']}] - "
+                f"qty: {item['quantity']}"
             )
 
             list_item = QListWidgetItem(display_text)

@@ -335,7 +335,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             QMessageBox.information(
                 self,
                 "Success",
-                f"Requisition created successfully!\nID: {requisition_id}",
+                "Requisition created successfully!",
             )
 
             # Refresh available items to show updated stock

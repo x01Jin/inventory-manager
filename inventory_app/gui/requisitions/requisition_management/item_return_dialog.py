@@ -11,17 +11,20 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QMessageBox, QInputDialog, QSpinBox, QWidget
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from .return_processor import ReturnProcessor, ReturnItem
 from inventory_app.database.models import Requisition, Requester
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.utils.date_utils import parse_datetime_iso, parse_date_iso
+from inventory_app.utils.date_utils import parse_datetime_iso, parse_date_iso, format_date_short
 
 
 class ReturnItemWidget(QWidget):
     """Simplified widget for handling return/loss input for a single item."""
+
+    # Signal emitted when return/loss values change
+    valueChanged = pyqtSignal()
 
     def __init__(self, return_item: ReturnItem, item_name: str, parent=None):
         super().__init__(parent)
@@ -62,7 +65,7 @@ class ReturnItemWidget(QWidget):
             return_layout.addWidget(QLabel("✅ Return unused:"))
             self.returned_spin = QSpinBox()
             self.returned_spin.setRange(0, self.return_item.quantity_requested)
-            self.returned_spin.setValue(self.return_item.quantity_requested)  # Default to all unused
+            self.returned_spin.setValue(0)  # Default to none returned (all consumed)
             self.returned_spin.setFixedWidth(60)
             self.returned_spin.valueChanged.connect(self._on_return_changed)
             return_layout.addWidget(self.returned_spin)
@@ -138,6 +141,9 @@ class ReturnItemWidget(QWidget):
                     margin: 2px;
                 }
             """)
+
+        # Emit signal to notify parent dialog of changes
+        self.valueChanged.emit()
 
     def _get_summary_text(self) -> str:
         """Get summary text for this item."""
@@ -229,7 +235,7 @@ class ItemReturnDialog(QDialog):
         info_layout.addWidget(activity_label)
 
         if self.requisition and self.requisition.lab_activity_date:
-            date_text = f"📅 Activity Date: {self.requisition.lab_activity_date.strftime('%Y-%m-%d')}"
+            date_text = f"📅 Activity Date: {format_date_short(self.requisition.lab_activity_date)}"
             date_label = QLabel(date_text)
             info_layout.addWidget(date_label)
 
@@ -300,6 +306,8 @@ class ItemReturnDialog(QDialog):
             for return_item in self.return_items:
                 item_name = item_names.get(return_item.item_id, f"Item #{return_item.item_id}")
                 widget = ReturnItemWidget(return_item, item_name, self)
+                # Connect widget value changes to dialog summary updates
+                widget.valueChanged.connect(self._update_summary)
                 self.items_layout.addWidget(widget)
                 self.item_widgets.append(widget)
 
@@ -329,24 +337,23 @@ class ItemReturnDialog(QDialog):
             return
 
         total_items = len(self.return_items)
-        completed_items = sum(1 for item in self.return_items if item.is_fully_processed())
 
         # Separate consumables and non-consumables for summary
         consumables = [item for item in self.return_items if item.is_consumable]
         non_consumables = [item for item in self.return_items if not item.is_consumable]
 
         summary_parts = [
-            f"Items: {completed_items}/{total_items} complete"
+            f"Items: {total_items} total     "
         ]
 
         # Add appropriate labels
         if consumables:
             total_returned = sum(item.quantity_returned for item in consumables)
-            summary_parts.append(f"Consumables returned: {total_returned}")
+            summary_parts.append(f"     Consumables returned: {total_returned}     ")
 
         if non_consumables:
             total_lost = sum(item.quantity_lost for item in non_consumables)
-            summary_parts.append(f"Non-consumables lost: {total_lost}")
+            summary_parts.append(f"     Non-consumables lost: {total_lost}     ")
 
         self.summary_label.setText(" | ".join(summary_parts))
 

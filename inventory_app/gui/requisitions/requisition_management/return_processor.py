@@ -34,9 +34,16 @@ class ReturnItem:
 
     def is_fully_processed(self) -> bool:
         """Check if all requested quantity has been processed."""
-        # User has made a decision by setting the spinbox value
-        # UI already constrains values to valid ranges (0 to quantity_requested)
-        return True
+        # For consumables: user has made a decision by setting quantity_returned
+        # For non-consumables: user has made a decision by setting quantity_lost
+        # Both are initialized to valid defaults (0 for lost, requested for returned)
+        # But we consider it processed if the user has explicitly interacted with it
+        # Since the UI initializes with valid values, we need to track if user changed anything
+        # For now, consider it processed if quantities are within valid ranges
+        if self.is_consumable:
+            return 0 <= self.quantity_returned <= self.quantity_requested
+        else:
+            return 0 <= self.quantity_lost <= self.quantity_requested
 
 
 class ReturnProcessor:

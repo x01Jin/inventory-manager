@@ -52,6 +52,9 @@ class RequesterTable(QTableWidget):
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setSortingEnabled(True)
 
+        # Disable cell editing on double-click
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
         # Header properties
         header = self.horizontalHeader()
         if header:

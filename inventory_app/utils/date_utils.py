@@ -133,7 +133,7 @@ def format_time_12h(time_obj: time) -> str:
         hour_12 = hour - 12
         am_pm = "PM"
 
-    return f"{hour_12}:{minute:02d} {am_pm}"
+    return f"{hour_12:02d}:{minute:02d} {am_pm}"
 
 
 def parse_date_iso(date_str: str) -> Optional[date]:
