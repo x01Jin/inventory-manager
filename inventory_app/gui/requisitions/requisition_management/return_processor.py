@@ -114,9 +114,15 @@ class ReturnProcessor:
             self._update_requisition_status_final(requisition_id)
 
             # Log final activity
-            self._log_final_return_activity(
-                requisition_id, returned_items, lost_items, editor_name
+            success = requisition_activity_manager.log_requisition_returned(
+                requisition_id=requisition_id,
+                user_name=editor_name
             )
+
+            if success:
+                logger.info(f"Logged final return activity for requisition {requisition_id}")
+            else:
+                logger.warning(f"Failed to log final return activity for requisition {requisition_id}")
 
             logger.info(f"Successfully processed final returns for requisition {requisition_id}")
             return True
@@ -234,50 +240,6 @@ class ReturnProcessor:
             logger.info(f"Updated requisition {requisition_id} status to final 'returned'")
         except Exception as e:
             logger.error(f"Failed to update requisition {requisition_id} status: {e}")
-
-    def _log_final_return_activity(self, requisition_id: int, returned_items: List[str],
-                                 lost_items: List[str], editor_name: str) -> None:
-        """Log final return activity."""
-        try:
-            # Get requester name for the activity log
-            requester_name = self._get_requester_name(requisition_id)
-
-            # Format summaries
-            returned_summary = ", ".join(returned_items) if returned_items else "None"
-            lost_summary = ", ".join(lost_items) if lost_items else "None"
-
-            combined_summary = f"Returned: {returned_summary}; Lost: {lost_summary}"
-
-            # Log the activity
-            success = requisition_activity_manager.log_requisition_returned(
-                requisition_id=requisition_id,
-                requester_name=requester_name,
-                returned_items=combined_summary,
-                user_name=editor_name
-            )
-
-            if success:
-                logger.info(f"Logged final return activity for requisition {requisition_id}")
-            else:
-                logger.warning(f"Failed to log final return activity for requisition {requisition_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to log final return activity: {e}")
-
-    def _get_requester_name(self, requisition_id: int) -> str:
-        """Get requester name for activity logging."""
-        try:
-            query = """
-            SELECT b.name
-            FROM Requesters b
-            JOIN Requisitions r ON b.id = r.requester_id
-            WHERE r.id = ?
-            """
-            rows = db.execute_query(query, (requisition_id,))
-            return rows[0]['name'] if rows else "Unknown"
-        except Exception as e:
-            logger.error(f"Failed to get requester name for requisition {requisition_id}: {e}")
-            return "Unknown"
 
     def get_requisition_items_for_return(self, requisition_id: int) -> List[ReturnItem]:
         """

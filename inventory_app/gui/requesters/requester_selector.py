@@ -79,8 +79,8 @@ class RequesterSelector(QDialog):
         # Set column widths
         self.requesters_table.setColumnWidth(0, 100)  # Requisitions
         self.requesters_table.setColumnWidth(1, 200)  # Name
-        self.requesters_table.setColumnWidth(2, 150)  # Affiliation
-        self.requesters_table.setColumnWidth(3, 150)  # Group
+        self.requesters_table.setColumnWidth(2, 250)  # Affiliation
+        self.requesters_table.setColumnWidth(3, 250)  # Group
 
         table_layout.addWidget(self.requesters_table)
         layout.addWidget(table_group)

@@ -64,8 +64,8 @@ class RequesterTable(QTableWidget):
         # Set column widths
         self.setColumnWidth(0, 100)  # Requisitions
         self.setColumnWidth(1, 200)  # Name
-        self.setColumnWidth(2, 150)  # Affiliation
-        self.setColumnWidth(3, 150)  # Group
+        self.setColumnWidth(2, 250)  # Affiliation
+        self.setColumnWidth(3, 250)  # Group
         self.setColumnWidth(4, 100)  # Created
 
         # Connect signals
@@ -104,7 +104,12 @@ class RequesterTable(QTableWidget):
                 self.setItem(row_position, 3, QTableWidgetItem(row_data.group_name))
 
                 # Created date
-                created_str = row_data.created_date.strftime("%Y-%m-%d") if row_data.created_date else ""
+                created_str = ""
+                if row_data.created_datetime:
+                    from inventory_app.utils.date_utils import format_date_short, format_time_12h
+                    date_str = format_date_short(row_data.created_datetime)
+                    time_str = format_time_12h(row_data.created_datetime.time())
+                    created_str = f"{date_str} at {time_str}"
                 self.setItem(row_position, 4, QTableWidgetItem(created_str))
 
             logger.info(f"Populated table with {len(requesters)} requesters")
@@ -194,5 +199,5 @@ class RequesterTable(QTableWidget):
         # Ensure some columns have reasonable minimum widths
         self.setColumnWidth(0, max(self.columnWidth(0), 100))  # Requisitions
         self.setColumnWidth(1, max(self.columnWidth(1), 200))  # Name
-        self.setColumnWidth(2, max(self.columnWidth(2), 150))  # Affiliation
-        self.setColumnWidth(3, max(self.columnWidth(3), 150))  # Group
+        self.setColumnWidth(2, max(self.columnWidth(2), 200))  # Affiliation
+        self.setColumnWidth(3, max(self.columnWidth(3), 200))  # Group

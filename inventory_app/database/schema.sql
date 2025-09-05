@@ -114,7 +114,8 @@ CREATE TABLE Requesters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     affiliation TEXT NOT NULL,
-    group_name TEXT NOT NULL
+    group_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 9. Requisitions: Requesting records with reservation support

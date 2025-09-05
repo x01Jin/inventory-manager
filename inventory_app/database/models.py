@@ -539,6 +539,7 @@ class Requester:
     name: str = ""
     affiliation: str = ""
     group_name: str = ""
+    created_at: Optional[datetime] = None
 
     def save(self) -> bool:
         """Save or update the requester."""
@@ -560,7 +561,14 @@ class Requester:
         """Get all requesters."""
         try:
             rows = db.execute_query("SELECT * FROM Requesters ORDER BY name")
-            return [cls(**dict(row)) for row in rows]
+            requesters = []
+            for row in rows:
+                req_dict = dict(row)
+                # Convert datetime string to datetime object
+                if req_dict.get('created_at'):
+                    req_dict['created_at'] = datetime.fromisoformat(req_dict['created_at'])
+                requesters.append(cls(**req_dict))
+            return requesters
         except Exception as e:
             logger.error(f"Failed to get requesters: {e}")
             return []
@@ -570,7 +578,15 @@ class Requester:
         """Get requester by ID."""
         try:
             rows = db.execute_query("SELECT * FROM Requesters WHERE id = ?", (requester_id,))
-            return cls(**dict(rows[0])) if rows else None
+            if not rows:
+                return None
+
+            req_dict = dict(rows[0])
+            # Convert datetime string to datetime object
+            if req_dict.get('created_at'):
+                req_dict['created_at'] = datetime.fromisoformat(req_dict['created_at'])
+
+            return cls(**req_dict)
         except Exception as e:
             logger.error(f"Failed to get requester {requester_id}: {e}")
             return None

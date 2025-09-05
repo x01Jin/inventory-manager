@@ -1,7 +1,7 @@
 """
 Requisition Activity Manager - Enhanced activity logging for requisitions.
 
-Provides rich activity descriptions that integrate with the existing Activity_Log system
+Provides activity descriptions that integrate with the existing Activity_Log system
 for dashboard visibility and audit trails. Activity descriptions are immutable once created.
 """
 
@@ -12,10 +12,10 @@ from inventory_app.utils.logger import logger
 
 class RequisitionActivityManager:
     """
-    Manages rich activity descriptions for requisition operations.
+    Manages activity descriptions for requisition operations.
 
-    Integrates with the existing Activity_Log system to provide detailed,
-    immutable activity descriptions for dashboard display and audit purposes.
+    Integrates with the existing Activity_Log system to provide
+    activity descriptions for dashboard display and audit purposes.
     """
 
     def __init__(self):
@@ -40,7 +40,7 @@ class RequisitionActivityManager:
             bool: True if logged successfully
         """
         try:
-            # Create rich activity description
+            # Create activity description
             description = self._format_creation_description(
                 requester_name,
             )
@@ -87,7 +87,7 @@ class RequisitionActivityManager:
             bool: True if logged successfully
         """
         try:
-            # Create rich activity description
+            # Create activity description
             description = self._format_update_description(
                 requester_name,
             )
@@ -119,7 +119,6 @@ class RequisitionActivityManager:
     def log_requisition_returned(
         self,
         requisition_id: int,
-        requester_name: str,
         user_name: str = "System",
     ) -> bool:
         """
@@ -127,14 +126,15 @@ class RequisitionActivityManager:
 
         Args:
             requisition_id: ID of the returned requisition
-            requester_name: Name of the requester
-            returned_items: Summary of returned items
             user_name: Name of the user performing the action
 
         Returns:
             bool: True if logged successfully
         """
         try:
+            # Get requester name from database
+            requester_name = self._get_requester_name(requisition_id)
+
             description = f"finalized requisition for {requester_name}"
 
             success = activity_logger.log_activity(
@@ -215,13 +215,13 @@ class RequisitionActivityManager:
         requester_name: str,
     ) -> str:
         """
-        Format a rich description for requisition creation.
+        Format a description for requisition creation.
 
         Args:
             requisition_id: ID of the requisition
             requester_name: Name of the requester
             activity_name: Name of the activity
-            activity_description: Detailed description
+            activity_description: description
             items_summary: Summary of items
 
         Returns:
@@ -234,13 +234,13 @@ class RequisitionActivityManager:
         requester_name: str,
     ) -> str:
         """
-        Format a rich description for requisition updates.
+        Format a description for requisition updates.
 
         Args:
             requisition_id: ID of the requisition
             requester_name: Name of the requester
             activity_name: Name of the activity
-            activity_description: Detailed description
+            activity_description: description
             items_summary: Summary of items
             changes_summary: Summary of changes made
 
@@ -277,6 +277,31 @@ class RequisitionActivityManager:
             item_parts.append(f"{item_name} (x{quantity})")
 
         return ", ".join(item_parts)
+
+    def _get_requester_name(self, requisition_id: int) -> str:
+        """
+        Get requester name for activity logging.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            str: Requester name or "Unknown" if not found
+        """
+        try:
+            from inventory_app.database.connection import db
+
+            query = """
+            SELECT r.name
+            FROM Requesters r
+            JOIN Requisitions req ON r.id = req.requester_id
+            WHERE req.id = ?
+            """
+            rows = db.execute_query(query, (requisition_id,))
+            return rows[0]['name'] if rows else "Unknown"
+        except Exception as e:
+            logger.error(f"Failed to get requester name for requisition {requisition_id}: {e}")
+            return "Unknown"
 
 
 # Global instance for easy access

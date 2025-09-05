@@ -5,7 +5,7 @@ Allows editing sizes, brands, and suppliers.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton,
-    QTabWidget, QDialog, QLineEdit, QDialogButtonBox, QMessageBox, QLabel, QComboBox
+    QTabWidget, QDialog, QLineEdit, QDialogButtonBox, QMessageBox, QLabel
 )
 
 from inventory_app.database.models import Size, Brand, Supplier, Category

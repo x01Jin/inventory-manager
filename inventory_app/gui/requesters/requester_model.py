@@ -5,7 +5,7 @@ Uses composition pattern with RequesterController.
 """
 
 from typing import List, Optional
-from datetime import date
+from datetime import datetime
 from dataclasses import dataclass
 
 from inventory_app.database.models import Requester as RequesterDB
@@ -21,7 +21,7 @@ class RequesterRow:
     name: str = ""
     affiliation: str = ""
     group_name: str = ""
-    created_date: Optional[date] = None
+    created_datetime: Optional[datetime] = None
     requisitions_count: int = 0
 
 
@@ -73,7 +73,7 @@ class RequesterModel:
                     name=requester.name,
                     affiliation=requester.affiliation,
                     group_name=requester.group_name,
-                    created_date=None,  # We don't have this field in the current Requester model
+                    created_datetime=requester.created_at,
                     requisitions_count=requisition_counts.get(requester.id, 0)
                 )
                 rows.append(row)
