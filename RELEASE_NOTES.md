@@ -4,12 +4,15 @@
 
 ## Summary
 
-- **2** commits
-- **66** files changed
-- **16,816** insertions (+)
+- **3** commits
+- **72** files changed
+- **17,992** insertions (+)
 - **0** deletions (-)
 
 ## Features
+
+- **Implement comprehensive release notes generation system** (55f972c)
+  *Author: copilot-swe-agent[bot]*
 
 - **Add activity logging for requester CRUD operations** (eb329de)
   - Replace old activity_logger in model with new manager
@@ -27,6 +30,11 @@
 ### Files Modified
 
 - `.gitignore`
+- `COMPREHENSIVE_RELEASE_NOTES.md`
+- `RELEASE_NOTES.json`
+- `RELEASE_NOTES.md`
+- `RELEASE_NOTES_README.md`
+- `generate_release_notes.py`
 - `inventory_app/database/connection.py`
 - `inventory_app/database/models.py`
 - `inventory_app/database/schema.sql`
@@ -91,4 +99,5 @@
 - `inventory_app/utils/date_utils.py`
 - `inventory_app/utils/internal_time.py`
 - `inventory_app/utils/logger.py`
+- `release_notes_generator.py`
 - `requirements.txt`
