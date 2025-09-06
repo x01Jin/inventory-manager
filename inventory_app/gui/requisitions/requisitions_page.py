@@ -515,5 +515,6 @@ class RequisitionsPage(QWidget):
 
     def _on_filters_cleared(self):
         """Handle filters cleared event."""
-        logger.debug("Filters cleared, refreshing data")
+        logger.debug("Filters cleared, clearing model and refreshing data")
+        self.model.clear_filters()
         self.refresh_data()
