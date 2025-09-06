@@ -3,10 +3,11 @@ SQL Query Builder for report generation.
 Extracts complex SQL construction logic into a dedicated, testable class.
 """
 
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.gui.reports.report_utils import date_formatter
 
 
 class ReportQueryBuilder:
@@ -130,16 +131,18 @@ class ReportQueryBuilder:
             raise
 
     def _build_optimized_period_columns(self, start_date: date, end_date: date, granularity: str) -> str:
-        """Build optimized period columns using pre-computed ranges."""
+        """Build optimized period columns using correct logic from report_utils."""
         try:
-            # Pre-compute period ranges for better performance
-            period_ranges = self._get_period_ranges(start_date, end_date, granularity)
+            # Use the correct period generation from report_utils
+            period_keys = date_formatter.get_period_keys(start_date, end_date, granularity)
 
-            if not period_ranges:
+            if not period_keys:
                 return ""
 
             column_parts = []
-            for period_key, (period_start, period_end) in period_ranges.items():
+            for period_key in period_keys:
+                # Parse period key to get start and end dates
+                period_start, period_end = self._parse_period_key_to_dates(period_key, start_date, end_date, granularity)
                 escaped_key = period_key.replace("'", "''")
                 column_parts.append(f"""
                 SUM(CASE WHEN r.datetime_requested >= '{period_start}' AND r.datetime_requested < '{period_end}'
@@ -151,70 +154,94 @@ class ReportQueryBuilder:
             logger.error(f"Failed to build optimized period columns: {e}")
             return ""
 
-    def _get_period_ranges(self, start_date: date, end_date: date, granularity: str) -> Dict[str, Tuple[str, str]]:
-        """Pre-compute period ranges for the given granularity."""
+    def _parse_period_key_to_dates(self, period_key: str, report_start: date, report_end: date, granularity: str) -> Tuple[str, str]:
+        """Parse a period key and return the corresponding start and end dates for SQL queries."""
         from datetime import timedelta
 
-        ranges = {}
-        current = start_date
+        try:
+            if granularity == "daily":
+                # Format: '2023-01-01'
+                period_date = date.fromisoformat(period_key)
+                next_date = period_date + timedelta(days=1)
+                return period_date.isoformat(), next_date.isoformat()
 
-        while current <= end_date:
-            if granularity == 'daily':
-                period_key = current.isoformat()
-                next_date = current + timedelta(days=1)
-                ranges[period_key] = (current.isoformat(), next_date.isoformat())
-                current = next_date
-
-            elif granularity == 'weekly':
-                # Calculate week start (Monday)
-                week_start = current - timedelta(days=current.weekday())
-                week_end = week_start + timedelta(days=7)
-                week_num = (week_start.day - 1) // 7 + 1
-                period_key = f"{week_start.year}-{week_start.month:02d}-W{week_num}"
-                ranges[period_key] = (week_start.isoformat(), week_end.isoformat())
-                current = week_end
-
-            elif granularity == 'monthly':
-                period_key = f"{current.year}-{current.month:02d}"
-                if current.month == 12:
-                    next_date = date(current.year + 1, 1, 1)
+            elif granularity == "weekly":
+                if "to" in period_key:
+                    # Excess period: '2023-01-01to2023-01-03'
+                    start_str, end_str = period_key.split('to')
+                    start_date = date.fromisoformat(start_str)
+                    end_date = date.fromisoformat(end_str)
+                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
                 else:
-                    next_date = date(current.year, current.month + 1, 1)
-                ranges[period_key] = (current.isoformat(), next_date.isoformat())
-                current = next_date
+                    # Main week: '2023-01-W1'
+                    year_str, month_str, week_part = period_key.split('-')
+                    year, month = int(year_str), int(month_str)
+                    week_num = int(week_part.replace('W', ''))
 
-            elif granularity == 'quarterly':
-                # Calculate quarter start
-                quarter = ((current.month - 1) // 3) + 1
-                period_key = f"{current.year}-Q{quarter}"
+                    # Find the Monday of the specified week
+                    first_day_of_month = date(year, month, 1)
+                    # Find first Monday of the month
+                    days_to_first_monday = (7 - first_day_of_month.weekday()) % 7
+                    first_monday = first_day_of_month + timedelta(days=days_to_first_monday)
 
-                # Calculate next quarter start
-                next_quarter_month = ((quarter) * 3) + 1
-                if next_quarter_month > 12:
-                    next_date = date(current.year + 1, 1, 1)
+                    # Calculate the Monday of the target week
+                    week_monday = first_monday + timedelta(days=(week_num - 1) * 7)
+                    week_sunday = week_monday + timedelta(days=6)
+
+                    return week_monday.isoformat(), (week_sunday + timedelta(days=1)).isoformat()
+
+            elif granularity == "monthly":
+                if "to" in period_key:
+                    # Excess period: '2023-01-01to2023-01-15'
+                    start_str, end_str = period_key.split('to')
+                    start_date = date.fromisoformat(start_str)
+                    end_date = date.fromisoformat(end_str)
+                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
                 else:
-                    next_date = date(current.year, next_quarter_month, 1)
+                    # Main month: '2023-01'
+                    year_str, month_str = period_key.split('-')
+                    year, month = int(year_str), int(month_str)
+                    month_start = date(year, month, 1)
+                    if month == 12:
+                        month_end = date(year + 1, 1, 1)
+                    else:
+                        month_end = date(year, month + 1, 1)
+                    return month_start.isoformat(), month_end.isoformat()
 
-                ranges[period_key] = (current.isoformat(), next_date.isoformat())
-                current = next_date
+            elif granularity == "quarterly":
+                if "to" in period_key:
+                    # Excess period: '2023-01-01to2023-03-15'
+                    start_str, end_str = period_key.split('to')
+                    start_date = date.fromisoformat(start_str)
+                    end_date = date.fromisoformat(end_str)
+                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
+                else:
+                    # Main quarter: '2023-Q1'
+                    year_str, quarter_str = period_key.split('-Q')
+                    year, quarter = int(year_str), int(quarter_str)
+                    quarter_start_month = (quarter - 1) * 3 + 1
+                    quarter_start = date(year, quarter_start_month, 1)
+                    quarter_end_month = quarter * 3 + 1
+                    if quarter_end_month > 12:
+                        quarter_end = date(year + 1, 1, 1)
+                    else:
+                        quarter_end = date(year, quarter_end_month, 1)
+                    return quarter_start.isoformat(), quarter_end.isoformat()
 
-            elif granularity in ['yearly', 'multi_year']:
-                period_key = str(current.year)
-                next_date = date(current.year + 1, 1, 1)
-                ranges[period_key] = (current.isoformat(), next_date.isoformat())
-                current = next_date
+            elif granularity in ["yearly", "multi_year"]:
+                # Year: '2023'
+                year = int(period_key)
+                year_start = date(year, 1, 1)
+                year_end = date(year + 1, 1, 1)
+                return year_start.isoformat(), year_end.isoformat()
 
             else:
-                # Default to monthly
-                period_key = f"{current.year}-{current.month:02d}"
-                if current.month == 12:
-                    next_date = date(current.year + 1, 1, 1)
-                else:
-                    next_date = date(current.year, current.month + 1, 1)
-                ranges[period_key] = (current.isoformat(), next_date.isoformat())
-                current = next_date
+                # Default fallback
+                return report_start.isoformat(), report_end.isoformat()
 
-        return ranges
+        except Exception as e:
+            logger.error(f"Failed to parse period key '{period_key}': {e}")
+            return report_start.isoformat(), report_end.isoformat()
 
     def _build_report_params(self, start_date: date, end_date: date, granularity: str,
                            grade_filter: str, section_filter: str,
