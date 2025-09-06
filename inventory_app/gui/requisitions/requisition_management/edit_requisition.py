@@ -383,11 +383,18 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                     "Please verify stock levels manually."
                 )
 
+            # Get editor name from user
+            editor_name = self.get_editor_name()
+            if not editor_name:
+                QMessageBox.warning(self, "Required", "Editor name is required.")
+                return
+
             # Log activity
             from inventory_app.services.requisition_activity import requisition_activity_manager
             requisition_activity_manager.log_requisition_updated(
                 requisition_id=self.requisition_id,
                 requester_name=self.selected_requester.name,
+                user_name=editor_name,
             )
 
             logger.info(f"Requisition {self.requisition_id} updated successfully")

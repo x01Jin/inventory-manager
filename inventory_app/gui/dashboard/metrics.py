@@ -64,13 +64,18 @@ class MetricsManager:
             # Total stock
             stock_query = """
             SELECT
-                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(disposed.disposed_qty, 0) as total_stock
+                COALESCE(SUM(ib.quantity_received), 0) -
+                COALESCE(movements.total_consumed, 0) -
+                COALESCE(movements.total_disposed, 0) +
+                COALESCE(movements.total_returned, 0) as total_stock
             FROM Item_Batches ib
             LEFT JOIN (
-                SELECT SUM(quantity) as disposed_qty
+                SELECT
+                    SUM(CASE WHEN movement_type = 'CONSUMPTION' THEN quantity ELSE 0 END) as total_consumed,
+                    SUM(CASE WHEN movement_type = 'DISPOSAL' THEN quantity ELSE 0 END) as total_disposed,
+                    SUM(CASE WHEN movement_type = 'RETURN' THEN quantity ELSE 0 END) as total_returned
                 FROM Stock_Movements
-                WHERE movement_type = 'DISPOSAL'
-            ) disposed ON 1=1
+            ) movements ON 1=1
             WHERE ib.disposal_date IS NULL
             """
             stock_result = db.execute_query(stock_query)
@@ -80,9 +85,12 @@ class MetricsManager:
             low_stock_query = """
             SELECT COUNT(*) as count FROM (
                 SELECT ib.item_id,
-                        SUM(ib.quantity_received) - COALESCE(SUM(sm.quantity), 0) as current_stock
+                        SUM(ib.quantity_received) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END), 0) as current_stock
                 FROM Item_Batches ib
-                LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
+                LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
                 WHERE ib.disposal_date IS NULL
                 GROUP BY ib.item_id
                 HAVING current_stock < 10 AND current_stock > 0

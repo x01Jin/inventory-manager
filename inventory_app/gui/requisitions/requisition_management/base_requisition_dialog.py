@@ -614,6 +614,25 @@ class BaseRequisitionDialog(QDialog):
             "Subclasses must implement update_create_button_state"
         )
 
+    def get_editor_name(self) -> str:
+        """
+        Get editor name from user input dialog.
+
+        Returns:
+            str: Editor name or empty string if cancelled
+        """
+        from PyQt6.QtWidgets import QInputDialog
+
+        editor_name, ok = QInputDialog.getText(
+            self,
+            "Editor Information",
+            "Enter your name/initials (required):"
+        )
+
+        if ok and editor_name.strip():
+            return editor_name.strip()
+        return ""
+
 class CompactRequisitionSchedule(QWidget):
     """Compact request and return schedule widget with horizontal layout."""
 

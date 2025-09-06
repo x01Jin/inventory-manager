@@ -366,9 +366,20 @@ class RequisitionsPage(QWidget):
                 QMessageBox.warning(self, "Required", "Editor name is required.")
                 return
 
+            # Get requester name for activity logging
+            requester_name = self._get_requester_name_for_deletion(requisition_id)
+
             # Delete the requisition
             if self.model.delete_requisition(requisition_id, editor_name.strip()):
                 logger.info(f"Requisition {requisition_id} deleted by {editor_name}")
+
+                # Log the deletion activity
+                from inventory_app.services.requisition_activity import requisition_activity_manager
+                requisition_activity_manager.log_requisition_deleted(
+                    requisition_id=requisition_id,
+                    requester_name=requester_name,
+                    user_name=editor_name.strip(),
+                )
 
                 QMessageBox.information(
                     self, "Success", "Requisition deleted successfully!"
@@ -518,3 +529,28 @@ class RequisitionsPage(QWidget):
         logger.debug("Filters cleared, clearing model and refreshing data")
         self.model.clear_filters()
         self.refresh_data()
+
+    def _get_requester_name_for_deletion(self, requisition_id: int) -> str:
+        """
+        Get requester name for deletion activity logging.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            str: Requester name or "Unknown" if not found
+        """
+        try:
+            from inventory_app.database.connection import db
+
+            query = """
+            SELECT r.name
+            FROM Requesters r
+            JOIN Requisitions req ON r.id = req.requester_id
+            WHERE req.id = ?
+            """
+            rows = db.execute_query(query, (requisition_id,))
+            return rows[0]['name'] if rows else "Unknown"
+        except Exception as e:
+            logger.error(f"Failed to get requester name for deletion of requisition {requisition_id}: {e}")
+            return "Unknown"

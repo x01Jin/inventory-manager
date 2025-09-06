@@ -156,6 +156,53 @@ class RequisitionActivityManager:
             logger.error(f"Error logging requisition return activity: {e}")
             return False
 
+    def log_requisition_deleted(
+        self,
+        requisition_id: int,
+        requester_name: str,
+        user_name: str = "System",
+    ) -> bool:
+        """
+        Log a requisition deletion activity.
+
+        Args:
+            requisition_id: ID of the deleted requisition
+            requester_name: Name of the requester
+            user_name: Name of the user performing the action
+
+        Returns:
+            bool: True if logged successfully
+        """
+        try:
+            # Create activity description
+            description = self._format_deletion_description(
+                requester_name,
+            )
+
+            # Log using existing activity logger
+            success = activity_logger.log_activity(
+                activity_type=activity_logger.REQUISITION_DELETED,
+                description=description,
+                entity_id=requisition_id,
+                entity_type="requisition",
+                user_name=user_name,
+            )
+
+            if success:
+                logger.info(
+                    f"Logged requisition deletion activity for ID: {requisition_id}"
+                )
+            else:
+                logger.error(
+                    f"Failed to log requisition deletion activity for ID: {requisition_id}"
+                )
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error logging requisition deletion activity: {e}")
+            return False
+
     def get_requisition_activities(self, limit: int = 50) -> List[Dict]:
         """
         Get recent requisition-related activities.
@@ -248,6 +295,21 @@ class RequisitionActivityManager:
             Formatted description string
         """
         return f"edited requisition for {requester_name}"
+
+    def _format_deletion_description(
+        self,
+        requester_name: str,
+    ) -> str:
+        """
+        Format a description for requisition deletion.
+
+        Args:
+            requester_name: Name of the requester
+
+        Returns:
+            Formatted description string
+        """
+        return f"deleted requisition for {requester_name}"
 
     def format_items_summary(self, selected_items: List[Dict]) -> str:
         """
