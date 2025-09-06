@@ -419,8 +419,6 @@ class ItemReturnDialog(QDialog):
 
             req_dict = dict(rows[0])
             # Convert dates using date_utils
-            if req_dict.get('datetime_requested'):
-                req_dict['datetime_requested'] = parse_datetime_iso(req_dict['datetime_requested'])
             if req_dict.get('expected_request'):
                 req_dict['expected_request'] = parse_datetime_iso(req_dict['expected_request'])
             if req_dict.get('expected_return'):

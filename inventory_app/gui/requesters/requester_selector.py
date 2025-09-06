@@ -75,6 +75,8 @@ class RequesterSelector(QDialog):
         self.requesters_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.requesters_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.requesters_table.itemSelectionChanged.connect(self.on_row_selected)
+        # Disable cell editing on double-click
+        self.requesters_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
         # Set column widths
         self.requesters_table.setColumnWidth(0, 100)  # Requisitions
@@ -126,6 +128,8 @@ class RequesterSelector(QDialog):
     def filter_requesters(self):
         """Filter requesters based on search term."""
         try:
+            # Update the model's search term and apply filters
+            self.model.filter_by_search(self.search_input.text())
             filtered_requesters = self.model.get_filtered_rows()
             self.populate_table(filtered_requesters)
         except Exception as e:

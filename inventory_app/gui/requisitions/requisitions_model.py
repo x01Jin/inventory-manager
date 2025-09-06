@@ -19,7 +19,6 @@ class RequisitionRow:
     requester_name: str = ""
     requester_affiliation: str = ""
     requester_group: str = ""
-    datetime_requested: Optional[datetime] = None  # Changed from date to datetime
     expected_request: Optional[datetime] = None
     expected_return: Optional[datetime] = None
     lab_activity_name: str = ""
@@ -90,7 +89,6 @@ class RequisitionsModel:
                     requester_name=summary.requester.name,
                     requester_affiliation=summary.requester.affiliation,
                     requester_group=summary.requester.group_name,
-                    datetime_requested=summary.requisition.datetime_requested,
                     expected_request=summary.requisition.expected_request,
                     expected_return=summary.requisition.expected_return,
                     lab_activity_name=summary.requisition.lab_activity_name,

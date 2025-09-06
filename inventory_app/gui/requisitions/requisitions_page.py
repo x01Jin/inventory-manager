@@ -27,8 +27,8 @@ from inventory_app.gui.requisitions.requisition_management import (
     NewRequisitionDialog,
     EditRequisitionDialog,
     ItemReturnDialog,
+    status_watcher,
 )
-from inventory_app.utils.internal_time import check_and_update_requisition_statuses
 from inventory_app.utils.logger import logger
 
 
@@ -177,16 +177,15 @@ class RequisitionsPage(QWidget):
                 )
                 return
 
-            # Perform manual status check and update database
-            updated_count = check_and_update_requisition_statuses()
-
+            # Update all requisition statuses using the status watcher
+            updated_count = self._update_all_requisition_statuses()
             if updated_count > 0:
+                logger.info(f"✅ Updated {updated_count} requisition statuses during refresh")
+
                 # Reload data to get updated statuses
                 success = self.model.load_data()
                 if not success:
-                    logger.error(
-                        "❌ STEP 3 FAILED: Failed to reload data after status updates"
-                    )
+                    logger.error("❌ STEP 2 FAILED: Failed to reload data after status updates")
                     QMessageBox.warning(
                         self,
                         "Data Reload Error",
@@ -529,6 +528,48 @@ class RequisitionsPage(QWidget):
         logger.debug("Filters cleared, clearing model and refreshing data")
         self.model.clear_filters()
         self.refresh_data()
+
+    def _update_all_requisition_statuses(self) -> int:
+        """
+        Update statuses for all requisitions that might need updates.
+
+        This method is called during refresh to ensure all requisitions
+        have current status information based on their dates.
+
+        Returns:
+            int: Number of requisitions that had their status updated
+        """
+        try:
+            from inventory_app.database.connection import db
+
+            # Get all requisitions that might need status updates
+            query = """
+            SELECT id FROM Requisitions
+            WHERE status IN ('requested', 'active', 'overdue')
+            AND (expected_return IS NOT NULL OR expected_request IS NOT NULL)
+            """
+            rows = db.execute_query(query)
+
+            if not rows:
+                return 0
+
+            updated_count = 0
+
+            # Update status for each requisition using the status watcher
+            for row in rows:
+                req_id = row['id']
+                try:
+                    new_status = status_watcher.update_status_for_requisition(req_id)
+                    if new_status:
+                        updated_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to update status for requisition {req_id}: {e}")
+
+            return updated_count
+
+        except Exception as e:
+            logger.error(f"Failed to update all requisition statuses: {e}")
+            return 0
 
     def _get_requester_name_for_deletion(self, requisition_id: int) -> str:
         """

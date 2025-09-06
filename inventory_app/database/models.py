@@ -614,7 +614,6 @@ class Requisition:
     """Represents a requesting requisition."""
     id: Optional[int] = None
     requester_id: int = 0
-    datetime_requested: Optional[datetime] = None  # NULL for reservations not yet picked up
     expected_request: datetime = datetime.now()
     expected_return: datetime = datetime.now()
     status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
@@ -637,14 +636,13 @@ class Requisition:
 
                 # Update requisition
                 query = """
-                UPDATE Requisitions SET requester_id = ?, datetime_requested = ?,
+                UPDATE Requisitions SET requester_id = ?,
                 expected_request = ?, expected_return = ?, status = ?,
                 lab_activity_name = ?, lab_activity_description = ?, lab_activity_date = ?,
                 num_students = ?, num_groups = ? WHERE id = ?
                 """
                 db.execute_update(query, (
                     self.requester_id,
-                    self.datetime_requested.isoformat() if self.datetime_requested else None,
                     self.expected_request.isoformat(),
                     self.expected_return.isoformat(),
                     self.status,
@@ -658,13 +656,12 @@ class Requisition:
             else:
                 # Insert new
                 query = """
-                INSERT INTO Requisitions (requester_id, datetime_requested, expected_request,
+                INSERT INTO Requisitions (requester_id, expected_request,
                 expected_return, status, lab_activity_name, lab_activity_description, lab_activity_date,
-                num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(query, (
                     self.requester_id,
-                    self.datetime_requested.isoformat() if self.datetime_requested else None,
                     self.expected_request.isoformat(),
                     self.expected_return.isoformat(),
                     self.status,
@@ -723,8 +720,6 @@ class Requisition:
             for row in rows:
                 req_dict = dict(row)
                 # Convert dates
-                if req_dict.get('datetime_requested'):
-                    req_dict['datetime_requested'] = datetime.fromisoformat(req_dict['datetime_requested'])
                 if req_dict.get('expected_request'):
                     req_dict['expected_request'] = datetime.fromisoformat(req_dict['expected_request'])
                 if req_dict.get('expected_return'):

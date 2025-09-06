@@ -53,7 +53,6 @@ class RequisitionsController:
                 r.requester_id,
                 r.lab_activity_name,
                 r.lab_activity_date,
-                r.datetime_requested,
                 r.expected_request,
                 r.expected_return,
                 r.num_students,
@@ -76,7 +75,7 @@ class RequisitionsController:
             LEFT JOIN Items i ON ri.item_id = i.id
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
-            ORDER BY r.datetime_requested DESC, r.id, ri.item_id
+            ORDER BY r.expected_request DESC, r.id, ri.item_id
             """
 
             rows = db.execute_query(query)
@@ -96,7 +95,6 @@ class RequisitionsController:
                         'requester_id': row['requester_id'],
                         'lab_activity_name': row['lab_activity_name'],
                         'lab_activity_date': date.fromisoformat(row['lab_activity_date']) if row['lab_activity_date'] else date.today(),
-                        'datetime_requested': datetime.fromisoformat(row['datetime_requested']) if row['datetime_requested'] else None,
                         'expected_request': datetime.fromisoformat(row['expected_request']) if row['expected_request'] else datetime.now(),
                         'expected_return': datetime.fromisoformat(row['expected_return']) if row['expected_return'] else datetime.now(),
                         'num_students': row['num_students'],

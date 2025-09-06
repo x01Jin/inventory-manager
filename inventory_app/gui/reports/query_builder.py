@@ -108,7 +108,7 @@ class ReportQueryBuilder:
 
             # WHERE clause with filters
             query += f"""
-            WHERE r.datetime_requested BETWEEN '{start_date.isoformat()}' AND '{end_date.isoformat()}'
+            WHERE r.expected_request BETWEEN '{start_date.isoformat()}' AND '{end_date.isoformat()}'
             """
 
             if grade_filter:
@@ -145,7 +145,7 @@ class ReportQueryBuilder:
                 period_start, period_end = self._parse_period_key_to_dates(period_key, start_date, end_date, granularity)
                 escaped_key = period_key.replace("'", "''")
                 column_parts.append(f"""
-                SUM(CASE WHEN r.datetime_requested >= '{period_start}' AND r.datetime_requested < '{period_end}'
+                SUM(CASE WHEN r.expected_request >= '{period_start}' AND r.expected_request < '{period_end}'
                     THEN ri.quantity_requested ELSE 0 END) AS "{escaped_key}" """)
 
             return ",".join(column_parts)
@@ -280,7 +280,7 @@ class ReportStatisticsBuilder:
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.datetime_requested BETWEEN ? AND ?
+        WHERE r.expected_request BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]
@@ -307,7 +307,7 @@ class ReportStatisticsBuilder:
         JOIN Items i ON i.id = ri.item_id
         JOIN Categories c ON c.id = i.category_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.datetime_requested BETWEEN ? AND ?
+        WHERE r.expected_request BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]
@@ -336,7 +336,7 @@ class ReportStatisticsBuilder:
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.datetime_requested BETWEEN ? AND ?
+        WHERE r.expected_request BETWEEN ? AND ?
         """
 
         params = [start_date.isoformat(), end_date.isoformat()]

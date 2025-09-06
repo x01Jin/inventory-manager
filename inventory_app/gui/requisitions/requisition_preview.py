@@ -193,18 +193,8 @@ class RequisitionPreview(QWidget):
         if req.expected_request:
             expected_request_str = format_date_short(req.expected_request) + " - " + format_time_12h(req.expected_request.time())
             expected_request_label = QLabel(f"• Expected Request: {expected_request_str}")
+            expected_request_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
             layout.addWidget(expected_request_label)
-
-        # Requested Date
-        if req.datetime_requested:
-            requested_str = format_date_short(req.datetime_requested) + " - " + format_time_12h(req.datetime_requested.time())
-            requested_label = QLabel(f"• Requested Date: {requested_str}")
-            requested_label.setStyleSheet(f"font-weight: bold; color: {DarkTheme.SUCCESS_COLOR};")
-            layout.addWidget(requested_label)
-        else:
-            not_requested_label = QLabel("• Requested Date:  Reserved")
-            not_requested_label.setStyleSheet(f"font-style: italic; color: {DarkTheme.WARNING_COLOR};")
-            layout.addWidget(not_requested_label)
 
         # Expected Return
         if req.expected_return:

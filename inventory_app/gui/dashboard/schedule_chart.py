@@ -27,6 +27,8 @@ class ScheduleChartManager:
         table.setWordWrap(True)
         table.setAlternatingRowColors(False)
         table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        # Disable cell editing on double-click
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
         # Configure column resizing
         header = table.horizontalHeader()

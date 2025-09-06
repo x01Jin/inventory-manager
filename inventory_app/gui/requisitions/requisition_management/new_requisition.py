@@ -11,14 +11,13 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QGroupBox,
-    QLineEdit,
-    QTextEdit,
     QMessageBox,
 )
 from PyQt6.QtCore import pyqtSignal
 
 from .base_requisition_dialog import BaseRequisitionDialog
+from .requester_selector_widget import RequesterSelectorWidget
+from .activity_details_widget import ActivityDetailsWidget
 from inventory_app.utils.logger import logger
 
 
@@ -55,70 +54,17 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         layout = QVBoxLayout(panel)
         layout.setSpacing(15)
 
-        # Requester selection (create mode only)
-        requester_group = QGroupBox("👥 Requester Information")
-        requester_layout = QVBoxLayout(requester_group)
+        # Requester selection widget
+        self.requester_widget = RequesterSelectorWidget(parent=self)
+        self.requester_widget.requester_selected.connect(self._on_requester_selected)
+        layout.addWidget(self.requester_widget)
 
-        # Requester display
-        self.requester_info = QLabel("No requester selected")
-        self.requester_info.setStyleSheet("font-weight: bold; padding: 5px;")
-        requester_layout.addWidget(self.requester_info)
-
-        # Requester selection button
-        select_requester_btn = QPushButton("Select Requester")
-        select_requester_btn.clicked.connect(self.select_requester)
-        requester_layout.addWidget(select_requester_btn)
-
-        layout.addWidget(requester_group)
-
-        # Activity details
-        activity_group = QGroupBox("📝 Activity Details")
-        activity_layout = QVBoxLayout(activity_group)
-
-        # Activity name
-        activity_name_layout = QHBoxLayout()
-        activity_name_layout.addWidget(QLabel("Activity Name:"))
-        self.activity_name = QLineEdit()
-        self.activity_name.setPlaceholderText("Enter activity name (required)")
-        self.activity_name.textChanged.connect(self.update_create_button_state)
-        activity_name_layout.addWidget(self.activity_name)
-        activity_layout.addLayout(activity_name_layout)
-
-        # Activity description
-        activity_layout.addWidget(QLabel("Description:"))
-        self.activity_description = QTextEdit()
-        self.activity_description.setPlaceholderText("Optional activity description")
-        self.activity_description.setMaximumHeight(80)
-        activity_layout.addWidget(self.activity_description)
-
-        # Activity date - compact format [Dec][23][2025]
-        date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("Activity Date:"))
-        self.activity_date_selector = self.datetime_manager.create_selector(self)
-        self.datetime_manager.set_defaults()
-        date_layout.addWidget(self.activity_date_selector)
-        activity_layout.addLayout(date_layout)
-
-        # Number of students/groups
-        numbers_layout = QHBoxLayout()
-
-        students_layout = QVBoxLayout()
-        students_layout.addWidget(QLabel("Number of Students:"))
-        self.num_students = QLineEdit()
-        self.num_students.setPlaceholderText("Optional")
-        students_layout.addWidget(self.num_students)
-
-        groups_layout = QVBoxLayout()
-        groups_layout.addWidget(QLabel("Number of Groups:"))
-        self.num_groups = QLineEdit()
-        self.num_groups.setPlaceholderText("Optional")
-        groups_layout.addWidget(self.num_groups)
-
-        numbers_layout.addLayout(students_layout)
-        numbers_layout.addLayout(groups_layout)
-        activity_layout.addLayout(numbers_layout)
-
-        layout.addWidget(activity_group)
+        # Activity details widget
+        self.activity_widget = ActivityDetailsWidget(parent=self)
+        self.activity_widget.set_datetime_manager(self.datetime_manager)
+        self.activity_widget.activity_name_changed.connect(self.update_create_button_state)
+        self.activity_widget.field_changed.connect(self.update_create_button_state)
+        layout.addWidget(self.activity_widget)
 
         return panel
 
@@ -140,51 +86,26 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
         layout.addLayout(button_layout)
 
+    def _on_requester_selected(self, requester):
+        """Handle requester selection from widget."""
+        self.selected_requester = requester
+        self.update_create_button_state()
+
     def update_create_button_state(self):
         """Update create button enabled state based on form completeness."""
         has_requester = self.selected_requester is not None
-        has_activity = self.activity_name.text().strip() != ""
+        has_activity = self.activity_widget.get_activity_name().strip() != ""
         has_items = len(self.selected_items) > 0
 
         self.create_button.setEnabled(has_requester and has_activity and has_items)
 
-    def select_requester(self):
-        """Open requester selection dialog."""
-        try:
-            from inventory_app.gui.requesters.requester_selector import RequesterSelector
-
-            selector = RequesterSelector(parent=self)
-            if selector.exec() == RequesterSelector.DialogCode.Accepted:
-                selected_requester_id = selector.get_selected_requester_id()
-                if selected_requester_id:
-                    # Get the requester object from the model
-                    from inventory_app.gui.requesters.requester_model import RequesterModel
-
-                    requester_model = RequesterModel()
-                    requester_model.load_data()
-                    selected_requester = requester_model.get_requester_by_id(
-                        selected_requester_id
-                    )
-
-                    if selected_requester:
-                        self.selected_requester = selected_requester
-                        self.requester_info.setText(
-                            f"{selected_requester.name} ({selected_requester.affiliation})"
-                        )
-                        self.update_create_button_state()
-                        logger.info(f"Requester selected: {selected_requester.name}")
-
-        except Exception as e:
-            logger.error(f"Failed to select requester: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to select requester: {str(e)}")
-
     def create_requisition(self):
         """Create the new requisition."""
         try:
-            # Gather form data
-            activity_name = self.activity_name.text().strip()
-            activity_description = self.activity_description.toPlainText().strip()
-            activity_date = self.datetime_manager.get_selected_date_iso()
+            # Gather form data from widgets
+            activity_name = self.activity_widget.get_activity_name()
+            activity_description = self.activity_widget.get_activity_description()
+            activity_date = self.activity_widget.get_activity_date_iso()
 
             expected_request = self.schedule_manager.get_request_datetime()
             expected_return = self.schedule_manager.get_return_datetime()
@@ -196,31 +117,9 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 )
                 return
 
-            # Parse optional numeric fields
-            num_students = None
-            num_groups = None
-
-            if self.num_students.text().strip():
-                try:
-                    num_students = int(self.num_students.text().strip())
-                except ValueError:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Input",
-                        "Number of students must be a valid number.",
-                    )
-                    return
-
-            if self.num_groups.text().strip():
-                try:
-                    num_groups = int(self.num_groups.text().strip())
-                except ValueError:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Input",
-                        "Number of groups must be a valid number.",
-                    )
-                    return
+            # Get optional numeric fields from widget
+            num_students = self.activity_widget.get_num_students()
+            num_groups = self.activity_widget.get_num_groups()
 
             # Validate requester
             if not self.selected_requester or not self.selected_requester.id:

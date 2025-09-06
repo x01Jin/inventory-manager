@@ -47,6 +47,9 @@ class AlertsManager:
         alerts_table.setSizePolicy(alerts_table.sizePolicy().Policy.Expanding, alerts_table.sizePolicy().Policy.Expanding)
         alerts_table.setStyleSheet("font-size: 9pt;")
         alerts_table.setWordWrap(True)
+        # Disable cell editing on double-click
+        alerts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        alerts_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
 
         # Configure column resizing to fit content with minimum width
         header = alerts_table.horizontalHeader()

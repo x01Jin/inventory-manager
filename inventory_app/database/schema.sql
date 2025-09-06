@@ -122,7 +122,6 @@ CREATE TABLE Requesters (
 CREATE TABLE Requisitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requester_id INTEGER NOT NULL,
-    datetime_requested DATETIME,  -- NULL for reservations not yet picked up
     expected_request DATETIME NOT NULL,
     expected_return DATETIME NOT NULL,
     status TEXT NOT NULL DEFAULT 'requested',  -- 'requested', 'active', 'returned', 'overdue'

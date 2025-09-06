@@ -36,7 +36,7 @@ class RequisitionsTable(QTableWidget):
         self.setHorizontalHeaderLabels([
             "Status",               # 1. Status (Active/Returned)
             "Requester",             # 2. Requester name
-            "Requested Date"         # 3. Date when items were requested (or "Reserved")
+            "Request Date"       # 3. Date of the request
         ])
 
         # Configure table appearance and behavior
@@ -111,15 +111,13 @@ class RequisitionsTable(QTableWidget):
                 requester_item.setData(Qt.ItemDataRole.UserRole, row_data.id)  # Store ID for selection
                 self.setItem(row_position, 1, requester_item)
 
-                # Requested Date (Column 2) - Show actual date or "Reserved"
-                if row_data.datetime_requested:
-                    date_str = format_date_short(row_data.datetime_requested)
-                    time_str = format_time_12h(row_data.datetime_requested.time())
-                    requested_date_str = f"{date_str}   -   {time_str}"
-                else:
-                    requested_date_str = "Reserved"
-                requested_item = QTableWidgetItem(requested_date_str)
-                self.setItem(row_position, 2, requested_item)
+                # Expected Request (Column 2) - Show expected request datetime
+                if row_data.expected_request:
+                    date_str = format_date_short(row_data.expected_request)
+                    time_str = format_time_12h(row_data.expected_request.time())
+                    expected_date_str = f"{date_str}   -   {time_str}"
+                    expected_item = QTableWidgetItem(expected_date_str)
+                    self.setItem(row_position, 2, expected_item)
 
             # After populating all data, resize columns to fit content with constraints
             self.resize_columns_to_contents()
@@ -180,7 +178,7 @@ class RequisitionsTable(QTableWidget):
             row_data = {
                 'status': status_item.text() if status_item else "",
                 'requester': requester_item.text() if requester_item else "",
-                'requested_date': requested_date_item.text() if requested_date_item else ""
+                'expected_request': requested_date_item.text() if requested_date_item else ""
             }
             data.append(row_data)
         return data
