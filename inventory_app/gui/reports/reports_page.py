@@ -67,10 +67,6 @@ class ReportsPage(QWidget):
             self.status_text, self.results_list, self.recent_reports_text
         )
 
-        # Connect date range changes to update acquisitions checkbox
-        self.date_range_selector.dateRangeChanged.connect(self.update_acquisitions_checkbox)
-        self.update_acquisitions_checkbox()  # Initial update
-
     def create_header(self) -> QWidget:
         """Create the page header."""
         header_widget = QWidget()
@@ -193,9 +189,10 @@ class ReportsPage(QWidget):
         options_group = QGroupBox("⚙️ Options")
         options_layout = QVBoxLayout(options_group)
 
-        self.include_acquisitions = QCheckBox("Include yearly acquisitions")
-        self.include_acquisitions.setChecked(True)
-        options_layout.addWidget(self.include_acquisitions)
+        # No options needed for usage reports now
+        options_label = QLabel("Idk what to put here tbh but theres still space so ye...")
+        options_label.setStyleSheet("color: #666; font-style: italic;")
+        options_layout.addWidget(options_label)
 
         layout.addWidget(options_group)
 
@@ -466,9 +463,6 @@ class ReportsPage(QWidget):
                 QDate(end_date.year, end_date.month, end_date.day)
             )
 
-        # Update acquisitions checkbox after preset change
-        self.update_acquisitions_checkbox()
-
     def generate_report(self):
         """Generate the selected report type."""
         try:
@@ -517,7 +511,6 @@ class ReportsPage(QWidget):
             supplier_filter = ""
 
         include_consumables = self.consumable_check.isChecked()
-        include_yearly = self.include_acquisitions.isChecked()
 
         # Start background worker
         self.worker = ReportWorker(
@@ -526,8 +519,7 @@ class ReportsPage(QWidget):
             end_date,
             category_filter=category_filter,
             supplier_filter=supplier_filter,
-            include_consumables=include_consumables,
-            include_yearly=include_yearly
+            include_consumables=include_consumables
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
@@ -624,25 +616,3 @@ class ReportsPage(QWidget):
     def refresh_data(self):
         """Refresh data on the reports page."""
         pass
-
-    def update_acquisitions_checkbox(self):
-        """Update the acquisitions checkbox based on date range."""
-        start_date, end_date = self.date_range_selector.to_py_dates()
-        days_diff = (end_date - start_date).days + 1
-
-        # Check if date range is >= 2 years (730 days approximately)
-        should_enable = days_diff >= 730
-
-        if should_enable:
-            # Enable checkbox and set to checked for long date ranges
-            self.include_acquisitions.setEnabled(True)
-            self.include_acquisitions.setChecked(True)
-            self.include_acquisitions.setToolTip("")
-        else:
-            # Disable checkbox and uncheck for short date ranges
-            self.include_acquisitions.setEnabled(False)
-            self.include_acquisitions.setChecked(False)
-            self.include_acquisitions.setToolTip(
-                "This option is only available for reports with date ranges of 2 years or more.\n"
-                "The yearly acquisitions column provides meaningful data only for longer time periods."
-            )

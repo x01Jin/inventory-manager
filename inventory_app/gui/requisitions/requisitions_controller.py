@@ -5,7 +5,7 @@ Uses composition pattern with DatabaseConnection.
 """
 
 from typing import List, Dict, Optional
-from datetime import date
+from datetime import date, datetime
 from dataclasses import dataclass
 import time
 
@@ -40,41 +40,114 @@ class RequisitionsController:
     def get_all_requisitions(self) -> List[RequisitionSummary]:
         """
         Get all requisitions with requester and item details.
+        OPTIMIZED: Uses single query with JOINs instead of N+1 queries.
 
         Returns:
             List of requisition summaries
         """
         try:
-            # Get all requisitions
-            requisitions = Requisition.get_all()
+            # Single optimized query to get all requisitions with items and requesters
+            query = """
+            SELECT
+                r.id as req_id,
+                r.requester_id,
+                r.lab_activity_name,
+                r.lab_activity_date,
+                r.datetime_requested,
+                r.expected_request,
+                r.expected_return,
+                r.num_students,
+                r.num_groups,
+                r.status as req_status,
+                req.name as requester_name,
+                req.affiliation,
+                req.group_name,
+                ri.item_id,
+                ri.quantity_requested,
+                i.name as item_name,
+                i.category_id,
+                i.size,
+                i.brand,
+                c.name as category_name,
+                s.name as supplier_name
+            FROM Requisitions r
+            JOIN Requesters req ON r.requester_id = req.id
+            LEFT JOIN Requisition_Items ri ON r.id = ri.requisition_id
+            LEFT JOIN Items i ON ri.item_id = i.id
+            LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            ORDER BY r.datetime_requested DESC, r.id, ri.item_id
+            """
+
+            rows = db.execute_query(query)
+            if not rows:
+                logger.info("No requisitions found")
+                return []
+
+            # Group results by requisition
+            requisition_groups = {}
+            for row in rows:
+                req_id = row['req_id']
+
+                if req_id not in requisition_groups:
+                    # Create requisition object with proper date conversion
+                    req_dict = {
+                        'id': req_id,
+                        'requester_id': row['requester_id'],
+                        'lab_activity_name': row['lab_activity_name'],
+                        'lab_activity_date': date.fromisoformat(row['lab_activity_date']) if row['lab_activity_date'] else date.today(),
+                        'datetime_requested': datetime.fromisoformat(row['datetime_requested']) if row['datetime_requested'] else None,
+                        'expected_request': datetime.fromisoformat(row['expected_request']) if row['expected_request'] else datetime.now(),
+                        'expected_return': datetime.fromisoformat(row['expected_return']) if row['expected_return'] else datetime.now(),
+                        'num_students': row['num_students'],
+                        'num_groups': row['num_groups'],
+                        'status': row['req_status']
+                    }
+                    requisition = Requisition(**req_dict)
+
+                    # Create requester object
+                    requester_dict = {
+                        'id': row['requester_id'],
+                        'name': row['requester_name'],
+                        'affiliation': row['affiliation'],
+                        'group_name': row['group_name']
+                    }
+                    requester = Requester(**requester_dict)
+
+                    requisition_groups[req_id] = {
+                        'requisition': requisition,
+                        'requester': requester,
+                        'items': [],
+                        'status': row['req_status'] or "Active"
+                    }
+
+                # Add item if it exists (some requisitions might have no items)
+                if row['item_id']:
+                    item_dict = {
+                        'item_id': row['item_id'],
+                        'quantity_requested': row['quantity_requested'],
+                        'name': row['item_name'],
+                        'category_id': row['category_id'],
+                        'size': row['size'],
+                        'brand': row['brand'],
+                        'category_name': row['category_name'],
+                        'supplier_name': row['supplier_name']
+                    }
+                    requisition_groups[req_id]['items'].append(item_dict)
+
+            # Convert to RequisitionSummary objects
             summaries = []
-
-            for req in requisitions:
-                if not req.id:
-                    continue
-
-                # Get requester details
-                requester = Requester.get_by_id(req.requester_id)
-                if not requester:
-                    logger.warning(f"Requester {req.requester_id} not found for requisition {req.id}")
-                    continue
-
-                # Get requisition items with details using ItemService
-                items = self.item_service.get_requisition_items_with_details(req.id)
-
-                # Get status directly from database (real-time monitor updates this)
-                status = req.status if req.status else "Active"
-
+            for req_data in requisition_groups.values():
                 summary = RequisitionSummary(
-                    requisition=req,
-                    requester=requester,
-                    items=items,
-                    total_items=sum(item['quantity_requested'] for item in items),
-                    status=status
+                    requisition=req_data['requisition'],
+                    requester=req_data['requester'],
+                    items=req_data['items'],
+                    total_items=sum(item['quantity_requested'] for item in req_data['items']),
+                    status=req_data['status']
                 )
                 summaries.append(summary)
 
-            logger.info(f"Retrieved {len(summaries)} requisitions")
+            logger.info(f"Retrieved {len(summaries)} requisitions with optimized single query")
             return summaries
 
         except Exception as e:

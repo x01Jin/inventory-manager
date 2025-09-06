@@ -24,18 +24,18 @@ class ReportQueryBuilder:
         ]
 
     def build_dynamic_report_query(self, start_date: date, end_date: date,
-                                  granularity: str, include_yearly: bool,
+                                  granularity: str,
                                   grade_filter: str = "",
                                   section_filter: str = "",
                                   include_consumables: bool = True) -> Tuple[str, Tuple]:
         """
         Build the complete dynamic report query.
+        OPTIMIZED: Pre-compute period ranges and use indexed columns.
 
         Args:
             start_date: Report start date
             end_date: Report end date
             granularity: Time granularity ('daily', 'weekly', 'monthly', etc.)
-            include_yearly: Whether to include yearly acquisitions column
             grade_filter: Grade level filter
             section_filter: Section filter
             include_consumables: Whether to include consumable items
@@ -44,156 +44,191 @@ class ReportQueryBuilder:
             Tuple of (SQL query string, parameters tuple)
         """
         try:
-            # Build base query
-            base_query, base_params = self._build_base_query(grade_filter, section_filter, include_consumables)
+            # Use optimized single query approach instead of CTEs
+            query = self._build_optimized_report_query(
+                start_date, end_date, granularity,
+                grade_filter, section_filter, include_consumables
+            )
 
-            # Add dynamic period calculation
-            period_query = self._build_period_query(granularity, start_date, end_date)
+            # Build parameters
+            params = self._build_report_params(
+                start_date, end_date, granularity,
+                grade_filter, section_filter, include_consumables
+            )
 
-            # Build main query with dynamic columns
-            main_query = self._build_main_query(include_yearly)
-
-            # Combine all parts
-            full_query = base_query + period_query + main_query
-
-            # Build parameters - date params first, then filter params
-            date_params = [start_date.isoformat(), end_date.isoformat()]
-            if include_yearly:
-                date_params.extend([start_date.isoformat(), end_date.isoformat()])
-
-            params = tuple(date_params + base_params)
-
-            return full_query, params
+            return query, params
 
         except Exception as e:
             logger.error(f"Failed to build dynamic report query: {e}")
             raise
 
-    def _build_base_query(self, grade_filter: str, section_filter: str, include_consumables: bool) -> Tuple[str, List]:
-        """Build the base CTE query with filters."""
-        base_query = """
-        WITH base AS (
-          SELECT
-            i.id AS item_id,
-            i.name AS item_name,
-            c.name AS category_name,
-            i.size,
-            i.brand,
-            i.other_specifications,
-            SUM(ri.quantity_requested) AS qty,
-            r.datetime_requested
-          FROM Requisition_Items ri
-          JOIN Requisitions r ON r.id = ri.requisition_id
-          JOIN Items i ON i.id = ri.item_id
-          JOIN Categories c ON c.id = i.category_id
-          JOIN Requesters req ON req.id = r.requester_id
-          WHERE r.datetime_requested BETWEEN ? AND ?
-        """
-
-        # Start with base parameters (date range will be added later)
-        params = []
-
-        # Add filters
-        if grade_filter:
-            base_query += " AND req.affiliation = ?"
-            params.append(grade_filter)
-        if section_filter:
-            base_query += " AND req.group_name = ?"
-            params.append(section_filter)
-        if not include_consumables:
-            base_query += " AND i.is_consumable = 0"
-
-        base_query += " GROUP BY i.id, r.datetime_requested)"
-        return base_query, params
-
-    def _build_period_query(self, granularity: str, start_date: Optional[date] = None, end_date: Optional[date] = None) -> str:
-        """Build the period calculation CTE with simplified weekly handling."""
-        period_queries = {
-            'daily': """
-                ,dynamic_periods AS (
-                  SELECT *, strftime('%Y-%m-%d', datetime_requested) AS period_key FROM base
-                )
-            """,
-            'weekly': """
-                ,dynamic_periods AS (
-                  SELECT
-                    *,
-                    strftime('%Y-%m', datetime_requested) || '-W' ||
-                    CAST(((strftime('%d', datetime_requested) - 1) / 7) + 1 AS TEXT) AS period_key
-                  FROM base
-                )
-            """,
-            'monthly': """
-                ,dynamic_periods AS (
-                  SELECT *, strftime('%Y-%m', datetime_requested) AS period_key FROM base
-                )
-            """,
-            'quarterly': """
-                ,dynamic_periods AS (
-                  SELECT
-                    *,
-                    strftime('%Y', datetime_requested) || '-Q' ||
-                    CAST(((CAST(strftime('%m', datetime_requested) AS INTEGER) - 1) / 3) + 1 AS TEXT) AS period_key
-                  FROM base
-                )
-            """,
-            'yearly': """
-                ,dynamic_periods AS (
-                  SELECT *, strftime('%Y', datetime_requested) AS period_key FROM base
-                )
-            """,
-            'multi_year': """
-                ,dynamic_periods AS (
-                  SELECT *, strftime('%Y', datetime_requested) AS period_key FROM base
-                )
+    def _build_optimized_report_query(self, start_date: date, end_date: date,
+                                     granularity: str,
+                                     grade_filter: str, section_filter: str,
+                                     include_consumables: bool) -> str:
+        """Build optimized single query without CTEs for better performance."""
+        try:
+            # Base query with direct JOINs instead of CTEs
+            query = """
+            SELECT
+                i.name AS ITEMS,
+                c.name AS CATEGORIES,
+                COALESCE(stock.total_stock, 0) AS ACTUAL_INVENTORY,
+                i.size AS SIZE,
+                i.brand AS BRAND,
+                i.other_specifications AS "OTHER SPECIFICATIONS"
             """
-        }
 
-        return period_queries.get(granularity, period_queries['monthly'])
+            # Add dynamic period columns
+            period_columns = self._build_optimized_period_columns(start_date, end_date, granularity)
+            if period_columns:
+                query += "," + period_columns
 
-    def _build_main_query(self, include_yearly: bool) -> str:
-        """Build the main SELECT query with dynamic columns."""
-        # Start with fixed columns
-        query_parts = ["SELECT", ",\n".join(self.base_columns)]
+            # Add TOTAL QUANTITY as the last column
+            query += """,
+                SUM(ri.quantity_requested) AS "TOTAL QUANTITY"
+            """
 
-        # Add placeholder for dynamic period columns (will be replaced)
-        query_parts.append("{period_columns}")
+            # FROM clause with optimized JOINs
+            query += """
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON r.id = ri.requisition_id
+            JOIN Items i ON i.id = ri.item_id
+            JOIN Categories c ON c.id = i.category_id
+            JOIN Requesters req ON req.id = r.requester_id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) as total_stock
+                FROM Item_Batches ib
+                GROUP BY ib.item_id
+            ) stock ON i.id = stock.item_id
+            """
 
-        # Add yearly acquisitions if needed
-        if include_yearly:
-            query_parts.append("""
-                ,(SELECT COALESCE(SUM(quantity_received), 0)
-                 FROM Item_Batches b
-                 WHERE b.item_id = dp.item_id
-                 AND strftime('%Y', b.date_received) >= strftime('%Y', ?)
-                 AND strftime('%Y', b.date_received) <= strftime('%Y', ?)) AS "YEARLY ACQUISITIONS"
-            """)
+            # WHERE clause with filters
+            query += f"""
+            WHERE r.datetime_requested BETWEEN '{start_date.isoformat()}' AND '{end_date.isoformat()}'
+            """
 
-        # Add total quantity and FROM clause
-        query_parts.append(',SUM(qty) AS "TOTAL QUANTITY"')
-        query_parts.extend([
-            'FROM dynamic_periods dp',
-            'GROUP BY item_id',
-            'ORDER BY category_name, item_name'
-        ])
+            if grade_filter:
+                query += " AND req.affiliation = ?"
+            if section_filter:
+                query += " AND req.group_name = ?"
+            if not include_consumables:
+                query += " AND i.is_consumable = 0"
 
-        return "\n".join(query_parts)
+            # GROUP BY clause
+            query += """
+            GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications
+            ORDER BY c.name, i.name
+            """
 
+            return query
 
+        except Exception as e:
+            logger.error(f"Failed to build optimized report query: {e}")
+            raise
 
-    def build_dynamic_columns(self, period_keys: List[str]) -> str:
-        """Build dynamic period columns for the query."""
-        if not period_keys:
+    def _build_optimized_period_columns(self, start_date: date, end_date: date, granularity: str) -> str:
+        """Build optimized period columns using pre-computed ranges."""
+        try:
+            # Pre-compute period ranges for better performance
+            period_ranges = self._get_period_ranges(start_date, end_date, granularity)
+
+            if not period_ranges:
+                return ""
+
+            column_parts = []
+            for period_key, (period_start, period_end) in period_ranges.items():
+                escaped_key = period_key.replace("'", "''")
+                column_parts.append(f"""
+                SUM(CASE WHEN r.datetime_requested >= '{period_start}' AND r.datetime_requested < '{period_end}'
+                    THEN ri.quantity_requested ELSE 0 END) AS "{escaped_key}" """)
+
+            return ",".join(column_parts)
+
+        except Exception as e:
+            logger.error(f"Failed to build optimized period columns: {e}")
             return ""
 
-        column_parts = []
-        for period_key in period_keys:
-            # Escape single quotes in period_key for SQL
-            escaped_key = period_key.replace("'", "''")
-            column_parts.append(f'SUM(CASE WHEN period_key = \'{escaped_key}\' THEN qty ELSE 0 END) AS "{escaped_key}"')
+    def _get_period_ranges(self, start_date: date, end_date: date, granularity: str) -> Dict[str, Tuple[str, str]]:
+        """Pre-compute period ranges for the given granularity."""
+        from datetime import timedelta
 
-        # Add leading comma for the first column
-        return ",\n".join([""] + column_parts)
+        ranges = {}
+        current = start_date
+
+        while current <= end_date:
+            if granularity == 'daily':
+                period_key = current.isoformat()
+                next_date = current + timedelta(days=1)
+                ranges[period_key] = (current.isoformat(), next_date.isoformat())
+                current = next_date
+
+            elif granularity == 'weekly':
+                # Calculate week start (Monday)
+                week_start = current - timedelta(days=current.weekday())
+                week_end = week_start + timedelta(days=7)
+                week_num = (week_start.day - 1) // 7 + 1
+                period_key = f"{week_start.year}-{week_start.month:02d}-W{week_num}"
+                ranges[period_key] = (week_start.isoformat(), week_end.isoformat())
+                current = week_end
+
+            elif granularity == 'monthly':
+                period_key = f"{current.year}-{current.month:02d}"
+                if current.month == 12:
+                    next_date = date(current.year + 1, 1, 1)
+                else:
+                    next_date = date(current.year, current.month + 1, 1)
+                ranges[period_key] = (current.isoformat(), next_date.isoformat())
+                current = next_date
+
+            elif granularity == 'quarterly':
+                # Calculate quarter start
+                quarter = ((current.month - 1) // 3) + 1
+                period_key = f"{current.year}-Q{quarter}"
+
+                # Calculate next quarter start
+                next_quarter_month = ((quarter) * 3) + 1
+                if next_quarter_month > 12:
+                    next_date = date(current.year + 1, 1, 1)
+                else:
+                    next_date = date(current.year, next_quarter_month, 1)
+
+                ranges[period_key] = (current.isoformat(), next_date.isoformat())
+                current = next_date
+
+            elif granularity in ['yearly', 'multi_year']:
+                period_key = str(current.year)
+                next_date = date(current.year + 1, 1, 1)
+                ranges[period_key] = (current.isoformat(), next_date.isoformat())
+                current = next_date
+
+            else:
+                # Default to monthly
+                period_key = f"{current.year}-{current.month:02d}"
+                if current.month == 12:
+                    next_date = date(current.year + 1, 1, 1)
+                else:
+                    next_date = date(current.year, current.month + 1, 1)
+                ranges[period_key] = (current.isoformat(), next_date.isoformat())
+                current = next_date
+
+        return ranges
+
+    def _build_report_params(self, start_date: date, end_date: date, granularity: str,
+                           grade_filter: str, section_filter: str,
+                           include_consumables: bool) -> Tuple:
+        """Build optimized parameter list for the report query."""
+        params = []
+
+        # Add filter parameters
+        if grade_filter:
+            params.append(grade_filter)
+        if section_filter:
+            params.append(section_filter)
+
+        return tuple(params)
 
     def execute_report_query(self, query: str, params: Tuple) -> List[Dict[str, Any]]:
         """Execute the report query and return results."""

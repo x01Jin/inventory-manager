@@ -24,7 +24,6 @@ class ReportWorker(QThread):
         self.category_filter = kwargs.get('category_filter', '')
         self.supplier_filter = kwargs.get('supplier_filter', '')
         self.include_consumables = kwargs.get('include_consumables', True)
-        self.include_yearly = kwargs.get('include_yearly', True)
         # Inventory report specific parameters
         self.inventory_report_type = kwargs.get('inventory_report_type', 'Stock Levels Report')
         # Requisition report specific parameters

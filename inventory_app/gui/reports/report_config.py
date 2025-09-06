@@ -38,7 +38,6 @@ class ReportConfig:
 
     # Date Range Constants
     DEFAULT_DATE_RANGE_DAYS = 30
-    MIN_ACQUISITIONS_DAYS = 730  # 2 years for yearly acquisitions
 
     # Styling Constants
     BUTTON_STYLES = {

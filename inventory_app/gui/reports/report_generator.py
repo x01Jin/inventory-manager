@@ -42,20 +42,6 @@ class ReportGenerator:
         """
         return date_formatter.get_smart_granularity(start_date, end_date)
 
-    def should_include_yearly_acquisitions(self, start_date: date, end_date: date) -> bool:
-        """
-        Determine if yearly acquisitions column should be included.
-
-        Args:
-            start_date (datetime.date): Start date of the reporting period
-            end_date (datetime.date): End date of the reporting period
-
-        Returns:
-            bool: True if range is >= 2 years
-        """
-        days_diff = (end_date - start_date).days + 1
-        return days_diff >= 730  # Approximately 2 years
-
     def generate_report(self, start_date: date, end_date: date,
                        output_path: Optional[str] = None,
                        grade_filter: str = "",
@@ -77,14 +63,13 @@ class ReportGenerator:
         """
         # Determine granularity and report title
         granularity = self.get_granularity(start_date, end_date)
-        include_yearly = self.should_include_yearly_acquisitions(start_date, end_date)
 
         try:
             logger.info(f"Generating {granularity} report from {start_date} to {end_date}")
 
             # Get report data with dynamic granularity
             report_data = self._get_dynamic_report_data(
-                start_date, end_date, granularity, include_yearly,
+                start_date, end_date, granularity,
                 grade_filter, section_filter, include_consumables
             )
 
@@ -113,7 +98,7 @@ class ReportGenerator:
 
 
     def _get_dynamic_report_data(self, start_date: date, end_date: date,
-                                granularity: str, include_yearly: bool,
+                                granularity: str,
                                 grade_filter: str = "",
                                 section_filter: str = "",
                                 include_consumables: bool = True) -> List[Dict]:
@@ -124,7 +109,6 @@ class ReportGenerator:
             start_date: Start date for the report
             end_date: End date for the report
             granularity: 'daily', 'weekly', 'monthly', or 'quarterly'
-            include_yearly: Whether to include yearly acquisitions column
             grade_filter: Filter by grade level
             section_filter: Filter by section
             include_consumables: Whether to include consumable items
@@ -136,18 +120,11 @@ class ReportGenerator:
             # Use QueryBuilder for SQL generation and execution
             query_builder = ReportQueryBuilder()
 
-            # Build the dynamic query
+            # Build the dynamic query (optimized approach with built-in period columns)
             query, params = query_builder.build_dynamic_report_query(
-                start_date, end_date, granularity, include_yearly,
+                start_date, end_date, granularity,
                 grade_filter, section_filter, include_consumables
             )
-
-            # Get period keys for dynamic columns
-            period_keys = date_formatter.get_period_keys(start_date, end_date, granularity)
-
-            # Build dynamic columns and replace placeholder
-            dynamic_columns = query_builder.build_dynamic_columns(period_keys)
-            query = query.replace("{period_columns}", dynamic_columns)
 
             # Execute query and return results
             return query_builder.execute_report_query(query, params)
@@ -178,8 +155,7 @@ class ReportGenerator:
             # Fixed headers that don't need formatting
             fixed_headers = {
                 "ITEMS", "CATEGORIES", "ACTUAL_INVENTORY", "SIZE",
-                "BRAND", "OTHER SPECIFICATIONS", "TOTAL QUANTITY",
-                "YEARLY ACQUISITIONS"
+                "BRAND", "OTHER SPECIFICATIONS", "TOTAL QUANTITY"
             }
 
             for header in headers:
