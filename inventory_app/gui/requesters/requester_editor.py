@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QGroupBox, QMessageBox
 )
 from inventory_app.database.models import Requester
+from inventory_app.services.requesters_activity import requesters_activity_manager
 from inventory_app.utils.logger import logger
 
 
@@ -178,6 +179,20 @@ class RequesterEditor(QDialog):
             if success:
                 action = "updated" if self.existing_requester else "created"
                 logger.info(f"Successfully {action} requester: {requester.name}")
+
+                # Log activity
+                editor_name = self.editor_input.text().strip()
+                if self.existing_requester:
+                    requesters_activity_manager.log_requester_updated(
+                        requester_name=name,
+                        user_name=editor_name
+                    )
+                else:
+                    requesters_activity_manager.log_requester_added(
+                        requester_name=name,
+                        user_name=editor_name
+                    )
+
                 QMessageBox.information(self, "Success", f"Requester {action} successfully!")
                 self.accept()
             else:

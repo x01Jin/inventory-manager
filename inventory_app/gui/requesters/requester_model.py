@@ -10,8 +10,8 @@ from dataclasses import dataclass
 
 from inventory_app.database.models import Requester as RequesterDB
 from inventory_app.database.connection import db
+from inventory_app.services.requesters_activity import requesters_activity_manager
 from inventory_app.utils.logger import logger
-from inventory_app.utils.activity_logger import activity_logger
 
 
 @dataclass
@@ -222,12 +222,9 @@ class RequesterModel:
                 self.load_data()
 
                 # Log activity
-                activity_logger.log_activity(
-                    activity_logger.REQUESTER_DELETED,
-                    f"Deleted requester: {requester.name}",
-                    requester_id,
-                    "requester",
-                    editor_name
+                requesters_activity_manager.log_requester_deleted(
+                    requester_name=requester.name,
+                    user_name=editor_name
                 )
 
                 logger.info(f"Successfully deleted requester {requester_id}: {requester.name}")

@@ -5,7 +5,7 @@ Provides complete CRUD operations for requesters with dedicated interface.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QMessageBox, QLineEdit
+    QPushButton, QGroupBox, QMessageBox, QLineEdit, QInputDialog
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -203,8 +203,19 @@ class RequestersPage(QWidget):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
+            # Ask for editor name
+            editor_name, ok = QInputDialog.getText(
+                self, "Editor Information",
+                "Your Name/Initials:",
+                text=""
+            )
+
+            if not ok or not editor_name.strip():
+                QMessageBox.warning(self, "Required Information", "Editor name is required.")
+                return
+
             try:
-                success = self.model.delete_requester(requester_id, "User")
+                success = self.model.delete_requester(requester_id, editor_name.strip())
                 if success:
                     QMessageBox.information(self, "Success", "Requester deleted successfully!")
                     self.refresh_data()
