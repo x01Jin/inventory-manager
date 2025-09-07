@@ -548,9 +548,12 @@ class Requester:
                 query = "UPDATE Requesters SET name = ?, affiliation = ?, group_name = ? WHERE id = ?"
                 db.execute_update(query, (self.name, self.affiliation, self.group_name, self.id))
             else:
-                query = "INSERT INTO Requesters (name, affiliation, group_name) VALUES (?, ?, ?)"
-                db.execute_update(query, (self.name, self.affiliation, self.group_name))
+                # For new requesters, explicitly set created_at to local time
+                current_time = datetime.now()
+                query = "INSERT INTO Requesters (name, affiliation, group_name, created_at) VALUES (?, ?, ?, ?)"
+                db.execute_update(query, (self.name, self.affiliation, self.group_name, current_time.isoformat()))
                 self.id = db.get_last_insert_id()
+                self.created_at = current_time
             return True
         except Exception as e:
             logger.error(f"Failed to save requester: {e}")
@@ -719,13 +722,25 @@ class Requisition:
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
-                # Convert dates
+                # Convert dates with error handling
                 if req_dict.get('expected_request'):
-                    req_dict['expected_request'] = datetime.fromisoformat(req_dict['expected_request'])
+                    try:
+                        req_dict['expected_request'] = datetime.fromisoformat(req_dict['expected_request'])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid expected_request format: {req_dict['expected_request']}")
+                        req_dict['expected_request'] = datetime.now()
                 if req_dict.get('expected_return'):
-                    req_dict['expected_return'] = datetime.fromisoformat(req_dict['expected_return'])
+                    try:
+                        req_dict['expected_return'] = datetime.fromisoformat(req_dict['expected_return'])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid expected_return format: {req_dict['expected_return']}")
+                        req_dict['expected_return'] = datetime.now()
                 if req_dict.get('lab_activity_date'):
-                    req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                    try:
+                        req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid lab_activity_date format: {req_dict['lab_activity_date']}")
+                        req_dict['lab_activity_date'] = date.today()
                 requisitions.append(cls(**req_dict))
             return requisitions
         except Exception as e:

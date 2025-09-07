@@ -84,15 +84,28 @@ class RequisitionsModel:
                     for item in summary.items
                 ])
 
+                # Create defensive copies of datetime objects to prevent runtime corruption
+                expected_request_copy = None
+                if summary.requisition.expected_request:
+                    expected_request_copy = summary.requisition.expected_request.replace()
+
+                expected_return_copy = None
+                if summary.requisition.expected_return:
+                    expected_return_copy = summary.requisition.expected_return.replace()
+
+                lab_activity_date_copy = None
+                if summary.requisition.lab_activity_date:
+                    lab_activity_date_copy = summary.requisition.lab_activity_date  # date objects are immutable
+
                 row = RequisitionRow(
                     id=summary.requisition.id,
                     requester_name=summary.requester.name,
                     requester_affiliation=summary.requester.affiliation,
                     requester_group=summary.requester.group_name,
-                    expected_request=summary.requisition.expected_request,
-                    expected_return=summary.requisition.expected_return,
+                    expected_request=expected_request_copy,
+                    expected_return=expected_return_copy,
                     lab_activity_name=summary.requisition.lab_activity_name,
-                    lab_activity_date=summary.requisition.lab_activity_date,
+                    lab_activity_date=lab_activity_date_copy,
                     num_students=summary.requisition.num_students,
                     num_groups=summary.requisition.num_groups,
                     total_items=summary.total_items,

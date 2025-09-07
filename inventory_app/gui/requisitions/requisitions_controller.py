@@ -90,13 +90,32 @@ class RequisitionsController:
 
                 if req_id not in requisition_groups:
                     # Create requisition object with proper date conversion
+                    # Handle invalid date formats gracefully
+                    try:
+                        lab_activity_date = date.fromisoformat(row['lab_activity_date']) if row['lab_activity_date'] else date.today()
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}")
+                        lab_activity_date = date.today()
+
+                    try:
+                        expected_request = datetime.fromisoformat(row['expected_request']) if row['expected_request'] else datetime.now()
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid expected_request format for requisition {req_id}: {row['expected_request']}")
+                        expected_request = datetime.now()
+
+                    try:
+                        expected_return = datetime.fromisoformat(row['expected_return']) if row['expected_return'] else datetime.now()
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid expected_return format for requisition {req_id}: {row['expected_return']}")
+                        expected_return = datetime.now()
+
                     req_dict = {
                         'id': req_id,
                         'requester_id': row['requester_id'],
                         'lab_activity_name': row['lab_activity_name'],
-                        'lab_activity_date': date.fromisoformat(row['lab_activity_date']) if row['lab_activity_date'] else date.today(),
-                        'expected_request': datetime.fromisoformat(row['expected_request']) if row['expected_request'] else datetime.now(),
-                        'expected_return': datetime.fromisoformat(row['expected_return']) if row['expected_return'] else datetime.now(),
+                        'lab_activity_date': lab_activity_date,
+                        'expected_request': expected_request,
+                        'expected_return': expected_return,
                         'num_students': row['num_students'],
                         'num_groups': row['num_groups'],
                         'status': row['req_status']
@@ -234,11 +253,19 @@ class RequisitionsController:
                 return None
 
             req_dict = dict(rows[0])
-            # Convert dates
+            # Convert dates with error handling
             if req_dict.get('date_requested'):
-                req_dict['date_requested'] = date.fromisoformat(req_dict['date_requested'])
+                try:
+                    req_dict['date_requested'] = date.fromisoformat(req_dict['date_requested'])
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid date_requested format for requisition {requisition_id}: {req_dict['date_requested']}")
+                    req_dict['date_requested'] = date.today()
             if req_dict.get('lab_activity_date'):
-                req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                try:
+                    req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid lab_activity_date format for requisition {requisition_id}: {req_dict['lab_activity_date']}")
+                    req_dict['lab_activity_date'] = date.today()
 
             return Requisition(**req_dict)
         except Exception as e:
