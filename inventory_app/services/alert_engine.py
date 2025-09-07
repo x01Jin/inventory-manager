@@ -1,14 +1,14 @@
 """
 Alert engine for the inventory application.
 Handles calculation and retrieval of alerts for expiration and calibration.
-Uses composition pattern with DatabaseConnection.
+Uses the item status service for efficient status calculation.
 """
 
-from typing import List
+from typing import List, Optional
 from datetime import date
 from dataclasses import dataclass
 
-from inventory_app.database.connection import db
+from inventory_app.services.item_status_service import item_status_service, ItemStatus
 from inventory_app.utils.logger import logger
 
 @dataclass
@@ -24,7 +24,7 @@ class Alert:
 class AlertEngine:
     """
     Handles alert calculations and retrieval.
-    Uses composition with DatabaseConnection.
+    Uses the item status service for efficient processing.
     """
 
     def __init__(self):
@@ -32,33 +32,27 @@ class AlertEngine:
 
     def get_all_alerts(self) -> List[Alert]:
         """
-        Get all current alerts by querying Items table directly.
-        Combines expiration and calibration alerts.
+        Get all current alerts using the item status service.
 
         Returns:
             List of Alert objects
         """
         try:
+            # Get all items with their status
+            all_statuses = item_status_service.get_all_items_status()
+
             alerts = []
+            for status in all_statuses:
+                if status.status != 'OK':  # Only include items with alerts
+                    alert = self._status_to_alert(status)
+                    if alert:
+                        alerts.append(alert)
 
-            # Get expiration alerts
-            exp_alerts = self.get_expiration_alerts(6)
-            alerts.extend(exp_alerts)
+            # Sort by reference date
+            alerts.sort(key=lambda x: x.reference_date)
 
-            # Get calibration alerts
-            cal_alerts = self.get_calibration_alerts(3)
-            alerts.extend(cal_alerts)
-
-            # Sort by reference date and take unique items (no duplicates if item has both)
-            seen_items = set()
-            unique_alerts = []
-            for alert in sorted(alerts, key=lambda x: x.reference_date):
-                if alert.item_id not in seen_items:
-                    seen_items.add(alert.item_id)
-                    unique_alerts.append(alert)
-
-            logger.debug(f"Retrieved {len(unique_alerts)} unique alerts")
-            return unique_alerts
+            logger.debug(f"Retrieved {len(alerts)} alerts")
+            return alerts
 
         except Exception as e:
             logger.error(f"Failed to get alerts: {e}")
@@ -75,42 +69,15 @@ class AlertEngine:
             List of expiration alerts
         """
         try:
-            query = """
-            SELECT i.id, i.name, i.expiration_date
-            FROM Items i
-            WHERE i.expiration_date IS NOT NULL
-              AND i.expiration_date <= DATE('now', '+{} months')
-            ORDER BY i.expiration_date ASC
-            """.format(lead_months)
-
-            rows = db.execute_query(query)
-            alerts = []
-            today = date.today()
-
-            for row in rows:
-                alert_date = date.fromisoformat(row['expiration_date'])
-                days_until = (alert_date - today).days
-                severity = self._determine_severity('Expiration Alert', days_until)
-
-                alert = Alert(
-                    item_id=row['id'],
-                    item_name=row['name'],
-                    alert_type='Expiration Alert',
-                    reference_date=alert_date,
-                    days_until=days_until,
-                    severity=severity
-                )
-                alerts.append(alert)
-
-            return alerts
-
+            all_alerts = self.get_all_alerts()
+            return [alert for alert in all_alerts if alert.alert_type == 'Expiration Alert']
         except Exception as e:
             logger.error(f"Failed to get expiration alerts: {e}")
             return []
 
     def get_calibration_alerts(self, lead_months: int = 3) -> List[Alert]:
         """
-        Get equipment needing calibration based on calibration_date + 12 months.
+        Get equipment needing calibration.
 
         Args:
             lead_months: Months before due date to alert
@@ -119,38 +86,8 @@ class AlertEngine:
             List of calibration alerts
         """
         try:
-            query = """
-            SELECT i.id, i.name, i.calibration_date,
-                   DATE(i.calibration_date, '+12 months') as next_calibration
-            FROM Items i
-            WHERE i.calibration_date IS NOT NULL
-              AND DATE('now') >= DATE(i.calibration_date, '+12 months', '-{} months')
-            ORDER BY next_calibration ASC
-            """.format(lead_months)
-
-            rows = db.execute_query(query)
-            alerts = []
-            today = date.today()
-
-            for row in rows:
-                next_cal = row['next_calibration']
-                if next_cal:
-                    alert_date = date.fromisoformat(next_cal)
-                    days_until = (alert_date - today).days
-                    severity = self._determine_severity('Calibration Alert', days_until)
-
-                    alert = Alert(
-                        item_id=row['id'],
-                        item_name=row['name'],
-                        alert_type='Calibration Alert',
-                        reference_date=alert_date,
-                        days_until=days_until,
-                        severity=severity
-                    )
-                    alerts.append(alert)
-
-            return alerts
-
+            all_alerts = self.get_all_alerts()
+            return [alert for alert in all_alerts if 'Calibration' in alert.alert_type]
         except Exception as e:
             logger.error(f"Failed to get calibration alerts: {e}")
             return []
@@ -169,18 +106,99 @@ class AlertEngine:
             logger.error(f"Failed to get critical alerts: {e}")
             return []
 
-    def _determine_severity(self, alert_type: str, days_until: int) -> str:
+    def _status_to_alert(self, status: ItemStatus) -> Optional[Alert]:
         """
-        Determine alert severity based on type and days remaining.
+        Convert ItemStatus to Alert format.
+        Handles combined statuses like "CAL_WARNING and EXPIRING".
 
         Args:
-            alert_type: Type of alert
-            days_until: Days until the alert date
+            status: ItemStatus object
+
+        Returns:
+            Alert object or None if conversion fails
+        """
+        try:
+            # Get item name
+            from inventory_app.database.models import Item
+            item = Item.get_by_id(status.item_id)
+            if not item:
+                return None
+
+            # Skip if no reference date
+            if not status.reference_date:
+                return None
+
+            # Handle combined statuses (split by " and ")
+            status_parts = status.status.split(' and ')
+
+            # For combined statuses, create alerts for each part
+            alerts = []
+            for status_part in status_parts:
+                alert = self._create_alert_for_status(status, status_part.strip(), item.name)
+                if alert:
+                    alerts.append(alert)
+
+            # Return the most urgent alert (smallest days_until)
+            if alerts:
+                return min(alerts, key=lambda x: x.days_until)
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to convert status to alert for item {status.item_id}: {e}")
+            return None
+
+    def _create_alert_for_status(self, status: ItemStatus, status_part: str, item_name: str) -> Optional[Alert]:
+        """
+        Create an alert for a specific status part.
+
+        Args:
+            status: Original ItemStatus object
+            status_part: Individual status part (e.g., 'CAL_WARNING')
+            item_name: Name of the item
+
+        Returns:
+            Alert object or None
+        """
+        # Determine alert type
+        if status_part in ['EXPIRING', 'EXPIRED']:
+            alert_type = 'Expiration Alert'
+        elif status_part in ['CAL_WARNING', 'CAL_DUE']:
+            alert_type = 'Calibration Alert'
+        else:
+            return None
+
+        # Determine severity
+        severity = self._determine_severity(status)
+
+        # Ensure we have a valid reference date
+        if not status.reference_date:
+            return None
+
+        return Alert(
+            item_id=status.item_id,
+            item_name=item_name,
+            alert_type=alert_type,
+            reference_date=status.reference_date,
+            days_until=status.days_until or 0,
+            severity=severity
+        )
+
+    def _determine_severity(self, status: ItemStatus) -> str:
+        """
+        Determine alert severity based on status and days remaining.
+
+        Args:
+            status: ItemStatus object
 
         Returns:
             Severity level: 'Critical', 'Warning', or 'Info'
         """
-        if days_until < 0:
+        days_until = status.days_until or 0
+
+        if status.status in ['EXPIRED', 'CAL_DUE']:
+            return 'Critical'  # Already past due
+        elif days_until < 0:
             return 'Critical'  # Already past due
         elif days_until <= 7:
             return 'Critical'  # Within a week

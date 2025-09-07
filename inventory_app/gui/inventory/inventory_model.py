@@ -130,19 +130,12 @@ class InventoryModel:
         return sorted(list(suppliers))
 
     def get_statistics(self) -> Dict[str, Any]:
-        """Get basic statistics about the inventory."""
+        """Get complete statistics about the inventory including alerts."""
 
         from inventory_app.gui.inventory.inventory_controller import InventoryController
 
         controller = InventoryController()
-        batch_stats = controller.get_batch_statistics()
-
-        # Combine batch statistics with alert statistics
-        return {
-            "total_batches": batch_stats['total_batches'],
-            "total_stock": batch_stats['total_stock'],
-            "available_stock": batch_stats['available_stock'],
-        }
+        return controller.get_inventory_statistics()
 
     def clear_filters(self) -> None:
         """Clear all filters and show all items."""

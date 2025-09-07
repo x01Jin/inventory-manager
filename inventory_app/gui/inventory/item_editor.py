@@ -123,18 +123,25 @@ class ItemEditor(QDialog):
         dates_group = QGroupBox("Dates and Status")
         dates_layout = QVBoxLayout(dates_group)
 
-        # Dates Grid
+        # Dates Grid (2x4 layout)
         dates_grid_layout = QGridLayout()
 
-        # Row 0: Acquisition Date
+        # Row 0: Acquisition Date and Disposal Date
         dates_grid_layout.addWidget(QLabel("Acquisition Date:"), 0, 0)
         self.acquisition_date = QDateEdit()
         self.acquisition_date.setDate(QDate.currentDate())
         self.acquisition_date.setCalendarPopup(True)
         dates_grid_layout.addWidget(self.acquisition_date, 0, 1)
-        # Columns 2 and 3 remain blank
 
-        # Row 1: Item Type and Date
+        self.disposal_label = QLabel("Disposal Date:")
+        dates_grid_layout.addWidget(self.disposal_label, 0, 2)
+        self.disposal_date = QDateEdit()
+        self.disposal_date.setDate(QDate.currentDate())
+        self.disposal_date.setCalendarPopup(True)
+        self.disposal_date.setSpecialValueText("No Disposal Date")
+        dates_grid_layout.addWidget(self.disposal_date, 0, 3)
+
+        # Row 1: Item Type and Expiration/Calibration Date
         dates_grid_layout.addWidget(QLabel("Item Type:"), 1, 0)
         self.item_type_combo = QComboBox()
         self.item_type_combo.addItem("Consumable", "consumable")
@@ -143,15 +150,17 @@ class ItemEditor(QDialog):
         self.item_type_combo.currentIndexChanged.connect(self.on_item_type_changed)
         dates_grid_layout.addWidget(self.item_type_combo, 1, 1)
 
-        # Single Date Field (label changes based on selection)
-        self.date_label = QLabel("Expiration Date:")
-        dates_grid_layout.addWidget(self.date_label, 1, 2)
+        self.variable_label = QLabel("Expiration Date:")
+        dates_grid_layout.addWidget(self.variable_label, 1, 2)
+        self.variable_input = QDateEdit()
+        self.variable_input.setDate(QDate.currentDate())
+        self.variable_input.setCalendarPopup(True)
+        self.variable_input.setSpecialValueText("No Expiration")
+        dates_grid_layout.addWidget(self.variable_input, 1, 3)
 
-        self.item_date = QDateEdit()
-        self.item_date.setDate(QDate.currentDate())
-        self.item_date.setCalendarPopup(True)
-        self.item_date.setSpecialValueText("No Date")
-        dates_grid_layout.addWidget(self.item_date, 1, 3)
+        # Initially hide disposal controls
+        self.disposal_label.hide()
+        self.disposal_date.hide()
 
         # Set column stretches for better alignment
         dates_grid_layout.setColumnStretch(1, 1)
@@ -188,31 +197,60 @@ class ItemEditor(QDialog):
         self.setMinimumHeight(700)
 
     def on_item_type_changed(self):
-        """Update the date field label and value based on item type selection."""
+        """Update the date field visibility and labels based on item type selection."""
         item_type = self.item_type_combo.currentData()
 
         if item_type == "consumable":
-            self.date_label.setText("Expiration Date:")
-            self.item_date.setSpecialValueText("No Expiration")
-            # If we have existing item data, populate with expiration date
+            # Hide disposal controls
+            self.disposal_label.hide()
+            self.disposal_date.hide()
+
+            # Show expiration in bottom-right
+            self.variable_label.setText("Expiration Date:")
+            self.variable_input.setSpecialValueText("No Expiration")
+            self.variable_label.show()
+            self.variable_input.show()
+
+            # Populate with existing expiration date if available
             if self.existing_item and self.existing_item.expiration_date:
                 qdate = QDate(self.existing_item.expiration_date.year,
                              self.existing_item.expiration_date.month,
                              self.existing_item.expiration_date.day)
-                self.item_date.setDate(qdate)
+                self.variable_input.setDate(qdate)
             else:
-                self.item_date.setDate(QDate.currentDate())
+                self.variable_input.setDate(QDate.currentDate())
         else:  # non_consumable
-            self.date_label.setText("Calibration Date:")
-            self.item_date.setSpecialValueText("No Calibration")
-            # If we have existing item data, populate with calibration date
-            if self.existing_item and self.existing_item.calibration_date:
-                qdate = QDate(self.existing_item.calibration_date.year,
-                             self.existing_item.calibration_date.month,
-                             self.existing_item.calibration_date.day)
-                self.item_date.setDate(qdate)
+            # Show disposal in top-right
+            self.disposal_label.show()
+            self.disposal_date.show()
+
+            # Show calibration in bottom-right
+            self.variable_label.setText("Calibration Date:")
+            self.variable_input.setSpecialValueText("No Calibration")
+            self.variable_label.show()
+            self.variable_input.show()
+
+            # Populate with existing dates if available
+            if self.existing_item:
+                if self.existing_item.calibration_date:
+                    qdate = QDate(self.existing_item.calibration_date.year,
+                                 self.existing_item.calibration_date.month,
+                                 self.existing_item.calibration_date.day)
+                    self.variable_input.setDate(qdate)
+                else:
+                    self.variable_input.setDate(QDate.currentDate())
+
+                if self.existing_item.expiration_date:
+                    qdate = QDate(self.existing_item.expiration_date.year,
+                                 self.existing_item.expiration_date.month,
+                                 self.existing_item.expiration_date.day)
+                    self.disposal_date.setDate(qdate)
+                else:
+                    self.disposal_date.setDate(QDate.currentDate())
             else:
-                self.item_date.setDate(QDate.currentDate())
+                # Default dates for new items
+                self.variable_input.setDate(QDate.currentDate())
+                self.disposal_date.setDate(QDate.currentDate())
 
     def load_dropdown_data(self):
         """Load data for dropdown lists."""
@@ -293,6 +331,9 @@ class ItemEditor(QDialog):
             else:
                 self.item_type_combo.setCurrentIndex(1)  # Non-Consumable
 
+            # Update the layout based on the loaded item type
+            self.on_item_type_changed()
+
             logger.debug(f"Loaded data for item {self.item_id}")
 
         except Exception as e:
@@ -333,24 +374,31 @@ class ItemEditor(QDialog):
 
             # Set dates based on item type
             item_type = self.item_type_combo.currentData()
-            item_date = self.item_date.date()
 
             if item_type == "consumable":
                 item.is_consumable = 1
-                # Set expiration date from the item_date field
-                if not self.item_date.specialValueText() or item_date != self.item_date.minimumDate():
-                    item.expiration_date = date(item_date.year(), item_date.month(), item_date.day())
-                else:
+                # Set expiration date from the variable_input field
+                exp_date = self.variable_input.date()
+                if self.variable_input.specialValueText() and exp_date == self.variable_input.minimumDate():
                     item.expiration_date = None
+                else:
+                    item.expiration_date = date(exp_date.year(), exp_date.month(), exp_date.day())
                 item.calibration_date = None  # Clear calibration date for consumables
             else:  # non_consumable
                 item.is_consumable = 0
-                # Set calibration date from the item_date field
-                if not self.item_date.specialValueText() or item_date != self.item_date.minimumDate():
-                    item.calibration_date = date(item_date.year(), item_date.month(), item_date.day())
-                else:
+                # Set calibration date from the variable_input field
+                cal_date = self.variable_input.date()
+                if self.variable_input.specialValueText() and cal_date == self.variable_input.minimumDate():
                     item.calibration_date = None
-                item.expiration_date = None  # Clear expiration date for non-consumables
+                else:
+                    item.calibration_date = date(cal_date.year(), cal_date.month(), cal_date.day())
+
+                # Set disposal date (stored in expiration_date) from the disposal_date field
+                disp_date = self.disposal_date.date()
+                if self.disposal_date.specialValueText() and disp_date == self.disposal_date.minimumDate():
+                    item.expiration_date = None
+                else:
+                    item.expiration_date = date(disp_date.year(), disp_date.month(), disp_date.day())
 
             # Get batch quantity for new items
             batch_quantity = 0

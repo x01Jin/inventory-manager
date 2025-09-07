@@ -6,6 +6,7 @@ Handles database operations and data loading for inventory items.
 from typing import List, Optional, Dict, Any
 from datetime import date
 from inventory_app.database.connection import db
+from inventory_app.services.item_status_service import item_status_service
 from inventory_app.utils.logger import logger
 
 
@@ -319,3 +320,58 @@ class InventoryController:
         except Exception as e:
             logger.error(f"Failed to get suppliers: {e}")
             return []
+
+    def get_inventory_statistics(self) -> Dict[str, Any]:
+        """Get complete inventory statistics including alerts."""
+        try:
+            # Get basic batch statistics
+            batch_stats = self.get_batch_statistics()
+
+            # Get alert counts from status service
+            alert_counts = item_status_service.get_alert_counts()
+
+            # Get low stock count
+            low_stock_query = """
+            SELECT COUNT(*) as count FROM (
+                SELECT ib.item_id,
+                        SUM(ib.quantity_received) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END), 0) as current_stock
+                FROM Item_Batches ib
+                LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+                HAVING current_stock < 10 AND current_stock > 0
+            )
+            """
+            low_stock_result = db.execute_query(low_stock_query)
+            low_stock_count = low_stock_result[0]['count'] if low_stock_result else 0
+
+            # Combine all statistics
+            stats = {
+                'total_batches': batch_stats['total_batches'],
+                'total_stock': batch_stats['total_stock'],
+                'available_stock': batch_stats['available_stock'],
+                'low_stock': low_stock_count,
+                'expiring': alert_counts.get('expiring', 0),
+                'expired': alert_counts.get('expired', 0),
+                'calibration_warning': alert_counts.get('calibration_warning', 0),
+                'calibration_due': alert_counts.get('calibration_due', 0)
+            }
+
+            logger.debug(f"Generated complete inventory statistics: {stats}")
+            return stats
+
+        except Exception as e:
+            logger.error(f"Failed to get inventory statistics: {e}")
+            return {
+                'total_batches': 0,
+                'total_stock': 0,
+                'available_stock': 0,
+                'low_stock': 0,
+                'expiring': 0,
+                'expired': 0,
+                'calibration_warning': 0,
+                'calibration_due': 0
+            }

@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QAbstractItemView, QHBoxLayout, QWidget
 )
 from PyQt6.QtCore import Qt, QTimer
-from inventory_app.gui.styles import DarkTheme
+from PyQt6.QtGui import QColor
+from inventory_app.services.item_status_service import item_status_service
 from inventory_app.utils.logger import logger
 
 
@@ -35,7 +36,7 @@ class InventoryTable(QTableWidget):
     # Column definitions
     COLUMNS = [
         "Stock/Available", "Name", "Size", "Brand", "Other Specifications", "Supplier",
-        "Calibration/Expiration Date", "Item Type", "Acquisition Date",
+        "Calibration Date", "Expiry/Disposal Date", "Item Type", "Acquisition Date",
         "Last Modified"
     ]
 
@@ -51,7 +52,6 @@ class InventoryTable(QTableWidget):
         self.setHorizontalHeaderLabels(self.COLUMNS)
 
         # Configure table properties
-        self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSortingEnabled(True)
 
@@ -72,41 +72,17 @@ class InventoryTable(QTableWidget):
             self.setColumnWidth(3, 100)  # Brand
             self.setColumnWidth(4, 120)  # Other Specifications
             self.setColumnWidth(5, 120)  # Supplier
-            self.setColumnWidth(6, 100)  # Calibration/Expiration Date
-            self.setColumnWidth(7, 80)   # Item Type
-            self.setColumnWidth(8, 100)  # Acquisition Date
-            self.setColumnWidth(9, 120)  # Last Modified
+            self.setColumnWidth(6, 100)  # Calibration Date
+            self.setColumnWidth(7, 100)  # Expiry/Disposal Date
+            self.setColumnWidth(8, 80)   # Item Type
+            self.setColumnWidth(9, 100)  # Acquisition Date
+            self.setColumnWidth(10, 120) # Last Modified
 
         # Configure vertical header
         v_header = self.verticalHeader()
         if v_header:
             v_header.setDefaultSectionSize(25)
             v_header.setVisible(False)
-
-        # Apply dark theme styling
-        self.apply_styling()
-
-    def apply_styling(self):
-        """Apply dark theme styling to the table."""
-        self.setStyleSheet(f"""
-            QTableWidget {{
-                gridline-color: {DarkTheme.BORDER_COLOR};
-                background-color: {DarkTheme.SECONDARY_DARK};
-                border: 1px solid {DarkTheme.BORDER_COLOR};
-                border-radius: 6px;
-                selection-background-color: {DarkTheme.ACCENT_COLOR};
-            }}
-
-            QTableWidget::item {{
-                padding: 8px;
-                border-bottom: 1px solid {DarkTheme.BORDER_COLOR};
-                color: {DarkTheme.TEXT_PRIMARY};
-            }}
-
-            QTableWidget::item:selected {{
-                background-color: {DarkTheme.ACCENT_COLOR};
-            }}
-        """)
 
     def populate_table(self, items: List[Dict[str, Any]]):
         """Populate the table with inventory items."""
@@ -128,7 +104,7 @@ class InventoryTable(QTableWidget):
         try:
             # Extract data from item dict
             item_id = item.get('id')
-            name = item.get('name', '')
+            name = item.get('name', 'N/A')
             size = item.get('size', '')
             brand = item.get('brand', '')
             other_specifications = item.get('other_specifications', '')
@@ -144,15 +120,17 @@ class InventoryTable(QTableWidget):
             available_stock = item.get('available_stock', 0)
             stock_display = f"{total_stock}/{available_stock}"
 
-            # Combine calibration/expiration date - use expiration for consumables, calibration for non-consumables
-            combined_date = expiration_date if expiration_date != "N/A" else calibration_date
-
             # Determine item type
             item_type = "Consumable" if is_consumable else "Non-Consumable"
 
+            # Get item status for coloring
+            item_status = None
+            if item_id:
+                item_status = item_status_service.get_item_status(item_id)
+
             # Create table items
-            status_item = QTableWidgetItem(stock_display)
-            self.setItem(row, 0, status_item)  # Stock/Available
+            stock_item = QTableWidgetItem(stock_display)
+            self.setItem(row, 0, stock_item)  # Stock/Available
 
             name_item = QTableWidgetItem(name)
             self.setItem(row, 1, name_item)  # Name
@@ -160,10 +138,20 @@ class InventoryTable(QTableWidget):
             self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))  # Brand
             self.setItem(row, 4, QTableWidgetItem(other_specifications or "N/A"))  # Other Specifications
             self.setItem(row, 5, QTableWidgetItem(supplier_name or "N/A"))  # Supplier
-            self.setItem(row, 6, QTableWidgetItem(combined_date))  # Calibration/Expiration Date
-            self.setItem(row, 7, QTableWidgetItem(item_type))  # Item Type
-            self.setItem(row, 8, QTableWidgetItem(acquisition_date))  # Acquisition Date
-            self.setItem(row, 9, QTableWidgetItem(last_modified))  # Last Modified
+
+            # Calibration Date with status-based coloring
+            cal_date_item = QTableWidgetItem(calibration_date or "N/A")
+            self._color_date_item(cal_date_item, item_status, "calibration")
+            self.setItem(row, 6, cal_date_item)  # Calibration Date
+
+            # Expiry/Disposal Date with status-based coloring
+            exp_date_item = QTableWidgetItem(expiration_date or "N/A")
+            self._color_date_item(exp_date_item, item_status, "expiration")
+            self.setItem(row, 7, exp_date_item)  # Expiry/Disposal Date
+
+            self.setItem(row, 8, QTableWidgetItem(item_type))  # Item Type
+            self.setItem(row, 9, QTableWidgetItem(acquisition_date))  # Acquisition Date
+            self.setItem(row, 10, QTableWidgetItem(last_modified))  # Last Modified
 
             # Store item ID in row for later retrieval
             if item_id is not None:
@@ -224,3 +212,38 @@ class InventoryTable(QTableWidget):
     def get_row_count(self) -> int:
         """Get the number of rows in the table."""
         return self.rowCount()
+
+    def _color_date_item(self, item: QTableWidgetItem, item_status, date_type: str) -> None:
+        """
+        Color-code the date item based on item status and date type.
+
+        Args:
+            item: The table item to color
+            item_status: ItemStatus object or None
+            date_type: "calibration" or "expiration"
+        """
+        if not item_status:
+            # Default color for OK status
+            item.setForeground(QColor("#FFFFFF"))  # Black
+            return
+
+        status = item_status.status
+
+        # Handle combined statuses by checking for specific components
+        if date_type == "calibration":
+            if "CAL_DUE" in status:
+                item.setForeground(QColor("#DC3545"))  # Red
+            elif "CAL_WARNING" in status:
+                item.setForeground(QColor("#FD7E14"))  # Orange
+            else:
+                item.setForeground(QColor("#FFFFFF"))  # Black
+        elif date_type == "expiration":
+            if "EXPIRED" in status:
+                item.setForeground(QColor("#DC3545"))  # Red
+            elif "EXPIRING" in status:
+                item.setForeground(QColor("#FFC107"))  # Yellow
+            else:
+                item.setForeground(QColor("#FFFFFF"))  # Black
+        else:
+            # Default for other date types
+            item.setForeground(QColor("#000000"))  # Black
