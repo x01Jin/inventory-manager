@@ -45,8 +45,6 @@ class RequisitionsModel:
         self.requester_filter: str = ""
         self.activity_filter: str = ""
         self.status_filter: str = ""
-        self.workflow_status_filter: str = ""
-        self.processed_status_filter: str = ""
         self.date_from: Optional[date] = None
         self.date_to: Optional[date] = None
 
@@ -155,29 +153,9 @@ class RequisitionsModel:
         Filter by requisition status.
 
         Args:
-            status: Status to filter by ('active', 'returned', 'overdue', 'partially returned', etc.)
+            status: Status to filter by ('requested', 'active', 'returned', 'overdue')
         """
-        self.status_filter = status
-        self._apply_filters()
-
-    def filter_by_workflow_status(self, workflow_status: str) -> None:
-        """
-        Filter by workflow status only (requested, active, overdue).
-
-        Args:
-            workflow_status: Workflow status to filter by
-        """
-        self.workflow_status_filter = workflow_status
-        self._apply_filters()
-
-    def filter_by_processed_status(self, processed_status: str) -> None:
-        """
-        Filter by processed status (returned, partially returned, used, lost).
-
-        Args:
-            processed_status: Processed status to filter by
-        """
-        self.processed_status_filter = processed_status
+        self.status_filter = status.lower()  # Make case-insensitive
         self._apply_filters()
 
     def filter_by_date_range(self, date_from: Optional[date], date_to: Optional[date]) -> None:
@@ -198,8 +176,6 @@ class RequisitionsModel:
         self.requester_filter = ""
         self.activity_filter = ""
         self.status_filter = ""
-        self.workflow_status_filter = ""
-        self.processed_status_filter = ""
         self.date_from = None
         self.date_to = None
         self._apply_filters()
@@ -228,14 +204,10 @@ class RequisitionsModel:
         """
         try:
             total_requisitions = len(self.filtered_requisitions)
+            requested_count = sum(1 for r in self.filtered_requisitions if r.status == "requested")
             active_count = sum(1 for r in self.filtered_requisitions if r.status == "active")
             returned_count = sum(1 for r in self.filtered_requisitions if r.status == "returned")
             overdue_count = sum(1 for r in self.filtered_requisitions if r.status == "overdue")
-            partially_returned_count = sum(1 for r in self.filtered_requisitions if "partially returned" in r.status)
-            consumed_count = sum(1 for r in self.filtered_requisitions if r.status == "consumed")
-            lost_count = sum(1 for r in self.filtered_requisitions if r.status == "lost")
-            returned_and_lost_count = sum(1 for r in self.filtered_requisitions if r.status == "returned and lost")
-            returned_and_consumed_count = sum(1 for r in self.filtered_requisitions if r.status == "returned and consumed")
 
             # Calculate total items requested
             total_items = sum(r.total_items for r in self.filtered_requisitions)
@@ -245,14 +217,10 @@ class RequisitionsModel:
 
             return {
                 'total_requisitions': total_requisitions,
+                'requested_requisitions': requested_count,
                 'active_requisitions': active_count,
                 'returned_requisitions': returned_count,
                 'overdue_requisitions': overdue_count,
-                'partially_returned_requisitions': partially_returned_count,
-                'consumed_requisitions': consumed_count,
-                'lost_requisitions': lost_count,
-                'returned_and_lost_requisitions': returned_and_lost_count,
-                'returned_and_consumed_requisitions': returned_and_consumed_count,
                 'total_items_requested': total_items,
                 'unique_requesters': unique_requesters
             }
@@ -261,14 +229,10 @@ class RequisitionsModel:
             logger.error(f"Failed to calculate statistics: {e}")
             return {
                 'total_requisitions': 0,
+                'requested_requisitions': 0,
                 'active_requisitions': 0,
                 'returned_requisitions': 0,
                 'overdue_requisitions': 0,
-                'partially_returned_requisitions': 0,
-                'consumed_requisitions': 0,
-                'lost_requisitions': 0,
-                'returned_and_lost_requisitions': 0,
-                'returned_and_consumed_requisitions': 0,
                 'total_items_requested': 0,
                 'unique_requesters': 0
             }
@@ -307,21 +271,9 @@ class RequisitionsModel:
             if self.activity_filter:
                 filtered = [r for r in filtered if self.activity_filter in r.requisition.lab_activity_name.lower()]
 
-            # Apply status filters
-            if self.workflow_status_filter:
-                filtered = [r for r in filtered if self._matches_workflow_status(r.status, self.workflow_status_filter)]
-
-            if self.processed_status_filter:
-                filtered = [r for r in filtered if self._matches_processed_status(r.status, self.processed_status_filter)]
-
-            # Legacy status filter (for backward compatibility)
+            # Apply status filter
             if self.status_filter:
-                if self.status_filter == "partially returned":
-                    filtered = [r for r in filtered if "partially returned" in r.status]
-                elif self.status_filter in ["requested", "active", "overdue"]:
-                    filtered = [r for r in filtered if self._matches_workflow_status(r.status, self.status_filter)]
-                else:
-                    filtered = [r for r in filtered if self.status_filter in r.status]
+                filtered = [r for r in filtered if r.status.lower() == self.status_filter]
 
             # Apply date range filter
             if self.date_from or self.date_to:
@@ -383,26 +335,3 @@ class RequisitionsModel:
             filtered.append(req)
 
         return filtered
-
-    def _matches_workflow_status(self, status_string: str, workflow_status: str) -> bool:
-        """Check if status string contains the specified workflow status."""
-        # Status format: "workflow_status, processed_status1 (X%), processed_status2 (Y%)"
-        # Or just "workflow_status" if no processed status
-        workflow_part = status_string.split(',')[0].strip()
-        return workflow_part == workflow_status
-
-    def _matches_processed_status(self, status_string: str, processed_status: str) -> bool:
-        """Check if status string contains the specified processed status."""
-        # Status format: "workflow_status, processed_status1 (X%), processed_status2 (Y%)"
-        parts = status_string.split(',')
-        if len(parts) < 2:
-            return False  # No processed status
-
-        # Check each processed status part
-        for part in parts[1:]:
-            part = part.strip()
-            # Extract the status name (remove percentage)
-            status_name = part.split(' (')[0] if ' (' in part else part
-            if status_name == processed_status:
-                return True
-        return False

@@ -65,9 +65,9 @@ class RequisitionsFilters(QWidget):
         filter_row1.addWidget(QLabel("Status:"))
         self.status_combo = QComboBox()
         self.status_combo.addItem("All Statuses", "")
-        self.status_combo.addItem("Active", "Active")
-        self.status_combo.addItem("Returned", "Returned")
-        self.status_combo.addItem("Overdue", "Overdue")
+        self.status_combo.addItem("Active", "active")
+        self.status_combo.addItem("Returned", "returned")
+        self.status_combo.addItem("Overdue", "overdue")
         self.status_combo.currentTextChanged.connect(self._on_status_changed)
         filter_row1.addWidget(self.status_combo)
 
