@@ -27,7 +27,6 @@ class ItemRow:
     last_modified: Optional[datetime]
     total_stock: int = 0
     available_stock: int = 0
-    alert_status: str = ""  # "expiration", "calibration", or ""
 
     def format_expiration_date(self) -> str:
         """Format expiration date for display."""
@@ -56,14 +55,6 @@ class ItemRow:
     def format_consumable(self) -> str:
         """Format consumable flag for display."""
         return "Yes" if self.is_consumable else "No"
-
-    def get_alert_color(self) -> Optional[str]:
-        """Get color code for alert status."""
-        if self.alert_status == "expiration":
-            return "#ef4444"  # Red
-        elif self.alert_status == "calibration":
-            return "#f59e0b"  # Yellow/Orange
-        return None
 
 
 class InventoryModel:
@@ -146,18 +137,11 @@ class InventoryModel:
         controller = InventoryController()
         batch_stats = controller.get_batch_statistics()
 
-        # Calculate alerts from current items
-        expiring_count = sum(1 for item in self.items if item.alert_status == "expiration")
-        calibration_count = sum(1 for item in self.items if item.alert_status == "calibration")
-
         # Combine batch statistics with alert statistics
         return {
             "total_batches": batch_stats['total_batches'],
             "total_stock": batch_stats['total_stock'],
             "available_stock": batch_stats['available_stock'],
-            "expiring_alerts": expiring_count,
-            "calibration_alerts": calibration_count,
-            "total_alerts": expiring_count + calibration_count
         }
 
     def clear_filters(self) -> None:

@@ -10,7 +10,6 @@ from .inventory_table import InventoryTable
 from .inventory_filters import InventoryFilters
 from .inventory_stats import InventoryStats
 from .item_editor import ItemEditor
-from .alert_system import AlertSystem
 
 __all__ = [
     'InventoryPage',
@@ -20,6 +19,5 @@ __all__ = [
     'InventoryTable',
     'InventoryFilters',
     'InventoryStats',
-    'ItemEditor',
-    'AlertSystem'
+    'ItemEditor'
 ]

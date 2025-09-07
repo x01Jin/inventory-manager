@@ -40,17 +40,7 @@ class InventoryStats(QWidget):
         self.available_stock_label = QLabel("✅ Available Stock: 0")
         stats_layout.addWidget(self.available_stock_label)
 
-        # Alerts
-        self.alerts_label = QLabel("⚠️ Alerts: 0")
-        stats_layout.addWidget(self.alerts_label)
 
-        # Expiration alerts
-        self.expiration_label = QLabel("⏰ Expiring: 0")
-        stats_layout.addWidget(self.expiration_label)
-
-        # Calibration alerts
-        self.calibration_label = QLabel("🔧 Calibration: 0")
-        stats_layout.addWidget(self.calibration_label)
 
         stats_layout.addStretch()
         layout.addWidget(stats_group)
@@ -61,9 +51,6 @@ class InventoryStats(QWidget):
             self.total_label.setText(f"📦 Total Batches: {stats.get('total_batches', 0)}")
             self.total_stock_label.setText(f"🔄 Total Stock: {stats.get('total_stock', 0)}")
             self.available_stock_label.setText(f"✅ Available Stock: {stats.get('available_stock', 0)}")
-            self.alerts_label.setText(f"⚠️ Alerts: {stats.get('total_alerts', 0)}")
-            self.expiration_label.setText(f"⏰ Expiring: {stats.get('expiring_alerts', 0)}")
-            self.calibration_label.setText(f"🔧 Calibration: {stats.get('calibration_alerts', 0)}")
 
             logger.debug(f"Updated statistics: {stats}")
 

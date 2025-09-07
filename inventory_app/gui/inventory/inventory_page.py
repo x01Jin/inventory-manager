@@ -16,7 +16,7 @@ from .inventory_table import InventoryTable
 from .inventory_filters import InventoryFilters
 from .inventory_stats import InventoryStats
 from .item_editor import ItemEditor
-from .alert_system import AlertSystem
+
 
 
 class InventoryPage(QWidget):
@@ -35,7 +35,6 @@ class InventoryPage(QWidget):
         self.table = InventoryTable()
         self.filters = InventoryFilters()
         self.stats = InventoryStats()
-        self.alert_system = AlertSystem()
 
         # Setup connections between components
         self._setup_connections()
@@ -145,7 +144,6 @@ class InventoryPage(QWidget):
                     is_consumable=bool(row.get('is_consumable', 1)),
                     total_stock=row.get('total_stock', 0),
                     available_stock=row.get('available_stock', 0),
-                    alert_status=row.get('alert_status', '')
                 )
                 items.append(item)
 
@@ -311,7 +309,6 @@ class InventoryPage(QWidget):
                 'is_consumable': item.is_consumable,
                 'total_stock': item.total_stock,
                 'available_stock': item.available_stock,
-                'alert_status': item.alert_status
             }
             table_data.append(row)
 

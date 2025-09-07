@@ -103,15 +103,6 @@ class InventoryController:
                 COALESCE(stock.total_stock, 0) as total_stock,
                 COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
-                    WHEN i.expiration_date IS NOT NULL
-                         AND i.expiration_date <= DATE('now', '+6 months')
-                    THEN 'expiration'
-                    WHEN i.calibration_date IS NOT NULL
-                         AND DATE('now') >= DATE(i.calibration_date, '+12 months')
-                    THEN 'calibration'
-                    ELSE ''
-                END as alert_status,
-                CASE
                     WHEN EXISTS (
                         SELECT 1 FROM Requisition_Items ri
                         JOIN Requisitions r ON ri.requisition_id = r.id

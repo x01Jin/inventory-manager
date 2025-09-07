@@ -49,7 +49,7 @@ class NavigationPanel(QWidget):
         layout.addStretch()
 
         # User info
-        user_info = QLabel("👤 Administrator")
+        user_info = QLabel("👤 Hello User!")
         user_info.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; padding: 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {DarkTheme.BORDER_COLOR};")
         layout.addWidget(user_info)
 

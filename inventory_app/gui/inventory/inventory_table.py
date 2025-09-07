@@ -1,20 +1,19 @@
 """
 Inventory table widget for displaying inventory items.
-Provides table display with sorting, alerts, and styling.
+Provides table display with sorting, and styling.
 """
 
 from typing import List, Dict, Any, Optional
 from PyQt6.QtWidgets import (
-    QTableWidget, QTableWidgetItem, QAbstractItemView, QHBoxLayout, QWidget, QLabel
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QHBoxLayout, QWidget
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.utils.logger import logger
 
 
 class AlertIndicator(QWidget):
-    """Widget to display alert indicators in table cells."""
+    """Widget to display indicators in table cells."""
 
     def __init__(self, alert_type: str = "", parent=None):
         super().__init__(parent)
@@ -27,29 +26,17 @@ class AlertIndicator(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(4)
 
-        # Alert indicator dot
-        self.indicator = QLabel("●")
-        self.indicator.setFixedSize(8, 8)
-
-        if self.alert_type == "expiration":
-            self.indicator.setStyleSheet(f"color: {DarkTheme.ERROR_COLOR}; font-weight: bold;")
-        elif self.alert_type == "calibration":
-            self.indicator.setStyleSheet(f"color: {DarkTheme.WARNING_COLOR}; font-weight: bold;")
-        else:
-            self.indicator.setVisible(False)
-
-        layout.addWidget(self.indicator)
         layout.addStretch()
 
 
 class InventoryTable(QTableWidget):
-    """Table widget for displaying inventory items with alerts and styling."""
+    """Table widget for displaying inventory items with styling."""
 
     # Column definitions
     COLUMNS = [
-        "Stock/Available", "Name", "Category", "Size", "Brand", "Supplier",
-        "Expiration Date", "Calibration Date", "Acquisition Date",
-        "Consumable", "Last Modified", "Alert Status"
+        "Stock/Available", "Name", "Size", "Brand", "Other Specifications", "Supplier",
+        "Calibration/Expiration Date", "Item Type", "Acquisition Date",
+        "Last Modified"
     ]
 
     def __init__(self, parent=None):
@@ -79,18 +66,16 @@ class InventoryTable(QTableWidget):
             header.setStretchLastSection(True)
 
             # Set column widths
-            self.setColumnWidth(0, 100)  # Status
+            self.setColumnWidth(0, 100)  # Stock/Available
             self.setColumnWidth(1, 200)  # Name
-            self.setColumnWidth(2, 120)  # Category
-            self.setColumnWidth(3, 80)   # Size
-            self.setColumnWidth(4, 100)  # Brand
+            self.setColumnWidth(2, 80)   # Size
+            self.setColumnWidth(3, 100)  # Brand
+            self.setColumnWidth(4, 120)  # Other Specifications
             self.setColumnWidth(5, 120)  # Supplier
-            self.setColumnWidth(6, 100)  # Expiration Date
-            self.setColumnWidth(7, 100)  # Calibration Date
+            self.setColumnWidth(6, 100)  # Calibration/Expiration Date
+            self.setColumnWidth(7, 80)   # Item Type
             self.setColumnWidth(8, 100)  # Acquisition Date
-            self.setColumnWidth(9, 80)   # Consumable
-            self.setColumnWidth(10, 120) # Last Modified
-            self.setColumnWidth(11, 100) # Alert Status
+            self.setColumnWidth(9, 120)  # Last Modified
 
         # Configure vertical header
         v_header = self.verticalHeader()
@@ -144,21 +129,26 @@ class InventoryTable(QTableWidget):
             # Extract data from item dict
             item_id = item.get('id')
             name = item.get('name', '')
-            category_name = item.get('category_name', 'Uncategorized')
             size = item.get('size', '')
             brand = item.get('brand', '')
+            other_specifications = item.get('other_specifications', '')
             supplier_name = item.get('supplier_name', '')
             expiration_date = self.format_date(item.get('expiration_date'))
             calibration_date = self.format_date(item.get('calibration_date'))
             acquisition_date = self.format_date(item.get('acquisition_date'))
-            is_consumable = "Yes" if item.get('is_consumable') else "No"
+            is_consumable = item.get('is_consumable', False)
             last_modified = self.format_datetime(item.get('last_modified'))
-            alert_status = item.get('alert_status', '')
 
             # Calculate stock/available format
             total_stock = item.get('total_stock', 0)
             available_stock = item.get('available_stock', 0)
             stock_display = f"{total_stock}/{available_stock}"
+
+            # Combine calibration/expiration date - use expiration for consumables, calibration for non-consumables
+            combined_date = expiration_date if expiration_date != "N/A" else calibration_date
+
+            # Determine item type
+            item_type = "Consumable" if is_consumable else "Non-Consumable"
 
             # Create table items
             status_item = QTableWidgetItem(stock_display)
@@ -166,22 +156,14 @@ class InventoryTable(QTableWidget):
 
             name_item = QTableWidgetItem(name)
             self.setItem(row, 1, name_item)  # Name
-            self.setItem(row, 2, QTableWidgetItem(category_name))  # Category
-            self.setItem(row, 3, QTableWidgetItem(size or "N/A"))  # Size
-            self.setItem(row, 4, QTableWidgetItem(brand or "N/A"))  # Brand
+            self.setItem(row, 2, QTableWidgetItem(size or "N/A"))  # Size
+            self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))  # Brand
+            self.setItem(row, 4, QTableWidgetItem(other_specifications or "N/A"))  # Other Specifications
             self.setItem(row, 5, QTableWidgetItem(supplier_name or "N/A"))  # Supplier
-            self.setItem(row, 6, QTableWidgetItem(expiration_date))  # Expiration Date
-            self.setItem(row, 7, QTableWidgetItem(calibration_date))  # Calibration Date
+            self.setItem(row, 6, QTableWidgetItem(combined_date))  # Calibration/Expiration Date
+            self.setItem(row, 7, QTableWidgetItem(item_type))  # Item Type
             self.setItem(row, 8, QTableWidgetItem(acquisition_date))  # Acquisition Date
-            self.setItem(row, 9, QTableWidgetItem(is_consumable))  # Consumable
-            self.setItem(row, 10, QTableWidgetItem(last_modified))  # Last Modified
-            self.setItem(row, 11, QTableWidgetItem(alert_status or "None"))  # Alert Status
-
-            # Apply status styling based on stock availability
-            self.apply_stock_styling(row, total_stock, available_stock)
-
-            # Apply alert styling
-            self.apply_alert_styling(row, alert_status)
+            self.setItem(row, 9, QTableWidgetItem(last_modified))  # Last Modified
 
             # Store item ID in row for later retrieval
             if item_id is not None:
@@ -189,50 +171,6 @@ class InventoryTable(QTableWidget):
 
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")
-
-    def apply_stock_styling(self, row: int, total_stock: int, available_stock: int):
-        """Apply styling based on stock availability."""
-        # Determine status based on stock levels
-        if available_stock == 0:
-            # Out of stock - red/warning styling
-            for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if item:
-                    item.setBackground(QColor(DarkTheme.ERROR_COLOR).lighter(180))
-                    if col == 0:  # Stock/Available column
-                        item.setForeground(QColor(DarkTheme.ERROR_COLOR))
-        elif available_stock < total_stock:
-            # Partially available - yellow/warning styling
-            for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if item:
-                    item.setBackground(QColor(DarkTheme.WARNING_COLOR).lighter(180))
-                    if col == 0:  # Stock/Available column
-                        item.setForeground(QColor(DarkTheme.WARNING_COLOR))
-        else:
-            # Fully available - green/success styling
-            for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if item and col == 0:  # Stock/Available column
-                    item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
-
-    def apply_alert_styling(self, row: int, alert_status: str):
-        """Apply styling based on alert status."""
-        if not alert_status:
-            return
-
-        # Set background color for alert rows
-        alert_color = None
-        if alert_status == "expiration":
-            alert_color = QColor(DarkTheme.ERROR_COLOR).lighter(180)
-        elif alert_status == "calibration":
-            alert_color = QColor(DarkTheme.WARNING_COLOR).lighter(180)
-
-        if alert_color:
-            for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if item:
-                    item.setBackground(alert_color)
 
     def format_date(self, date_str: Optional[str]) -> str:
         """Format date string for display."""
