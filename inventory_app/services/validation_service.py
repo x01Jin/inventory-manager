@@ -89,7 +89,8 @@ class ValidationService:
         required_fields = ['date_requested', 'lab_activity_name', 'lab_activity_date']
 
         for field in required_fields:
-            if not requisition_data.get(field):
+            value = requisition_data.get(field, '').strip()
+            if not value:
                 logger.error(f"Missing required requisition field: {field}")
                 return False
 
