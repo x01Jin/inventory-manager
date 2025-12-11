@@ -52,7 +52,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
         # Load existing data into form fields
         self.load_existing_data_simple()
 
-        logger.info(f"Edit requisition dialog initialized for ID: {self.requisition_id}")
+        logger.info(
+            f"Edit requisition dialog initialized for ID: {self.requisition_id}"
+        )
 
     def _setup_header(self, layout):
         """Setup edit-specific header."""
@@ -74,7 +76,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
         # Activity details widget
         self.activity_widget = ActivityDetailsWidget(parent=self)
         self.activity_widget.set_datetime_manager(self.datetime_manager)
-        self.activity_widget.activity_name_changed.connect(self.update_create_button_state)
+        self.activity_widget.activity_name_changed.connect(
+            self.update_create_button_state
+        )
         self.activity_widget.field_changed.connect(self.update_create_button_state)
         layout.addWidget(self.activity_widget)
 
@@ -129,8 +133,13 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                 self.activity_widget.set_activity_name(req.lab_activity_name)
 
             # Activity description
-            if hasattr(req, "lab_activity_description") and req.lab_activity_description:
-                self.activity_widget.set_activity_description(req.lab_activity_description)
+            if (
+                hasattr(req, "lab_activity_description")
+                and req.lab_activity_description
+            ):
+                self.activity_widget.set_activity_description(
+                    req.lab_activity_description
+                )
             elif hasattr(self.requisition_summary, "activity_description"):
                 self.activity_widget.set_activity_description(
                     self.requisition_summary.activity_description or ""
@@ -143,6 +152,7 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                     activity_date = req.lab_activity_date
                     if isinstance(activity_date, str):
                         from datetime import date
+
                         activity_date = date.fromisoformat(activity_date)
 
                     if activity_date:
@@ -152,6 +162,7 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                     logger.warning(f"Failed to load activity date: {date_error}")
                     # Set to current date as fallback
                     from inventory_app.utils.date_utils import get_current_date
+
                     self.activity_widget.set_activity_date(get_current_date())
 
             # Number of students/groups
@@ -228,11 +239,17 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
             # Basic validation
             if not expected_request or not expected_return:
-                QMessageBox.warning(self, "Validation Error", "Please set both request and return times.")
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    "Please set both request and return times.",
+                )
                 return
 
             if not self.selected_requester:
-                QMessageBox.warning(self, "Validation Error", "Please select a requester.")
+                QMessageBox.warning(
+                    self, "Validation Error", "Please select a requester."
+                )
                 return
 
             # Get numeric fields from widget
@@ -241,17 +258,23 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
             # Convert to QDateTime for validation
             from inventory_app.utils.date_utils import datetime_to_qdatetime
+
             expected_request_qt = datetime_to_qdatetime(expected_request)
             expected_return_qt = datetime_to_qdatetime(expected_return)
 
             if expected_request_qt is None or expected_return_qt is None:
-                QMessageBox.warning(self, "Validation Error", "Invalid date/time format.")
+                QMessageBox.warning(
+                    self, "Validation Error", "Invalid date/time format."
+                )
                 return
 
             # Validate data
             if not self.validator.validate_requisition_data(
-                self.selected_requester, self.selected_items,
-                expected_request_qt, expected_return_qt, activity_name
+                self.selected_requester,
+                self.selected_items,
+                expected_request_qt,
+                expected_return_qt,
+                activity_name,
             ):
                 return
 
@@ -259,7 +282,10 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             from datetime import date
             from inventory_app.database.models import Requisition, RequisitionItem
             from inventory_app.database.connection import db
-            from inventory_app.utils.date_utils import parse_datetime_iso, parse_date_iso
+            from inventory_app.utils.date_utils import (
+                parse_datetime_iso,
+                parse_date_iso,
+            )
 
             # Get current requisition data
             query = "SELECT * FROM Requisitions WHERE id = ?"
@@ -271,12 +297,18 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             # Create Requisition object from database data
             req_dict = dict(rows[0])
             # Convert dates
-            if req_dict.get('expected_request'):
-                req_dict['expected_request'] = parse_datetime_iso(req_dict['expected_request'])
-            if req_dict.get('expected_return'):
-                req_dict['expected_return'] = parse_datetime_iso(req_dict['expected_return'])
-            if req_dict.get('lab_activity_date'):
-                req_dict['lab_activity_date'] = parse_date_iso(req_dict['lab_activity_date'])
+            if req_dict.get("expected_request"):
+                req_dict["expected_request"] = parse_datetime_iso(
+                    req_dict["expected_request"]
+                )
+            if req_dict.get("expected_return"):
+                req_dict["expected_return"] = parse_datetime_iso(
+                    req_dict["expected_return"]
+                )
+            if req_dict.get("lab_activity_date"):
+                req_dict["lab_activity_date"] = parse_date_iso(
+                    req_dict["lab_activity_date"]
+                )
 
             req = Requisition(**req_dict)
 
@@ -287,59 +319,71 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             req.expected_return = expected_return
             req.lab_activity_name = activity_name
             req.lab_activity_description = activity_description
-            req.lab_activity_date = date.fromisoformat(activity_date) if activity_date else date.today()
+            req.lab_activity_date = (
+                date.fromisoformat(activity_date) if activity_date else date.today()
+            )
             req.num_students = num_students
             req.num_groups = num_groups
 
-            if not req.save("System"):
-                QMessageBox.critical(self, "Error", "Failed to update requisition.")
-                return
-
-            # Clear existing items and re-create
-            db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.requisition_id,))
-
-            # Delete existing stock movements to prevent double reservation
-            self.stock_service.delete_movements_for_requisition(self.requisition_id)
-
-            # Add new items
-            for item in self.selected_items:
-                req_item = RequisitionItem()
-                req_item.requisition_id = self.requisition_id
-                req_item.item_id = item["item_id"]
-                req_item.quantity_requested = item["quantity"]
-                if not req_item.save():
-                    logger.error(f"Failed to save item {item['item_id']}")
-                    QMessageBox.critical(self, "Error", "Failed to save items.")
-                    return
-
-            # Create stock movements for the updated requisition
-            movement_success = self.item_manager.create_stock_movements_for_requisition(
-                self.requisition_id, self.selected_items
+            # Update requisition and modifications in a single transaction
+            from inventory_app.database.connection import db as global_db
+            from inventory_app.services.requisition_activity import (
+                requisition_activity_manager,
             )
 
-            if not movement_success:
-                QMessageBox.warning(
-                    self, "Stock Movement Warning",
-                    "Requisition updated but stock movement recording failed.\n"
-                    "Please verify stock levels manually."
-                )
+            try:
+                with global_db.transaction(immediate=True):
+                    if not req.save("System"):
+                        raise Exception("Failed to save requisition")
 
-            # Get editor name from user
-            editor_name = self.get_editor_name()
-            if not editor_name:
-                QMessageBox.warning(self, "Required", "Editor name is required.")
+                    # Clear existing items and re-create
+                    db.execute_update(
+                        "DELETE FROM Requisition_Items WHERE requisition_id = ?",
+                        (self.requisition_id,),
+                    )
+
+                    # Delete existing stock movements to prevent double reservation
+                    self.stock_service.delete_movements_for_requisition(
+                        self.requisition_id
+                    )
+
+                    # Add new items
+                    for item in self.selected_items:
+                        req_item = RequisitionItem()
+                        req_item.requisition_id = self.requisition_id
+                        req_item.item_id = item["item_id"]
+                        req_item.quantity_requested = item["quantity"]
+                        if not req_item.save():
+                            raise Exception(f"Failed to save item {item['item_id']}")
+
+                    # Create stock movements for the updated requisition
+                    if not self.item_manager.create_stock_movements_for_requisition(
+                        self.requisition_id, self.selected_items
+                    ):
+                        raise Exception("Failed to create stock movements")
+
+                    # Get editor name from user
+                    editor_name = self.get_editor_name()
+                    if not editor_name:
+                        raise Exception("Editor name is required")
+
+                    # Log activity (include in transaction)
+                    success = requisition_activity_manager.log_requisition_updated(
+                        requisition_id=self.requisition_id,
+                        requester_name=self.selected_requester.name,
+                        user_name=editor_name,
+                    )
+                    if not success:
+                        raise Exception("Failed to log requisition update activity")
+            except Exception as e:
+                logger.error(f"Failed to update requisition in transaction: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to update: {str(e)}")
                 return
-
-            # Log activity
-            from inventory_app.services.requisition_activity import requisition_activity_manager
-            requisition_activity_manager.log_requisition_updated(
-                requisition_id=self.requisition_id,
-                requester_name=self.selected_requester.name,
-                user_name=editor_name,
-            )
 
             logger.info(f"Requisition {self.requisition_id} updated successfully")
-            QMessageBox.information(self, "Success", "Requisition updated successfully!")
+            QMessageBox.information(
+                self, "Success", "Requisition updated successfully!"
+            )
 
             # Start the status update workflow with 0.5 second delay
             self._start_status_update_workflow()
@@ -360,8 +404,12 @@ class EditRequisitionDialog(BaseRequisitionDialog):
         """Update requisition status after the delay."""
         try:
             # Update status using the status watcher
-            new_status = status_watcher.update_status_for_requisition(self.requisition_id)
-            logger.info(f"Status updated to {new_status} for requisition {self.requisition_id}")
+            new_status = status_watcher.update_status_for_requisition(
+                self.requisition_id
+            )
+            logger.info(
+                f"Status updated to {new_status} for requisition {self.requisition_id}"
+            )
 
             # Start refresh timer for another 0.5 second delay
             self.refresh_timer = QTimer(self)
@@ -370,7 +418,9 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             self.refresh_timer.start(500)  # 500ms = 0.5 seconds
 
         except Exception as e:
-            logger.error(f"Failed to update status for requisition {self.requisition_id}: {e}")
+            logger.error(
+                f"Failed to update status for requisition {self.requisition_id}: {e}"
+            )
             # Continue with refresh even if status update fails
             self._refresh_after_status_update()
 

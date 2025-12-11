@@ -311,97 +311,110 @@ class Item:
         """Save or update the item with history tracking and batch creation."""
         try:
             current_time = datetime.now()
+            # Wrap the entire save operation in a single transaction so that
+            # creating the item and its initial batch (if any) are committed
+            # atomically.
+            with db.transaction():
+                if self.id:
+                    # Update existing - log to history first
+                    history_query = """
+                    INSERT INTO Update_History (item_id, editor_name, reason)
+                    VALUES (?, ?, ?)
+                    """
+                    db.execute_update(
+                        history_query, (self.id, editor_name, "Item updated")
+                    )
 
-            if self.id:
-                # Update existing - log to history first
-                history_query = """
-                INSERT INTO Update_History (item_id, editor_name, reason)
-                VALUES (?, ?, ?)
-                """
-                db.execute_update(history_query, (self.id, editor_name, "Item updated"))
+                    # Update item
+                    query = """
+                    UPDATE Items SET name = ?, category_id = ?, size = ?, brand = ?,
+                    other_specifications = ?, po_number = ?, supplier_id = ?,
+                    expiration_date = ?, calibration_date = ?, is_consumable = ?,
+                    acquisition_date = ?, last_modified = ? WHERE id = ?
+                    """
+                    params = (
+                        self.name,
+                        self.category_id,
+                        self.size,
+                        self.brand,
+                        self.other_specifications,
+                        self.po_number,
+                        self.supplier_id,
+                        self.expiration_date.isoformat()
+                        if self.expiration_date
+                        else None,
+                        self.calibration_date.isoformat()
+                        if self.calibration_date
+                        else None,
+                        self.is_consumable,
+                        self.acquisition_date.isoformat()
+                        if self.acquisition_date
+                        else None,
+                        current_time.isoformat(),
+                        self.id,
+                    )
+                    db.execute_update(query, params)
 
-                # Update item
-                query = """
-                UPDATE Items SET name = ?, category_id = ?, size = ?, brand = ?,
-                other_specifications = ?, po_number = ?, supplier_id = ?,
-                expiration_date = ?, calibration_date = ?, is_consumable = ?,
-                acquisition_date = ?, last_modified = ? WHERE id = ?
-                """
-                params = (
-                    self.name,
-                    self.category_id,
-                    self.size,
-                    self.brand,
-                    self.other_specifications,
-                    self.po_number,
-                    self.supplier_id,
-                    self.expiration_date.isoformat() if self.expiration_date else None,
-                    self.calibration_date.isoformat()
-                    if self.calibration_date
-                    else None,
-                    self.is_consumable,
-                    self.acquisition_date.isoformat()
-                    if self.acquisition_date
-                    else None,
-                    current_time.isoformat(),
-                    self.id,
-                )
-                db.execute_update(query, params)
-
-                # Log activity
-                activity_logger.log_activity(
-                    activity_logger.ITEM_EDITED,
-                    f"Updated item: {self.name}",
-                    self.id,
-                    "item",
-                    editor_name,
-                )
-            else:
-                # Insert new item
-                query = """
-                INSERT INTO Items (name, category_id, size, brand, other_specifications,
-                po_number, supplier_id, expiration_date, calibration_date, is_consumable,
-                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """
-                params = (
-                    self.name,
-                    self.category_id,
-                    self.size,
-                    self.brand,
-                    self.other_specifications,
-                    self.po_number,
-                    self.supplier_id,
-                    self.expiration_date.isoformat() if self.expiration_date else None,
-                    self.calibration_date.isoformat()
-                    if self.calibration_date
-                    else None,
-                    self.is_consumable,
-                    self.acquisition_date.isoformat()
-                    if self.acquisition_date
-                    else None,
-                    current_time.isoformat(),
-                )
-                result = db.execute_update(query, params, return_last_id=True)
-                if isinstance(result, tuple):
-                    _, self.id = result
+                    # Log activity
+                    activity_logger.log_activity(
+                        activity_logger.ITEM_EDITED,
+                        f"Updated item: {self.name}",
+                        self.id,
+                        "item",
+                        editor_name,
+                    )
                 else:
-                    logger.error("Failed to obtain last insert id for Item")
-                self.last_modified = current_time
+                    # Insert new item
+                    query = """
+                    INSERT INTO Items (name, category_id, size, brand, other_specifications,
+                    po_number, supplier_id, expiration_date, calibration_date, is_consumable,
+                    acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                    params = (
+                        self.name,
+                        self.category_id,
+                        self.size,
+                        self.brand,
+                        self.other_specifications,
+                        self.po_number,
+                        self.supplier_id,
+                        self.expiration_date.isoformat()
+                        if self.expiration_date
+                        else None,
+                        self.calibration_date.isoformat()
+                        if self.calibration_date
+                        else None,
+                        self.is_consumable,
+                        self.acquisition_date.isoformat()
+                        if self.acquisition_date
+                        else None,
+                        current_time.isoformat(),
+                    )
+                    result = db.execute_update(query, params, return_last_id=True)
+                    if isinstance(result, tuple):
+                        _, self.id = result
+                    else:
+                        logger.error("Failed to obtain last insert id for Item")
+                    self.last_modified = current_time
 
-                # Create batches if batch_quantity is specified
-                if batch_quantity > 0 and self.id:
-                    self._create_batches(batch_quantity)
+                    # Create batches if batch_quantity is specified
+                    if not self.id:
+                        # In the insert path set last_modified
+                        self.last_modified = current_time
 
-                # Log activity
-                activity_logger.log_activity(
-                    activity_logger.ITEM_ADDED,
-                    f"Added new item: {self.name} ({batch_quantity} batches)",
-                    self.id,
-                    "item",
-                    editor_name,
-                )
+                    if batch_quantity > 0 and self.id:
+                        self._create_batches(batch_quantity)
 
-            return True
+                    # Log activity
+                    activity_logger.log_activity(
+                        activity_logger.ITEM_ADDED,
+                        f"Added new item: {self.name} ({batch_quantity} batches)",
+                        self.id,
+                        "item",
+                        editor_name,
+                    )
+
+                return True
         except Exception as e:
             logger.error(f"Failed to save item: {e}")
             return False
@@ -485,48 +498,43 @@ class Item:
             db.execute_update(disposal_query, (self.id, reason, editor_name))
             logger.info(f"Logged disposal history for item {self.id}")
 
-            # Import time for delays
-            import time
+            # Perform deletions in a single transaction to ensure atomicity and
+            # remove fragile timing-based hacks. This relies on foreign keys
+            # to enforce constraints and will rollback on any failure.
+            with db.transaction():
+                # 1. Delete requisition items first (has dual dependencies: item + requisition)
+                logger.info(f"Deleting Requisition_Items for item {self.id}")
+                db.execute_update(
+                    "DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,)
+                )
 
-            # Cascade delete all related records in DEPENDENCY ORDER with delays
-            # Order: dependencies first, then main tables
+                # 2. Delete stock movements (references both items and batches)
+                logger.info(f"Deleting Stock_Movements for item {self.id}")
+                db.execute_update(
+                    "DELETE FROM Stock_MovEMENTS WHERE item_id = ?", (self.id,)
+                )
 
-            # 1. Delete requisition items first (has dual dependencies: item + requisition)
-            logger.info(f"Deleting Requisition_Items for item {self.id}")
-            db.execute_update(
-                "DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,)
-            )
-            time.sleep(0.1)  # 0.1s delay to prevent constraint timing issues
+                # 3. Delete item batches (only depends on items, safe after movements deleted)
+                logger.info(f"Deleting Item_Batches for item {self.id}")
+                db.execute_update(
+                    "DELETE FROM Item_Batches WHERE item_id = ?", (self.id,)
+                )
 
-            # 2. Delete stock movements (references both items and batches)
-            logger.info(f"Deleting Stock_Movements for item {self.id}")
-            db.execute_update(
-                "DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,)
-            )
-            time.sleep(0.1)  # 0.1s delay
+                # 4. Delete update history (only depends on items)
+                logger.info(f"Deleting Update_History for item {self.id}")
+                db.execute_update(
+                    "DELETE FROM Update_History WHERE item_id = ?", (self.id,)
+                )
 
-            # 3. Delete item batches (only depends on items, safe after movements deleted)
-            logger.info(f"Deleting Item_Batches for item {self.id}")
-            db.execute_update("DELETE FROM Item_Batches WHERE item_id = ?", (self.id,))
-            time.sleep(0.1)  # 0.1s delay
+                # 5. Delete disposal history (only depends on items)
+                logger.info(f"Deleting Disposal_History for item {self.id}")
+                db.execute_update(
+                    "DELETE FROM Disposal_History WHERE item_id = ?", (self.id,)
+                )
 
-            # 4. Delete update history (only depends on items)
-            logger.info(f"Deleting Update_History for item {self.id}")
-            db.execute_update(
-                "DELETE FROM Update_History WHERE item_id = ?", (self.id,)
-            )
-            time.sleep(0.1)  # 0.1s delay
-
-            # 5. Delete disposal history (only depends on items)
-            logger.info(f"Deleting Disposal_History for item {self.id}")
-            db.execute_update(
-                "DELETE FROM Disposal_History WHERE item_id = ?", (self.id,)
-            )
-            time.sleep(0.1)  # 0.1s delay
-
-            # 6. Finally delete the item itself (no dependencies remain)
-            logger.info(f"Deleting main Items record {self.id}")
-            db.execute_update("DELETE FROM Items WHERE id = ?", (self.id,))
+                # 6. Finally delete the item itself (no dependencies remain)
+                logger.info(f"Deleting main Items record {self.id}")
+                db.execute_update("DELETE FROM Items WHERE id = ?", (self.id,))
 
             logger.info(f"Successfully deleted item {self.id} and all related records")
             return True
@@ -826,34 +834,35 @@ class Requisition:
         try:
             if not self.id:
                 return False
+            with db.transaction():
+                # Delete related stock movements first
+                db.execute_update(
+                    "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = 'CONSUMPTION'",
+                    (self.id,),
+                )
 
-            # Delete related stock movements first
-            db.execute_update(
-                "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = 'CONSUMPTION'",
-                (self.id,),
-            )
+                # Delete requisition items
+                db.execute_update(
+                    "DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.id,)
+                )
 
-            # Delete requisition items
-            db.execute_update(
-                "DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.id,)
-            )
+                # Delete history records (to avoid foreign key constraint)
+                db.execute_update(
+                    "DELETE FROM Requisition_History WHERE requisition_id = ?",
+                    (self.id,),
+                )
 
-            # Delete history records (to avoid foreign key constraint)
-            db.execute_update(
-                "DELETE FROM Requisition_History WHERE requisition_id = ?", (self.id,)
-            )
+                # Log the deletion after cleaning up references
+                history_query = """
+                INSERT INTO Requisition_History (requisition_id, editor_name, reason)
+                VALUES (?, ?, ?)
+                """
+                db.execute_update(
+                    history_query, (self.id, editor_name, "Requisition deleted")
+                )
 
-            # Log the deletion after cleaning up references
-            history_query = """
-            INSERT INTO Requisition_History (requisition_id, editor_name, reason)
-            VALUES (?, ?, ?)
-            """
-            db.execute_update(
-                history_query, (self.id, editor_name, "Requisition deleted")
-            )
-
-            # Finally delete the requisition
-            db.execute_update("DELETE FROM Requisitions WHERE id = ?", (self.id,))
+                # Finally delete the requisition
+                db.execute_update("DELETE FROM Requisitions WHERE id = ?", (self.id,))
             return True
         except Exception as e:
             logger.error(f"Failed to delete requisition {self.id}: {e}")

@@ -15,8 +15,16 @@ from inventory_app.utils.logger import logger
 
 class ReturnItem:
     """Simple data structure for one-time return processing."""
-    def __init__(self, item_id: int, batch_id: Optional[int], quantity_requested: int,
-                 quantity_returned: int = 0, quantity_lost: int = 0, is_consumable: bool = False):
+
+    def __init__(
+        self,
+        item_id: int,
+        batch_id: Optional[int],
+        quantity_requested: int,
+        quantity_returned: int = 0,
+        quantity_lost: int = 0,
+        is_consumable: bool = False,
+    ):
         self.item_id = item_id
         self.batch_id = batch_id
         self.quantity_requested = quantity_requested
@@ -59,8 +67,9 @@ class ReturnProcessor:
         self.stock_service = StockMovementService()
         logger.info("Return processor initialized")
 
-    def process_returns(self, requisition_id: int, return_items: List[ReturnItem],
-                       editor_name: str) -> bool:
+    def process_returns(
+        self, requisition_id: int, return_items: List[ReturnItem], editor_name: str
+    ) -> bool:
         """
         Process all returns for a requisition in one final operation.
 
@@ -79,56 +88,77 @@ class ReturnProcessor:
             if not self._validate_all_processed(return_items):
                 return False
 
-            # Process each item (one-time final processing)
-            returned_items = []
-            lost_items = []
-            consumed_items = []
+            # Run the entire final return processing inside an IMMEDIATE transaction
+            # to prevent concurrent modifications while we're updating stock and status.
+            from inventory_app.database.connection import db as global_db
 
-            for return_item in return_items:
-                if return_item.is_consumable:
-                    self._process_consumable_return(requisition_id, return_item, editor_name)
-                    # Track returned and consumed quantities for logging
-                    if return_item.quantity_returned > 0:
-                        returned_items.append(
-                            f"{return_item.quantity_returned}x (ID: {return_item.item_id})"
-                        )
-                    consumed_quantity = return_item.quantity_requested - return_item.quantity_returned
-                    if consumed_quantity > 0:
-                        consumed_items.append(
-                            f"{consumed_quantity}x (ID: {return_item.item_id})"
-                        )
-                elif not return_item.is_consumable:
-                    self._process_non_consumable_loss(requisition_id, return_item, editor_name)
-                    # Track returned and lost quantities for logging
-                    returned_quantity = return_item.quantity_requested - return_item.quantity_lost
-                    if returned_quantity > 0:
-                        returned_items.append(
-                            f"{returned_quantity}x (ID: {return_item.item_id})"
-                        )
-                    if return_item.quantity_lost > 0:
-                        lost_items.append(
-                            f"{return_item.quantity_lost}x (ID: {return_item.item_id})"
-                        )
+            with global_db.transaction(immediate=True):
+                # Process each item (one-time final processing)
+                returned_items = []
+                lost_items = []
+                consumed_items = []
 
-            # Update requisition status to final "returned"
-            self._update_requisition_status_final(requisition_id)
+                for return_item in return_items:
+                    if return_item.is_consumable:
+                        self._process_consumable_return(
+                            requisition_id, return_item, editor_name
+                        )
+                        # Track returned and consumed quantities for logging
+                        if return_item.quantity_returned > 0:
+                            returned_items.append(
+                                f"{return_item.quantity_returned}x (ID: {return_item.item_id})"
+                            )
+                        consumed_quantity = (
+                            return_item.quantity_requested
+                            - return_item.quantity_returned
+                        )
+                        if consumed_quantity > 0:
+                            consumed_items.append(
+                                f"{consumed_quantity}x (ID: {return_item.item_id})"
+                            )
+                    elif not return_item.is_consumable:
+                        self._process_non_consumable_loss(
+                            requisition_id, return_item, editor_name
+                        )
+                        # Track returned and lost quantities for logging
+                        returned_quantity = (
+                            return_item.quantity_requested - return_item.quantity_lost
+                        )
+                        if returned_quantity > 0:
+                            returned_items.append(
+                                f"{returned_quantity}x (ID: {return_item.item_id})"
+                            )
+                        if return_item.quantity_lost > 0:
+                            lost_items.append(
+                                f"{return_item.quantity_lost}x (ID: {return_item.item_id})"
+                            )
 
-            # Log final activity
-            success = requisition_activity_manager.log_requisition_returned(
-                requisition_id=requisition_id,
-                user_name=editor_name
+                # Update requisition status to final "returned"
+                self._update_requisition_status_final(requisition_id)
+
+                # Log final activity
+                success = requisition_activity_manager.log_requisition_returned(
+                    requisition_id=requisition_id, user_name=editor_name
+                )
+
+                if success:
+                    logger.info(
+                        f"Logged final return activity for requisition {requisition_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to log final return activity for requisition {requisition_id}"
+                    )
+
+            logger.info(
+                f"Successfully processed final returns for requisition {requisition_id}"
             )
-
-            if success:
-                logger.info(f"Logged final return activity for requisition {requisition_id}")
-            else:
-                logger.warning(f"Failed to log final return activity for requisition {requisition_id}")
-
-            logger.info(f"Successfully processed final returns for requisition {requisition_id}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to process returns for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to process returns for requisition {requisition_id}: {e}"
+            )
             return False
 
     def _validate_all_processed(self, return_items: List[ReturnItem]) -> bool:
@@ -155,12 +185,16 @@ class ReturnProcessor:
 
         return True
 
-    def _process_consumable_return(self, requisition_id: int, return_item: ReturnItem, editor_name: str) -> None:
+    def _process_consumable_return(
+        self, requisition_id: int, return_item: ReturnItem, editor_name: str
+    ) -> None:
         """Process consumable item return - replace RESERVATION with final movements."""
         # Phase 2: Replace the initial RESERVATION movement with final movements
 
         # Record CONSUMPTION movement for consumed quantity (requested - returned)
-        consumed_quantity = return_item.quantity_requested - return_item.quantity_returned
+        consumed_quantity = (
+            return_item.quantity_requested - return_item.quantity_returned
+        )
         if consumed_quantity > 0:
             consumption_note = f"Consumable consumed by {editor_name} (used quantity)"
             self.stock_service.record_consumption(
@@ -168,55 +202,61 @@ class ReturnProcessor:
                 consumed_quantity,
                 requisition_id,
                 consumption_note,
-                return_item.batch_id
+                return_item.batch_id,
             )
 
         # Remove the original RESERVATION movement to prevent double-counting
-        self._remove_reservation_movement(requisition_id, return_item.item_id, return_item.batch_id)
+        self._remove_reservation_movement(
+            requisition_id, return_item.item_id, return_item.batch_id
+        )
 
-    def _remove_reservation_movement(self, requisition_id: int, item_id: int, batch_id: Optional[int]) -> None:
+    def _remove_reservation_movement(
+        self, requisition_id: int, item_id: int, batch_id: Optional[int]
+    ) -> None:
         """Remove the original RESERVATION movement to prevent double-counting in stock calculations."""
-        try:
-            if batch_id is not None:
-                query = """
-                DELETE FROM Stock_Movements
-                WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
-                """
-                params = (item_id, batch_id, requisition_id)
-            else:
-                query = """
-                DELETE FROM Stock_Movements
-                WHERE item_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
-                """
-                params = (item_id, requisition_id)
+        if batch_id is not None:
+            query = """
+            DELETE FROM Stock_Movements
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
+            """
+            params = (item_id, batch_id, requisition_id)
+        else:
+            query = """
+            DELETE FROM Stock_Movements
+            WHERE item_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
+            """
+            params = (item_id, requisition_id)
 
-            db.execute_update(query, params)
-            logger.debug(f"Removed RESERVATION movement for item {item_id} in requisition {requisition_id}")
-        except Exception as e:
-            logger.error(f"Failed to remove RESERVATION movement for item {item_id}: {e}")
+        db.execute_update(query, params)
+        logger.debug(
+            f"Removed RESERVATION movement for item {item_id} in requisition {requisition_id}"
+        )
 
-    def _remove_request_movement(self, requisition_id: int, item_id: int, batch_id: Optional[int]) -> None:
+    def _remove_request_movement(
+        self, requisition_id: int, item_id: int, batch_id: Optional[int]
+    ) -> None:
         """Remove the original REQUEST movement to prevent double-counting in stock calculations."""
-        try:
-            if batch_id is not None:
-                query = """
-                DELETE FROM Stock_Movements
-                WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'REQUEST'
-                """
-                params = (item_id, batch_id, requisition_id)
-            else:
-                query = """
-                DELETE FROM Stock_Movements
-                WHERE item_id = ? AND source_id = ? AND movement_type = 'REQUEST'
-                """
-                params = (item_id, requisition_id)
+        if batch_id is not None:
+            query = """
+            DELETE FROM Stock_Movements
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'REQUEST'
+            """
+            params = (item_id, batch_id, requisition_id)
+        else:
+            query = """
+            DELETE FROM Stock_Movements
+            WHERE item_id = ? AND source_id = ? AND movement_type = 'REQUEST'
+            """
+            params = (item_id, requisition_id)
 
-            db.execute_update(query, params)
-            logger.debug(f"Removed REQUEST movement for item {item_id} in requisition {requisition_id}")
-        except Exception as e:
-            logger.error(f"Failed to remove REQUEST movement for item {item_id}: {e}")
+        db.execute_update(query, params)
+        logger.debug(
+            f"Removed REQUEST movement for item {item_id} in requisition {requisition_id}"
+        )
 
-    def _process_non_consumable_loss(self, requisition_id: int, return_item: ReturnItem, editor_name: str) -> None:
+    def _process_non_consumable_loss(
+        self, requisition_id: int, return_item: ReturnItem, editor_name: str
+    ) -> None:
         """Process non-consumable item loss - record disposed quantities."""
         # Record DISPOSAL movement for lost quantity
         if return_item.quantity_lost > 0:
@@ -226,18 +266,22 @@ class ReturnProcessor:
                 return_item.quantity_lost,
                 requisition_id,
                 disposal_note,
-                return_item.batch_id
+                return_item.batch_id,
             )
 
         # Remove the original REQUEST movement to prevent double-counting
-        self._remove_request_movement(requisition_id, return_item.item_id, return_item.batch_id)
+        self._remove_request_movement(
+            requisition_id, return_item.item_id, return_item.batch_id
+        )
 
     def _update_requisition_status_final(self, requisition_id: int) -> None:
         """Update requisition status to final 'returned' state."""
         try:
             query = "UPDATE Requisitions SET status = ? WHERE id = ?"
             db.execute_update(query, ("returned", requisition_id))
-            logger.info(f"Updated requisition {requisition_id} status to final 'returned'")
+            logger.info(
+                f"Updated requisition {requisition_id} status to final 'returned'"
+            )
         except Exception as e:
             logger.error(f"Failed to update requisition {requisition_id} status: {e}")
 
@@ -266,19 +310,21 @@ class ReturnProcessor:
             return_items = []
             for row in rows:
                 return_item = ReturnItem(
-                    item_id=row['item_id'],
-                    batch_id=row['batch_id'],
-                    quantity_requested=row['quantity_requested'],
+                    item_id=row["item_id"],
+                    batch_id=row["batch_id"],
+                    quantity_requested=row["quantity_requested"],
                     quantity_returned=0,
                     quantity_lost=0,
-                    is_consumable=bool(row['is_consumable'])
+                    is_consumable=bool(row["is_consumable"]),
                 )
                 return_items.append(return_item)
 
             return return_items
 
         except Exception as e:
-            logger.error(f"Failed to get return items for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to get return items for requisition {requisition_id}: {e}"
+            )
             return []
 
     def is_requisition_processed(self, requisition_id: int) -> bool:
@@ -295,10 +341,12 @@ class ReturnProcessor:
             query = "SELECT status FROM Requisitions WHERE id = ?"
             rows = db.execute_query(query, (requisition_id,))
             if rows:
-                return rows[0]['status'] == 'returned'
+                return rows[0]["status"] == "returned"
             return False
         except Exception as e:
-            logger.error(f"Failed to check if requisition {requisition_id} is processed: {e}")
+            logger.error(
+                f"Failed to check if requisition {requisition_id} is processed: {e}"
+            )
             return False
 
     def get_requisition_return_summary(self, requisition_id: int) -> dict:
@@ -320,7 +368,9 @@ class ReturnProcessor:
             JOIN Items i ON ri.item_id = i.id
             WHERE ri.requisition_id = ?
             """
-            requisition_rows = db.execute_query(requisition_items_query, (requisition_id,))
+            requisition_rows = db.execute_query(
+                requisition_items_query, (requisition_id,)
+            )
 
             # Get all stock movements for this requisition (CONSUMPTION and DISPOSAL only)
             movements_query = """
@@ -333,77 +383,77 @@ class ReturnProcessor:
             # Create lookup for movements by item_id and type
             movements_lookup = {}
             for row in movement_rows:
-                item_id = row['item_id']
-                movement_type = row['movement_type']
-                quantity = row['quantity']
+                item_id = row["item_id"]
+                movement_type = row["movement_type"]
+                quantity = row["quantity"]
 
                 if item_id not in movements_lookup:
-                    movements_lookup[item_id] = {'CONSUMPTION': 0, 'DISPOSAL': 0}
+                    movements_lookup[item_id] = {"CONSUMPTION": 0, "DISPOSAL": 0}
 
                 movements_lookup[item_id][movement_type] = quantity
 
             summary = {
-                'returned_consumables': [],
-                'consumed_items': [],
-                'returned_non_consumables': [],
-                'lost_non_consumables': [],
-                'total_returned': 0,
-                'total_consumed': 0,
-                'total_lost': 0
+                "returned_consumables": [],
+                "consumed_items": [],
+                "returned_non_consumables": [],
+                "lost_non_consumables": [],
+                "total_returned": 0,
+                "total_consumed": 0,
+                "total_lost": 0,
             }
 
             # Process each original requisition item
             for row in requisition_rows:
-                item_id = row['item_id']
-                item_name = row['item_name']
-                quantity_requested = row['quantity_requested']
-                is_consumable = bool(row['is_consumable'])
+                item_id = row["item_id"]
+                item_name = row["item_name"]
+                quantity_requested = row["quantity_requested"]
+                is_consumable = bool(row["is_consumable"])
 
                 # Get movements for this item (default to 0 if no movement recorded)
-                item_movements = movements_lookup.get(item_id, {'CONSUMPTION': 0, 'DISPOSAL': 0})
+                item_movements = movements_lookup.get(
+                    item_id, {"CONSUMPTION": 0, "DISPOSAL": 0}
+                )
 
                 if is_consumable:
                     # For consumables: consumed = CONSUMPTION quantity, returned = requested - consumed
-                    consumed_quantity = item_movements['CONSUMPTION']
+                    consumed_quantity = item_movements["CONSUMPTION"]
                     returned_quantity = quantity_requested - consumed_quantity
 
                     if consumed_quantity > 0:
-                        summary['consumed_items'].append({
-                            'item_name': item_name,
-                            'quantity': consumed_quantity
-                        })
-                        summary['total_consumed'] += consumed_quantity
+                        summary["consumed_items"].append(
+                            {"item_name": item_name, "quantity": consumed_quantity}
+                        )
+                        summary["total_consumed"] += consumed_quantity
 
                     if returned_quantity > 0:
-                        summary['returned_consumables'].append({
-                            'item_name': item_name,
-                            'quantity': returned_quantity
-                        })
-                        summary['total_returned'] += returned_quantity
+                        summary["returned_consumables"].append(
+                            {"item_name": item_name, "quantity": returned_quantity}
+                        )
+                        summary["total_returned"] += returned_quantity
 
                 else:
                     # For non-consumables: lost = DISPOSAL quantity, returned = requested - lost
-                    lost_quantity = item_movements['DISPOSAL']
+                    lost_quantity = item_movements["DISPOSAL"]
                     returned_quantity = quantity_requested - lost_quantity
 
                     if lost_quantity > 0:
-                        summary['lost_non_consumables'].append({
-                            'item_name': item_name,
-                            'quantity': lost_quantity
-                        })
-                        summary['total_lost'] += lost_quantity
+                        summary["lost_non_consumables"].append(
+                            {"item_name": item_name, "quantity": lost_quantity}
+                        )
+                        summary["total_lost"] += lost_quantity
 
                     if returned_quantity > 0:
-                        summary['returned_non_consumables'].append({
-                            'item_name': item_name,
-                            'quantity': returned_quantity
-                        })
-                        summary['total_returned'] += returned_quantity
+                        summary["returned_non_consumables"].append(
+                            {"item_name": item_name, "quantity": returned_quantity}
+                        )
+                        summary["total_returned"] += returned_quantity
 
             return summary
 
         except Exception as e:
-            logger.error(f"Failed to get return summary for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to get return summary for requisition {requisition_id}: {e}"
+            )
             return {}
 
 

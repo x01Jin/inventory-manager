@@ -213,9 +213,7 @@ class ItemSelectionManager:
         return quantity, ok if ok is not None else False
 
     def create_stock_movements_for_requisition(
-        self,
-        requisition_id: int,
-        selected_items: List[Dict]
+        self, requisition_id: int, selected_items: List[Dict]
     ) -> bool:
         """
         Create stock movements for a requisition on final save.
@@ -228,8 +226,13 @@ class ItemSelectionManager:
         Returns:
             True if movements were created successfully
         """
-        try:
-            # Record movements based on selected items
+        # Use an immediate transaction to prevent race conditions where
+        # concurrent bookings could oversubscribe inventory. Avoid starting
+        # a nested transaction if the caller already has an active one.
+        from inventory_app.database.connection import db as global_db
+
+        def _create_movements():
+            # Re-check availability and record movements based on selected items
             for item in selected_items:
                 # Get item consumability
                 item_query = "SELECT is_consumable FROM Items WHERE id = ?"
@@ -243,6 +246,14 @@ class ItemSelectionManager:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """
 
+                # Re-check availability for this batch now we're inside a
+                # write-locked transaction. If insufficient, raise to rollback.
+                available = self.get_available_stock_for_batch(item["batch_id"])
+                if available < item["quantity"]:
+                    raise Exception(
+                        f"Insufficient stock for batch {item['batch_id']} (requested={item['quantity']}, available={available})"
+                    )
+
                 db.execute_update(
                     movement_query,
                     (
@@ -255,9 +266,22 @@ class ItemSelectionManager:
                     ),
                 )
 
-            logger.info(f"Created stock movements for requisition {requisition_id} with {len(selected_items)} items")
+            logger.info(
+                f"Created stock movements for requisition {requisition_id} with {len(selected_items)} items"
+            )
             return True
 
+        # If there's already an active transaction, run inline and allow
+        # exceptions to propagate so the caller's transaction will roll back.
+        if global_db.in_transaction():
+            return _create_movements()
+
+        # Otherwise, create an IMMEDIATE transaction here and run the body.
+        try:
+            with global_db.transaction(immediate=True):
+                return _create_movements()
         except Exception as e:
-            logger.error(f"Failed to create stock movements for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to create stock movements for requisition {requisition_id}: {e}"
+            )
             return False

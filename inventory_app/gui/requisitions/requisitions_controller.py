@@ -18,11 +18,13 @@ from inventory_app.utils.logger import logger
 @dataclass
 class RequisitionSummary:
     """Summary data for a requisition including requester and items."""
+
     requisition: Requisition
     requester: Requester
     items: List[Dict]  # List of item details with quantities
     total_items: int
     status: str  # 'Active', 'Returned', 'Overdue'
+
 
 class RequisitionsController:
     """
@@ -86,85 +88,107 @@ class RequisitionsController:
             # Group results by requisition
             requisition_groups = {}
             for row in rows:
-                req_id = row['req_id']
+                req_id = row["req_id"]
 
                 if req_id not in requisition_groups:
                     # Create requisition object with proper date conversion
                     # Handle invalid date formats gracefully
                     try:
-                        lab_activity_date = date.fromisoformat(row['lab_activity_date']) if row['lab_activity_date'] else date.today()
+                        lab_activity_date = (
+                            date.fromisoformat(row["lab_activity_date"])
+                            if row["lab_activity_date"]
+                            else date.today()
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}")
+                        logger.warning(
+                            f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}"
+                        )
                         lab_activity_date = date.today()
 
                     try:
-                        expected_request = datetime.fromisoformat(row['expected_request']) if row['expected_request'] else datetime.now()
+                        expected_request = (
+                            datetime.fromisoformat(row["expected_request"])
+                            if row["expected_request"]
+                            else datetime.now()
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid expected_request format for requisition {req_id}: {row['expected_request']}")
+                        logger.warning(
+                            f"Invalid expected_request format for requisition {req_id}: {row['expected_request']}"
+                        )
                         expected_request = datetime.now()
 
                     try:
-                        expected_return = datetime.fromisoformat(row['expected_return']) if row['expected_return'] else datetime.now()
+                        expected_return = (
+                            datetime.fromisoformat(row["expected_return"])
+                            if row["expected_return"]
+                            else datetime.now()
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid expected_return format for requisition {req_id}: {row['expected_return']}")
+                        logger.warning(
+                            f"Invalid expected_return format for requisition {req_id}: {row['expected_return']}"
+                        )
                         expected_return = datetime.now()
 
                     req_dict = {
-                        'id': req_id,
-                        'requester_id': row['requester_id'],
-                        'lab_activity_name': row['lab_activity_name'],
-                        'lab_activity_date': lab_activity_date,
-                        'expected_request': expected_request,
-                        'expected_return': expected_return,
-                        'num_students': row['num_students'],
-                        'num_groups': row['num_groups'],
-                        'status': row['req_status']
+                        "id": req_id,
+                        "requester_id": row["requester_id"],
+                        "lab_activity_name": row["lab_activity_name"],
+                        "lab_activity_date": lab_activity_date,
+                        "expected_request": expected_request,
+                        "expected_return": expected_return,
+                        "num_students": row["num_students"],
+                        "num_groups": row["num_groups"],
+                        "status": row["req_status"],
                     }
                     requisition = Requisition(**req_dict)
 
                     # Create requester object
                     requester_dict = {
-                        'id': row['requester_id'],
-                        'name': row['requester_name'],
-                        'affiliation': row['affiliation'],
-                        'group_name': row['group_name']
+                        "id": row["requester_id"],
+                        "name": row["requester_name"],
+                        "affiliation": row["affiliation"],
+                        "group_name": row["group_name"],
                     }
                     requester = Requester(**requester_dict)
 
                     requisition_groups[req_id] = {
-                        'requisition': requisition,
-                        'requester': requester,
-                        'items': [],
-                        'status': row['req_status'] or "Active"
+                        "requisition": requisition,
+                        "requester": requester,
+                        "items": [],
+                        "status": row["req_status"] or "Active",
                     }
 
                 # Add item if it exists (some requisitions might have no items)
-                if row['item_id']:
+                if row["item_id"]:
                     item_dict = {
-                        'item_id': row['item_id'],
-                        'quantity_requested': row['quantity_requested'],
-                        'name': row['item_name'],
-                        'category_id': row['category_id'],
-                        'size': row['size'],
-                        'brand': row['brand'],
-                        'category_name': row['category_name'],
-                        'supplier_name': row['supplier_name']
+                        "item_id": row["item_id"],
+                        "quantity_requested": row["quantity_requested"],
+                        "name": row["item_name"],
+                        "category_id": row["category_id"],
+                        "size": row["size"],
+                        "brand": row["brand"],
+                        "category_name": row["category_name"],
+                        "supplier_name": row["supplier_name"],
                     }
-                    requisition_groups[req_id]['items'].append(item_dict)
+                    requisition_groups[req_id]["items"].append(item_dict)
 
             # Convert to RequisitionSummary objects
             summaries = []
             for req_data in requisition_groups.values():
                 summary = RequisitionSummary(
-                    requisition=req_data['requisition'],
-                    requester=req_data['requester'],
-                    items=req_data['items'],
-                    total_items=sum(item['quantity_requested'] for item in req_data['items']),
-                    status=req_data['status']
+                    requisition=req_data["requisition"],
+                    requester=req_data["requester"],
+                    items=req_data["items"],
+                    total_items=sum(
+                        item["quantity_requested"] for item in req_data["items"]
+                    ),
+                    status=req_data["status"],
                 )
                 summaries.append(summary)
 
-            logger.info(f"Retrieved {len(summaries)} requisitions with optimized single query")
+            logger.info(
+                f"Retrieved {len(summaries)} requisitions with optimized single query"
+            )
             return summaries
 
         except Exception as e:
@@ -183,23 +207,31 @@ class RequisitionsController:
             bool: True if successful
         """
         try:
-            # Step 1: Delete requisition history records first (simple DELETE)
-            self._delete_requisition_history(requisition_id)
-            time.sleep(0.1)
+            # Perform deletion in a single transaction to ensure atomicity
+            with db.transaction():
+                # Step 1: Delete requisition history records first (simple DELETE)
+                self._delete_requisition_history(requisition_id)
 
-            # Step 2: Delete requisition items (removes FK references to requisition)
-            db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (requisition_id,))
-            time.sleep(0.1)
+                # Step 2: Delete requisition items (removes FK references to requisition)
+                db.execute_update(
+                    "DELETE FROM Requisition_Items WHERE requisition_id = ?",
+                    (requisition_id,),
+                )
 
-            # Step 3: Delete ALL stock movements for this requisition
-            db.execute_update("DELETE FROM Stock_Movements WHERE source_id = ?", (requisition_id,))
-            time.sleep(0.1)
+                # Step 3: Delete ALL stock movements for this requisition
+                db.execute_update(
+                    "DELETE FROM Stock_Movements WHERE source_id = ?", (requisition_id,)
+                )
 
-            # Step 4: Finally delete the requisition itself
-            success = db.execute_update("DELETE FROM Requisitions WHERE id = ?", (requisition_id,))
+                # Step 4: Finally delete the requisition itself
+                success = db.execute_update(
+                    "DELETE FROM Requisitions WHERE id = ?", (requisition_id,)
+                )
 
             if success:
-                logger.info(f"Successfully deleted requisition {requisition_id} and all dependencies")
+                logger.info(
+                    f"Successfully deleted requisition {requisition_id} and all dependencies"
+                )
                 return True
 
             return False
@@ -254,18 +286,26 @@ class RequisitionsController:
 
             req_dict = dict(rows[0])
             # Convert dates with error handling
-            if req_dict.get('date_requested'):
+            if req_dict.get("date_requested"):
                 try:
-                    req_dict['date_requested'] = date.fromisoformat(req_dict['date_requested'])
+                    req_dict["date_requested"] = date.fromisoformat(
+                        req_dict["date_requested"]
+                    )
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid date_requested format for requisition {requisition_id}: {req_dict['date_requested']}")
-                    req_dict['date_requested'] = date.today()
-            if req_dict.get('lab_activity_date'):
+                    logger.warning(
+                        f"Invalid date_requested format for requisition {requisition_id}: {req_dict['date_requested']}"
+                    )
+                    req_dict["date_requested"] = date.today()
+            if req_dict.get("lab_activity_date"):
                 try:
-                    req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                    req_dict["lab_activity_date"] = date.fromisoformat(
+                        req_dict["lab_activity_date"]
+                    )
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid lab_activity_date format for requisition {requisition_id}: {req_dict['lab_activity_date']}")
-                    req_dict['lab_activity_date'] = date.today()
+                    logger.warning(
+                        f"Invalid lab_activity_date format for requisition {requisition_id}: {req_dict['lab_activity_date']}"
+                    )
+                    req_dict["lab_activity_date"] = date.today()
 
             return Requisition(**req_dict)
         except Exception as e:
@@ -279,11 +319,16 @@ class RequisitionsController:
             db.execute_update(query, (requisition_id,))
             logger.debug(f"Deleted history records for requisition {requisition_id}")
         except Exception as e:
-            logger.error(f"Failed to delete requisition history for {requisition_id}: {e}")
+            logger.error(
+                f"Failed to delete requisition history for {requisition_id}: {e}"
+            )
 
     def _clear_requisition_items(self, requisition_id: int) -> None:
         """Remove all items from a requisition."""
         try:
-            db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (requisition_id,))
+            db.execute_update(
+                "DELETE FROM Requisition_Items WHERE requisition_id = ?",
+                (requisition_id,),
+            )
         except Exception as e:
             logger.error(f"Failed to clear requisition items: {e}")

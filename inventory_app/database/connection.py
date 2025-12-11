@@ -25,6 +25,8 @@ class DatabaseConnection:
         """
         self.db_path = Path(db_path)
         self._connection: Optional[sqlite3.Connection] = None
+        # If a transaction is active, this holds the sqlite3.Connection
+        self._transaction_conn: Optional[sqlite3.Connection] = None
 
     class _ConnectionContext:
         """
@@ -48,6 +50,43 @@ class DatabaseConnection:
                     self.conn.rollback()
                     logger.error(f"Database connection error: {exc_val}")
                 self.conn.close()
+
+    class _TransactionContext:
+        """
+        Context manager for atomic multi-statement transactions.
+        When active, `execute_query`, `execute_update` and `execute_script`
+        will use the same connection for all statements so they can be
+        committed or rolled back together.
+        """
+
+        def __init__(self, parent: "DatabaseConnection", immediate: bool = False):
+            self.parent = parent
+            self.conn: Optional[sqlite3.Connection] = None
+            self.immediate = immediate
+
+        def __enter__(self) -> sqlite3.Connection:
+            if self.parent._transaction_conn is not None:
+                raise RuntimeError("Nested transactions are not supported")
+            self.conn = sqlite3.connect(self.parent.db_path)
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            self.conn.row_factory = sqlite3.Row
+            # If the caller requested an immediate transaction, begin one
+            # with `BEGIN IMMEDIATE` to obtain a write lock early and prevent
+            # concurrent writers from making conflicting changes.
+            if self.immediate:
+                self.conn.execute("BEGIN IMMEDIATE")
+            self.parent._transaction_conn = self.conn
+            return self.conn
+
+        def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+            if self.conn:
+                if exc_type:
+                    self.conn.rollback()
+                    logger.error(f"Transaction error: {exc_val}")
+                else:
+                    self.conn.commit()
+                self.conn.close()
+                self.parent._transaction_conn = None
 
     def create_database(self) -> bool:
         """
@@ -83,6 +122,27 @@ class DatabaseConnection:
         """
         return self._ConnectionContext(self.db_path)
 
+    def transaction(self, immediate: bool = False):
+        """
+        Transactional context manager that allows executing multiple
+        statements atomically. Example:
+
+            with db.transaction():
+                db.execute_update(...)
+                db.execute_update(...)
+
+        All `execute_update` calls inside the context will run on the
+        same connection and will be committed/rolled back together.
+        """
+        return self._TransactionContext(self, immediate=immediate)
+
+    def in_transaction(self) -> bool:
+        """
+        Return True if a transaction context is currently active on this
+        DatabaseConnection instance.
+        """
+        return self._transaction_conn is not None
+
     def execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """
         Execute a SELECT query and return results.
@@ -95,16 +155,21 @@ class DatabaseConnection:
             List of dictionaries representing rows
         """
         try:
-            with self.get_connection() as conn:
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
+            else:
+                with self.get_connection() as conn:
+                    cursor = conn.execute(query, params)
+                    rows = cursor.fetchall()
 
-                # Convert sqlite3.Row objects to dictionaries
-                results = []
-                for row in rows:
-                    results.append(dict(row))
+            # Convert sqlite3.Row objects to dictionaries
+            results = []
+            for row in rows:
+                results.append(dict(row))
 
-                return results
+            return results
 
         except Exception as e:
             logger.error(f"Query execution failed: {e}")
@@ -127,19 +192,27 @@ class DatabaseConnection:
             Number of affected rows, or (affected_rows, last_insert_id) if return_last_id is True
         """
         try:
-            with self.get_connection() as conn:
+            # Use the active transaction connection if available; do not commit
+            # while inside a transaction because the transaction manager will
+            # handle commit/rollback at the end of the context.
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
                 cursor = conn.execute(query, params)
-                conn.commit()
                 affected_rows = cursor.rowcount
-
                 if return_last_id:
-                    # Use the cursor's lastrowid which is the reliable last row id for
-                    # the connection that executed the INSERT. Avoid querying
-                    # last_insert_rowid() on a separate connection which is unreliable.
                     last_insert_id = cursor.lastrowid
                     return affected_rows, last_insert_id
-                else:
-                    return affected_rows
+                return affected_rows
+            else:
+                with self.get_connection() as conn:
+                    cursor = conn.execute(query, params)
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    if return_last_id:
+                        last_insert_id = cursor.lastrowid
+                        return affected_rows, last_insert_id
+                    else:
+                        return affected_rows
 
         except Exception as e:
             logger.error(f"Update execution failed: {e}")
@@ -155,37 +228,20 @@ class DatabaseConnection:
             script: Multi-statement SQL script
         """
         try:
-            with self.get_connection() as conn:
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
                 conn.executescript(script)
-                conn.commit()
+            else:
+                with self.get_connection() as conn:
+                    conn.executescript(script)
+                    conn.commit()
 
         except Exception as e:
             logger.error(f"Script execution failed: {e}")
             raise
 
-    def get_last_insert_id(self) -> Optional[int]:
-        """
-        Get the last inserted row ID.
-
-        Returns:
-            Last insert ID or None if no connection
-        """
-        try:
-            # This method is inherently unreliable because it opens a new
-            # connection and calls SQLite's last_insert_rowid() which only
-            # reports the last insert for that connection. Prefer using
-            # `execute_update(..., return_last_id=True)` which returns the
-            # `cursor.lastrowid` from the same connection used to perform the
-            # INSERT.
-            logger.warning(
-                "get_last_insert_id() is deprecated and unreliable; use execute_update(..., return_last_id=True) instead"
-            )
-            with self.get_connection() as conn:
-                cursor = conn.execute("SELECT last_insert_rowid()")
-                return cursor.fetchone()[0]
-        except Exception as e:
-            logger.error(f"Failed to get last insert ID: {e}")
-            return None
+    # Removed `get_last_insert_id()` in favor of `execute_update(..., return_last_id=True)`
+    # which returns the `cursor.lastrowid` from the connection used for the INSERT.
 
     def database_exists(self) -> bool:
         """
