@@ -21,14 +21,18 @@ class ReportQueryBuilder:
             "(SELECT COALESCE(SUM(quantity_received), 0) FROM Item_Batches b WHERE b.item_id = dp.item_id) AS ACTUAL_INVENTORY",
             "size AS SIZE",
             "brand AS BRAND",
-            "other_specifications AS \"OTHER SPECIFICATIONS\""
+            'other_specifications AS "OTHER SPECIFICATIONS"',
         ]
 
-    def build_dynamic_report_query(self, start_date: date, end_date: date,
-                                  granularity: str,
-                                  grade_filter: str = "",
-                                  section_filter: str = "",
-                                  include_consumables: bool = True) -> Tuple[str, Tuple]:
+    def build_dynamic_report_query(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str,
+        grade_filter: str = "",
+        section_filter: str = "",
+        include_consumables: bool = True,
+    ) -> Tuple[str, Tuple]:
         """
         Build the complete dynamic report query.
         OPTIMIZED: Pre-compute period ranges and use indexed columns.
@@ -46,27 +50,30 @@ class ReportQueryBuilder:
         """
         try:
             # Use optimized single query approach instead of CTEs
-            query = self._build_optimized_report_query(
-                start_date, end_date, granularity,
-                grade_filter, section_filter, include_consumables
+            query, params = self._build_optimized_report_query(
+                start_date,
+                end_date,
+                granularity,
+                grade_filter,
+                section_filter,
+                include_consumables,
             )
 
-            # Build parameters
-            params = self._build_report_params(
-                start_date, end_date, granularity,
-                grade_filter, section_filter, include_consumables
-            )
-
-            return query, params
+            return query, tuple(params)
 
         except Exception as e:
             logger.error(f"Failed to build dynamic report query: {e}")
             raise
 
-    def _build_optimized_report_query(self, start_date: date, end_date: date,
-                                     granularity: str,
-                                     grade_filter: str, section_filter: str,
-                                     include_consumables: bool) -> str:
+    def _build_optimized_report_query(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str,
+        grade_filter: str,
+        section_filter: str,
+        include_consumables: bool,
+    ) -> Tuple[str, list]:
         """Build optimized single query without CTEs for better performance."""
         try:
             # Base query with direct JOINs instead of CTEs
@@ -80,10 +87,12 @@ class ReportQueryBuilder:
                 i.other_specifications AS "OTHER SPECIFICATIONS"
             """
 
-            # Add dynamic period columns
-            period_columns = self._build_optimized_period_columns(start_date, end_date, granularity)
-            if period_columns:
-                query += "," + period_columns
+            # Add dynamic period columns (now returns SQL and params)
+            period_columns_sql, period_params = self._build_optimized_period_columns(
+                start_date, end_date, granularity
+            )
+            if period_columns_sql:
+                query += "," + period_columns_sql
 
             # Add TOTAL QUANTITY as the last column
             query += """,
@@ -106,9 +115,10 @@ class ReportQueryBuilder:
             ) stock ON i.id = stock.item_id
             """
 
-            # WHERE clause with filters
-            query += f"""
-            WHERE r.expected_request BETWEEN '{start_date.isoformat()}' AND '{end_date.isoformat()}'
+            # WHERE clause with filters. Use half-open range to avoid string
+            # comparison issues when datetimes are stored as ISO timestamps.
+            query += """
+            WHERE r.expected_request >= ? AND r.expected_request < ?
             """
 
             if grade_filter:
@@ -124,37 +134,73 @@ class ReportQueryBuilder:
             ORDER BY c.name, i.name
             """
 
-            return query
+            # Build params in stable order: period ranges, global date bounds, then filters
+            # This ordering matches placeholders in the SQL where period scoped
+            # columns come before the WHERE clause parameters.
+            params: List[Any] = []
+            params.extend(period_params)
+
+            # Convert global date bounds to half-open range: [start_date, end_date + 1 day)
+            from datetime import timedelta
+
+            params.append(start_date.isoformat())
+            params.append((end_date + timedelta(days=1)).isoformat())
+            if grade_filter:
+                params.append(grade_filter)
+            if section_filter:
+                params.append(section_filter)
+
+            return query, params
 
         except Exception as e:
             logger.error(f"Failed to build optimized report query: {e}")
             raise
 
-    def _build_optimized_period_columns(self, start_date: date, end_date: date, granularity: str) -> str:
+    def _build_optimized_period_columns(
+        self, start_date: date, end_date: date, granularity: str
+    ) -> Tuple[str, list]:
         """Build optimized period columns using correct logic from report_utils."""
         try:
             # Use the correct period generation from report_utils
-            period_keys = date_formatter.get_period_keys(start_date, end_date, granularity)
+            period_keys = date_formatter.get_period_keys(
+                start_date, end_date, granularity
+            )
 
             if not period_keys:
-                return ""
+                return "", []
 
             column_parts = []
+            params: list = []
             for period_key in period_keys:
                 # Parse period key to get start and end dates
-                period_start, period_end = self._parse_period_key_to_dates(period_key, start_date, end_date, granularity)
-                escaped_key = period_key.replace("'", "''")
-                column_parts.append(f"""
-                SUM(CASE WHEN r.expected_request >= '{period_start}' AND r.expected_request < '{period_end}'
-                    THEN ri.quantity_requested ELSE 0 END) AS "{escaped_key}" """)
+                period_start, period_end = self._parse_period_key_to_dates(
+                    period_key, start_date, end_date, granularity
+                )
 
-            return ",".join(column_parts)
+                # Validate period_key to avoid injection via column alias
+                import re
+
+                if not re.match(r"^[0-9A-Za-z\-]+(?:to[0-9A-Za-z\-]+)?$", period_key):
+                    logger.warning(f"Skipping invalid period key: {period_key}")
+                    continue
+
+                # Use parameter placeholders for dates; alias is quoted and validated
+                safe_alias = period_key.replace('"', '""')
+                column_parts.append(
+                    "SUM(CASE WHEN r.expected_request >= ? AND r.expected_request < ? "
+                    'THEN ri.quantity_requested ELSE 0 END) AS "{}"'.format(safe_alias)
+                )
+                params.extend([period_start, period_end])
+
+            return ",".join(column_parts), params
 
         except Exception as e:
             logger.error(f"Failed to build optimized period columns: {e}")
-            return ""
+            return "", []
 
-    def _parse_period_key_to_dates(self, period_key: str, report_start: date, report_end: date, granularity: str) -> Tuple[str, str]:
+    def _parse_period_key_to_dates(
+        self, period_key: str, report_start: date, report_end: date, granularity: str
+    ) -> Tuple[str, str]:
         """Parse a period key and return the corresponding start and end dates for SQL queries."""
         from datetime import timedelta
 
@@ -168,38 +214,46 @@ class ReportQueryBuilder:
             elif granularity == "weekly":
                 if "to" in period_key:
                     # Excess period: '2023-01-01to2023-01-03'
-                    start_str, end_str = period_key.split('to')
+                    start_str, end_str = period_key.split("to")
                     start_date = date.fromisoformat(start_str)
                     end_date = date.fromisoformat(end_str)
-                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
+                    return start_date.isoformat(), (
+                        end_date + timedelta(days=1)
+                    ).isoformat()
                 else:
                     # Main week: '2023-01-W1'
-                    year_str, month_str, week_part = period_key.split('-')
+                    year_str, month_str, week_part = period_key.split("-")
                     year, month = int(year_str), int(month_str)
-                    week_num = int(week_part.replace('W', ''))
+                    week_num = int(week_part.replace("W", ""))
 
                     # Find the Monday of the specified week
                     first_day_of_month = date(year, month, 1)
                     # Find first Monday of the month
                     days_to_first_monday = (7 - first_day_of_month.weekday()) % 7
-                    first_monday = first_day_of_month + timedelta(days=days_to_first_monday)
+                    first_monday = first_day_of_month + timedelta(
+                        days=days_to_first_monday
+                    )
 
                     # Calculate the Monday of the target week
                     week_monday = first_monday + timedelta(days=(week_num - 1) * 7)
                     week_sunday = week_monday + timedelta(days=6)
 
-                    return week_monday.isoformat(), (week_sunday + timedelta(days=1)).isoformat()
+                    return week_monday.isoformat(), (
+                        week_sunday + timedelta(days=1)
+                    ).isoformat()
 
             elif granularity == "monthly":
                 if "to" in period_key:
                     # Excess period: '2023-01-01to2023-01-15'
-                    start_str, end_str = period_key.split('to')
+                    start_str, end_str = period_key.split("to")
                     start_date = date.fromisoformat(start_str)
                     end_date = date.fromisoformat(end_str)
-                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
+                    return start_date.isoformat(), (
+                        end_date + timedelta(days=1)
+                    ).isoformat()
                 else:
                     # Main month: '2023-01'
-                    year_str, month_str = period_key.split('-')
+                    year_str, month_str = period_key.split("-")
                     year, month = int(year_str), int(month_str)
                     month_start = date(year, month, 1)
                     if month == 12:
@@ -211,13 +265,15 @@ class ReportQueryBuilder:
             elif granularity == "quarterly":
                 if "to" in period_key:
                     # Excess period: '2023-01-01to2023-03-15'
-                    start_str, end_str = period_key.split('to')
+                    start_str, end_str = period_key.split("to")
                     start_date = date.fromisoformat(start_str)
                     end_date = date.fromisoformat(end_str)
-                    return start_date.isoformat(), (end_date + timedelta(days=1)).isoformat()
+                    return start_date.isoformat(), (
+                        end_date + timedelta(days=1)
+                    ).isoformat()
                 else:
                     # Main quarter: '2023-Q1'
-                    year_str, quarter_str = period_key.split('-Q')
+                    year_str, quarter_str = period_key.split("-Q")
                     year, quarter = int(year_str), int(quarter_str)
                     quarter_start_month = (quarter - 1) * 3 + 1
                     quarter_start = date(year, quarter_start_month, 1)
@@ -243,13 +299,19 @@ class ReportQueryBuilder:
             logger.error(f"Failed to parse period key '{period_key}': {e}")
             return report_start.isoformat(), report_end.isoformat()
 
-    def _build_report_params(self, start_date: date, end_date: date, granularity: str,
-                           grade_filter: str, section_filter: str,
-                           include_consumables: bool) -> Tuple:
+    def _build_report_params(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str,
+        grade_filter: str,
+        section_filter: str,
+        include_consumables: bool,
+    ) -> Tuple:
         """Build optimized parameter list for the report query."""
-        params = []
+        params: List[Any] = []
 
-        # Add filter parameters
+        # This method is retained for compatibility but callers now build params
         if grade_filter:
             params.append(grade_filter)
         if section_filter:
@@ -270,9 +332,12 @@ class ReportStatisticsBuilder:
     """Builds queries for report statistics and summaries."""
 
     @staticmethod
-    def build_usage_statistics_query(start_date: date, end_date: date,
-                                   grade_filter: str = "",
-                                   section_filter: str = "") -> Tuple[str, Tuple]:
+    def build_usage_statistics_query(
+        start_date: date,
+        end_date: date,
+        grade_filter: str = "",
+        section_filter: str = "",
+    ) -> Tuple[str, Tuple]:
         """Build query to get usage statistics."""
         # Total items used
         total_query = """
@@ -283,7 +348,7 @@ class ReportStatisticsBuilder:
         WHERE r.expected_request BETWEEN ? AND ?
         """
 
-        params = [start_date.isoformat(), end_date.isoformat()]
+        params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
@@ -296,9 +361,12 @@ class ReportStatisticsBuilder:
         return total_query, tuple(params)
 
     @staticmethod
-    def build_category_statistics_query(start_date: date, end_date: date,
-                                      grade_filter: str = "",
-                                      section_filter: str = "") -> Tuple[str, Tuple]:
+    def build_category_statistics_query(
+        start_date: date,
+        end_date: date,
+        grade_filter: str = "",
+        section_filter: str = "",
+    ) -> Tuple[str, Tuple]:
         """Build query to get category statistics."""
         category_query = """
         SELECT c.name as category, SUM(ri.quantity_requested) as qty
@@ -310,7 +378,7 @@ class ReportStatisticsBuilder:
         WHERE r.expected_request BETWEEN ? AND ?
         """
 
-        params = [start_date.isoformat(), end_date.isoformat()]
+        params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
@@ -325,10 +393,13 @@ class ReportStatisticsBuilder:
         return category_query, tuple(params)
 
     @staticmethod
-    def build_top_items_query(start_date: date, end_date: date,
-                            grade_filter: str = "",
-                            section_filter: str = "",
-                            limit: int = 10) -> Tuple[str, Tuple]:
+    def build_top_items_query(
+        start_date: date,
+        end_date: date,
+        grade_filter: str = "",
+        section_filter: str = "",
+        limit: int = 10,
+    ) -> Tuple[str, Tuple]:
         """Build query to get top used items."""
         top_items_query = """
         SELECT i.name as item_name, SUM(ri.quantity_requested) as qty
@@ -339,7 +410,7 @@ class ReportStatisticsBuilder:
         WHERE r.expected_request BETWEEN ? AND ?
         """
 
-        params = [start_date.isoformat(), end_date.isoformat()]
+        params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
         if grade_filter:
@@ -349,6 +420,7 @@ class ReportStatisticsBuilder:
             top_items_query += " AND req.group_name = ?"
             params.append(section_filter)
 
-        top_items_query += f" GROUP BY i.id, i.name ORDER BY qty DESC LIMIT {limit}"
+        top_items_query += " GROUP BY i.id, i.name ORDER BY qty DESC LIMIT ?"
+        params.append(limit)
 
         return top_items_query, tuple(params)

@@ -47,6 +47,7 @@ How to read this document
   - Evidence: `ReportQueryBuilder` uses f-strings for date ranges and dynamic period columns [inventory_app/gui/reports/query_builder.py](inventory_app/gui/reports/query_builder.py#L100-L140)
   - Severity: High
   - Remediation: Use parameterized queries for date bounds and build dynamic columns safely (e.g., validate and escape period keys or use temporary tables / parameterized aggregates).
+  - Status: **Completed** — `ReportQueryBuilder` now uses parameterized placeholders for date bounds and period ranges; period keys are validated before being used as column aliases to prevent SQL injection. Added unit tests verifying placeholders and validation behavior (`tests/test_report_query_builder.py`).
 
 - **Inconsistent stock movement types & lack of enforcement**
   - Description: Movement types vary across code (`CONSUMPTION`, `RESERVATION`, `RETURN`, `DISPOSAL`, `REQUEST`, `LOST`) and not enforced by DB schema.
