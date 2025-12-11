@@ -62,7 +62,9 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         # Activity details widget
         self.activity_widget = ActivityDetailsWidget(parent=self)
         self.activity_widget.set_datetime_manager(self.datetime_manager)
-        self.activity_widget.activity_name_changed.connect(self.update_create_button_state)
+        self.activity_widget.activity_name_changed.connect(
+            self.update_create_button_state
+        )
         self.activity_widget.field_changed.connect(self.update_create_button_state)
         layout.addWidget(self.activity_widget)
 
@@ -113,7 +115,9 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             # Validate request/return times are set
             if not expected_request or not expected_return:
                 QMessageBox.warning(
-                    self, "Validation Error", "Please set both request and return times."
+                    self,
+                    "Validation Error",
+                    "Please set both request and return times.",
                 )
                 return
 
@@ -130,6 +134,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
             # Convert to QDateTime for validation (handle None case)
             from inventory_app.utils.date_utils import datetime_to_qdatetime
+
             expected_request_qt = datetime_to_qdatetime(expected_request)
             expected_return_qt = datetime_to_qdatetime(expected_return)
 
@@ -151,6 +156,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
             # Validate activity date format
             from inventory_app.utils.date_utils import is_valid_date_format
+
             if activity_date and not is_valid_date_format(activity_date):
                 QMessageBox.warning(
                     self, "Invalid Date", "Please select a valid activity date."
@@ -161,59 +167,60 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             from inventory_app.database.models import Requisition, RequisitionItem
             from datetime import date
 
-            # Create main requisition
-            requisition = Requisition()
-            requisition.requester_id = self.selected_requester.id
-            requisition.expected_request = expected_request
-            requisition.expected_return = expected_return
-            requisition.status = "requested"
-            requisition.lab_activity_name = activity_name
-            requisition.lab_activity_description = activity_description
-            requisition.lab_activity_date = (
-                date.fromisoformat(activity_date) if activity_date else date.today()
-            )
-            requisition.num_students = num_students
-            requisition.num_groups = num_groups
+            # Create main requisition and related records inside a transaction
+            # so that any failure in saving items or creating movements will
+            # cause the entire operation to rollback.
+            from inventory_app.database.connection import db as global_db
 
-            # Save requisition
-            if not requisition.save("System"):
-                QMessageBox.critical(self, "Error", "Failed to create requisition.")
-                return
-
-            if not requisition.id:
-                QMessageBox.critical(self, "Error", "Failed to get requisition ID.")
-                return
-
-            requisition_id = requisition.id
-
-            # Create requisition items
-            for item in self.selected_items:
-                # Create requisition item
-                req_item = RequisitionItem()
-                req_item.requisition_id = requisition_id
-                req_item.item_id = item["item_id"]
-                req_item.quantity_requested = item["quantity"]
-
-                if not req_item.save():
-                    logger.error(
-                        f"Failed to save requisition item for item {item['item_id']}"
-                    )
-                    QMessageBox.critical(
-                        self, "Error", "Failed to save requisition items."
-                    )
-                    return
-
-            # Create stock movements for the requisition
-            movement_success = self.item_manager.create_stock_movements_for_requisition(
-                requisition_id, self.selected_items
-            )
-
-            if not movement_success:
-                QMessageBox.warning(
-                    self, "Stock Movement Warning",
-                    "Requisition created but stock movement recording failed.\n"
-                    "Please verify stock levels manually."
+            # Use an IMMEDIATE transaction to reserve stock atomically and
+            # prevent concurrent reservations from oversubscribing stock.
+            with global_db.transaction(immediate=True):
+                # Create main requisition
+                requisition = Requisition()
+                requisition.requester_id = self.selected_requester.id
+                requisition.expected_request = expected_request
+                requisition.expected_return = expected_return
+                requisition.status = "requested"
+                requisition.lab_activity_name = activity_name
+                requisition.lab_activity_description = activity_description
+                requisition.lab_activity_date = (
+                    date.fromisoformat(activity_date) if activity_date else date.today()
                 )
+                requisition.num_students = num_students
+                requisition.num_groups = num_groups
+
+                # Save requisition; raise on failure to ensure transaction rollback
+                if not requisition.save("System"):
+                    raise Exception("Failed to create requisition")
+
+                if not requisition.id:
+                    raise Exception("Failed to get requisition ID")
+
+                requisition_id = requisition.id
+
+                # Create requisition items
+                for item in self.selected_items:
+                    # Create requisition item
+                    req_item = RequisitionItem()
+                    req_item.requisition_id = requisition_id
+                    req_item.item_id = item["item_id"]
+                    req_item.quantity_requested = item["quantity"]
+
+                    if not req_item.save():
+                        raise Exception(
+                            f"Failed to save requisition item for item {item['item_id']}"
+                        )
+
+                # Create stock movements for the requisition. If movement creation
+                # fails, treat it as an error so the transaction will rollback.
+                movement_success = (
+                    self.item_manager.create_stock_movements_for_requisition(
+                        requisition_id, self.selected_items
+                    )
+                )
+
+                if not movement_success:
+                    raise Exception("Failed to create stock movements for requisition")
 
             # Get editor name from user
             editor_name = self.get_editor_name()

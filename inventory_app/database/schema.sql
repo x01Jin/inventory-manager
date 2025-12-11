@@ -84,7 +84,7 @@ CREATE TABLE Item_Batches (
     date_received DATE NOT NULL,
     quantity_received INTEGER NOT NULL CHECK (quantity_received > 0),
     disposal_date DATE,
-    FOREIGN KEY (item_id) REFERENCES Items(id),
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE,
     UNIQUE(item_id, batch_number)
 );
 
@@ -102,8 +102,9 @@ CREATE TABLE Stock_Movements (
     movement_date DATE NOT NULL,
     source_id INTEGER,             -- e.g., requisition_id for usage
     note TEXT,
-    FOREIGN KEY (item_id) REFERENCES Items(id),
-    FOREIGN KEY (batch_id) REFERENCES Item_Batches(id)
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE,
+        FOREIGN KEY (batch_id) REFERENCES Item_Batches(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_id) REFERENCES Requisitions(id) ON DELETE CASCADE
 );
 
 -- Indexes
@@ -143,8 +144,8 @@ CREATE TABLE Requisition_Items (
     requisition_id INTEGER NOT NULL,
     item_id INTEGER NOT NULL,
     quantity_requested INTEGER NOT NULL CHECK (quantity_requested > 0),
-    FOREIGN KEY (requisition_id) REFERENCES Requisitions(id),
-    FOREIGN KEY (item_id) REFERENCES Items(id)
+        FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
 );
 
 -- Indexes
@@ -158,7 +159,7 @@ CREATE TABLE Update_History (
     editor_name TEXT NOT NULL,
     edit_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reason TEXT NOT NULL,
-    FOREIGN KEY (item_id) REFERENCES Items(id)
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
 );
 
 -- Index
@@ -171,7 +172,7 @@ CREATE TABLE Requisition_History (
     editor_name TEXT NOT NULL,
     edit_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reason TEXT NOT NULL,
-    FOREIGN KEY (requisition_id) REFERENCES Requisitions(id)
+        FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
 );
 
 -- Index
@@ -184,8 +185,9 @@ CREATE TABLE Disposal_History (
     reason TEXT NOT NULL,
     disposal_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     editor_name TEXT NOT NULL,
-    FOREIGN KEY (item_id) REFERENCES Items(id)
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
 );
+CREATE INDEX idx_movements_source ON Stock_Movements(source_id);
 
 -- Index
 CREATE INDEX idx_disposal_item ON Disposal_History(item_id);

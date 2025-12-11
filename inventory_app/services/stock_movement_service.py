@@ -19,7 +19,14 @@ class StockMovementService:
         """Initialize the stock movement service."""
         logger.info("Stock movement service initialized")
 
-    def record_consumption(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def record_consumption(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record item consumption (requesting).
 
@@ -30,9 +37,18 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being consumed (optional)
         """
-        self._record_movement(item_id, 'CONSUMPTION', quantity, source_id, note, batch_id)
+        self._record_movement(
+            item_id, "CONSUMPTION", quantity, source_id, note, batch_id
+        )
 
-    def record_reservation(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def record_reservation(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record item reservation (temporary hold for active requisitions).
 
@@ -43,9 +59,18 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being reserved (optional)
         """
-        self._record_movement(item_id, 'RESERVATION', quantity, source_id, note, batch_id)
+        self._record_movement(
+            item_id, "RESERVATION", quantity, source_id, note, batch_id
+        )
 
-    def record_return(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def record_return(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record item return.
 
@@ -56,9 +81,16 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being returned (optional)
         """
-        self._record_movement(item_id, 'RETURN', quantity, source_id, note, batch_id)
+        self._record_movement(item_id, "RETURN", quantity, source_id, note, batch_id)
 
-    def record_disposal(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def record_disposal(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record item disposal (lost or damaged non-consumable items).
 
@@ -69,9 +101,16 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being disposed (optional)
         """
-        self._record_movement(item_id, 'DISPOSAL', quantity, source_id, note, batch_id)
+        self._record_movement(item_id, "DISPOSAL", quantity, source_id, note, batch_id)
 
-    def record_lost(self, item_id: int, quantity: int, source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def record_lost(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record item loss (deprecated - use record_disposal for non-consumables, record_consumption for consumables).
 
@@ -84,9 +123,11 @@ class StockMovementService:
         """
         # For backward compatibility, map LOST to DISPOSAL
         # In future versions, this should be removed and callers should use appropriate methods
-        self._record_movement(item_id, 'DISPOSAL', quantity, source_id, note, batch_id)
+        self._record_movement(item_id, "DISPOSAL", quantity, source_id, note, batch_id)
 
-    def process_return(self, requisition_id: int, return_data: List[Dict], editor_name: str) -> bool:
+    def process_return(
+        self, requisition_id: int, return_data: List[Dict], editor_name: str
+    ) -> bool:
         """
         Process returns for multiple items in a requisition.
 
@@ -99,24 +140,42 @@ class StockMovementService:
             bool: True if successful
         """
         try:
-            for return_item in return_data:
-                note = f"Items returned by {editor_name}"
-                self.record_return(
-                    return_item['item_id'],
-                    return_item['quantity_returned'],
-                    requisition_id,
-                    note
-                )
+            # Run returns in a transaction so that all movements are created
+            # atomically and we can rollback on error.
+            from inventory_app.database.connection import db as global_db
 
-            logger.info(f"Processed return for requisition {requisition_id}")
-            return True
+            def _process():
+                for return_item in return_data:
+                    note = f"Items returned by {editor_name}"
+                    self.record_return(
+                        return_item["item_id"],
+                        return_item["quantity_returned"],
+                        requisition_id,
+                        note,
+                    )
+                return True
+
+            if global_db.in_transaction():
+                return _process()
+
+            with global_db.transaction(immediate=True):
+                return _process()
 
         except Exception as e:
-            logger.error(f"Failed to process return for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to process return for requisition {requisition_id}: {e}"
+            )
             return False
 
-    def _record_movement(self, item_id: int, movement_type: str, quantity: int,
-                        source_id: int, note: str, batch_id: Optional[int] = None) -> None:
+    def _record_movement(
+        self,
+        item_id: int,
+        movement_type: str,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
         """
         Record a stock movement in the database.
 
@@ -128,40 +187,39 @@ class StockMovementService:
             note: Descriptive note
             batch_id: Specific batch ID (optional)
         """
-        try:
-            if batch_id is not None:
-                query = """
-                INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """
-                params = (
-                    item_id,
-                    batch_id,
-                    movement_type,
-                    quantity,
-                    date.today().isoformat(),
-                    source_id,
-                    note
-                )
-            else:
-                query = """
-                INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """
-                params = (
-                    item_id,
-                    movement_type,
-                    quantity,
-                    date.today().isoformat(),
-                    source_id,
-                    note
-                )
+        if batch_id is not None:
+            query = """
+            INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """
+            params = (
+                item_id,
+                batch_id,
+                movement_type,
+                quantity,
+                date.today().isoformat(),
+                source_id,
+                note,
+            )
+        else:
+            query = """
+            INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+            params = (
+                item_id,
+                movement_type,
+                quantity,
+                date.today().isoformat(),
+                source_id,
+                note,
+            )
 
-            db.execute_update(query, params)
-            batch_info = f" (batch {batch_id})" if batch_id else ""
-            logger.debug(f"Recorded {movement_type} movement for item {item_id}{batch_info}: {quantity} units")
-        except Exception as e:
-            logger.error(f"Failed to record stock movement: {e}")
+        db.execute_update(query, params)
+        batch_info = f" (batch {batch_id})" if batch_id else ""
+        logger.debug(
+            f"Recorded {movement_type} movement for item {item_id}{batch_info}: {quantity} units"
+        )
 
     def get_current_stock_level(self, item_id: int) -> int:
         """
@@ -183,7 +241,7 @@ class StockMovementService:
             WHERE item_id = ?
             """
             batch_rows = db.execute_query(batch_query, (item_id,))
-            total_received = batch_rows[0]['total_received'] if batch_rows else 0
+            total_received = batch_rows[0]["total_received"] if batch_rows else 0
 
             # Get net movement adjustments
             movement_query = """
@@ -200,7 +258,7 @@ class StockMovementService:
             WHERE item_id = ?
             """
             movement_rows = db.execute_query(movement_query, (item_id,))
-            net_adjustment = movement_rows[0]['net_adjustment'] if movement_rows else 0
+            net_adjustment = movement_rows[0]["net_adjustment"] if movement_rows else 0
 
             return max(0, total_received + net_adjustment)
         except Exception as e:
@@ -224,7 +282,7 @@ class StockMovementService:
             WHERE item_id = ? AND movement_type IN ('RESERVATION', 'REQUEST')
             """
             rows = db.execute_query(query, (item_id,))
-            return rows[0]['reserved_qty'] if rows else 0
+            return rows[0]["reserved_qty"] if rows else 0
         except Exception as e:
             logger.error(f"Failed to get reserved stock for item {item_id}: {e}")
             return 0
@@ -240,14 +298,10 @@ class StockMovementService:
         Returns:
             True if movements were successfully deleted
         """
-        try:
-            query = """
-            DELETE FROM Stock_Movements
-            WHERE source_id = ?
-            """
-            db.execute_update(query, (requisition_id,))
-            logger.info(f"Deleted stock movements for requisition {requisition_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete stock movements for requisition {requisition_id}: {e}")
-            return False
+        query = """
+        DELETE FROM Stock_Movements
+        WHERE source_id = ?
+        """
+        db.execute_update(query, (requisition_id,))
+        logger.info(f"Deleted stock movements for requisition {requisition_id}")
+        return True

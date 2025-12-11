@@ -27,6 +27,7 @@ How to read this document
   - Evidence: `NewRequisitionDialog.create_requisition()` (separate saves and then movement creation) and `Item.save()` creating batches separately [inventory_app/gui/requisitions/requisition_management/new_requisition.py](inventory_app/gui/requisitions/requisition_management/new_requisition.py#L150-L240), [inventory_app/database/models.py](inventory_app/database/models.py#L279-L324)
   - Severity: Critical
   - Remediation: Add a `transaction()` context manager to `DatabaseConnection` and refactor multi-step flows to run inside a single transaction with proper rollback on error.
+    - Status: **Completed** — Added a `DatabaseConnection.transaction()` context manager and refactored core flows including `Item.save()` (insert + batch creation), `NewRequisitionDialog.create_requisition()`, `Item.delete()`, and `Requisition.delete()` to use transactions. Added unit tests for commit/rollback behavior and removal of fragile `time.sleep()` hacks in deletion flows. Also refactored `StockMovementService.process_return()` and `ItemSelectionManager.create_stock_movements_for_requisition()` to use transactions and added schema-level `ON DELETE CASCADE` constraints and `idx_movements_source` to improve referential integrity and simplify deletes. Unit tests updated accordingly.
 
 - **No concurrency control around stock reservations (race conditions)**
   - Description: Creation of reservation/consumption `Stock_Movements` is done without re-checking availability inside a transaction or applying locks.
@@ -34,6 +35,7 @@ How to read this document
   - Evidence: `ItemSelectionManager.create_stock_movements_for_requisition()` inserts movements without transactional revalidation [inventory_app/gui/requisitions/requisition_management/item_selection_manager.py](inventory_app/gui/requisitions/requisition_management/item_selection_manager.py#L180-L240)
   - Severity: Critical
   - Remediation: Use transactions with SELECT ... FOR UPDATE semantics (or SQLite `BEGIN IMMEDIATE`) to re-check and reserve stock atomically; reject requests when insufficient stock.
+    - Status: **Partially Completed** — `ItemSelectionManager.create_stock_movements_for_requisition()` now re-checks availability inside an IMMEDIATE transaction and rejects requests when stock is insufficient. This prevents race conditions for typical single-process concurrency; consider additional integration tests or distributed locks if the app is used in a multi-process environment.
 
 ---
 
@@ -59,6 +61,7 @@ How to read this document
   - Evidence: `inventory_app/database/models.py` uses sequential deletes with `time.sleep` [inventory_app/database/models.py](inventory_app/database/models.py#L400-L480)
   - Severity: High
   - Remediation: Use `ON DELETE CASCADE` where appropriate or perform deletions within a single transaction and trust FK constraints; remove `sleep()` calls.
+    - Status: **Partially Completed** — `time.sleep()`-based deletion sequences were replaced with transactional deletes in `Item.delete()` and `Requisition.delete()` (where applicable) removing fragile timing hacks. Consider schema-level `ON DELETE CASCADE` and migration tests as further steps.
 
 ---
 

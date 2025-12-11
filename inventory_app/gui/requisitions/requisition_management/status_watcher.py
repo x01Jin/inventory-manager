@@ -57,7 +57,9 @@ class StatusWatcher:
             return new_status
 
         except Exception as e:
-            logger.error(f"Failed to update status for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to update status for requisition {requisition_id}: {e}"
+            )
             return "requested"
 
     def _get_requisition_dates(self, requisition_id: int) -> Optional[dict]:
@@ -80,9 +82,9 @@ class StatusWatcher:
             if rows:
                 row = rows[0]
                 return {
-                    'expected_request': self._parse_datetime(row['expected_request']),
-                    'expected_return': self._parse_datetime(row['expected_return']),
-                    'current_status': row['status']
+                    "expected_request": self._parse_datetime(row["expected_request"]),
+                    "expected_return": self._parse_datetime(row["expected_return"]),
+                    "current_status": row["status"],
                 }
             return None
         except Exception as e:
@@ -109,25 +111,25 @@ class StatusWatcher:
         Returns:
             str: Calculated status
         """
-        expected_request = dates.get('expected_request')
-        expected_return = dates.get('expected_return')
-        current_status = dates.get('current_status', 'requested')
+        expected_request = dates.get("expected_request")
+        expected_return = dates.get("expected_return")
+        current_status = dates.get("current_status", "requested")
 
         # Don't change status if already returned (final state)
-        if current_status == 'returned':
-            return 'returned'
+        if current_status == "returned":
+            return "returned"
 
         # Calculate based on current time vs expected dates
         if expected_request and self.current_time < expected_request:
-            return 'requested'
+            return "requested"
         elif expected_request and expected_return:
             if expected_request <= self.current_time < expected_return:
-                return 'active'
+                return "active"
             elif self.current_time >= expected_return:
-                return 'overdue'
+                return "overdue"
 
         # Fallback to requested if dates are invalid
-        return 'requested'
+        return "requested"
 
     def _update_status_in_db(self, requisition_id: int, new_status: str):
         """
@@ -138,19 +140,25 @@ class StatusWatcher:
             new_status: New status to set
         """
         try:
-            query = "UPDATE Requisitions SET status = ? WHERE id = ?"
-            db.execute_update(query, (new_status, requisition_id))
+            # Make the update + history insert atomic
+            from inventory_app.database.connection import db as global_db
 
-            # Log the status change
-            history_query = """
-            INSERT INTO Requisition_History (requisition_id, editor_name, reason)
-            VALUES (?, 'System', ?)
-            """
-            reason = f"Real-time status update to {new_status}"
-            db.execute_update(history_query, (requisition_id, reason))
+            with global_db.transaction():
+                query = "UPDATE Requisitions SET status = ? WHERE id = ?"
+                db.execute_update(query, (new_status, requisition_id))
+
+                # Log the status change
+                history_query = """
+                INSERT INTO Requisition_History (requisition_id, editor_name, reason)
+                VALUES (?, 'System', ?)
+                """
+                reason = f"Real-time status update to {new_status}"
+                db.execute_update(history_query, (requisition_id, reason))
 
         except Exception as e:
-            logger.error(f"Failed to update status in DB for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to update status in DB for requisition {requisition_id}: {e}"
+            )
             raise
 
 
