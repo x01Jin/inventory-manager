@@ -62,7 +62,7 @@ class DatabaseConnection:
                 logger.error(f"Schema file not found: {schema_path}")
                 return False
 
-            with open(schema_path, 'r', encoding='utf-8') as f:
+            with open(schema_path, "r", encoding="utf-8") as f:
                 schema_sql = f.read()
 
             with self.get_connection() as conn:
@@ -112,7 +112,9 @@ class DatabaseConnection:
             logger.error(f"Params: {params}")
             raise
 
-    def execute_update(self, query: str, params: tuple = (), return_last_id: bool = False) -> Union[int, tuple[int, int]]:
+    def execute_update(
+        self, query: str, params: tuple = (), return_last_id: bool = False
+    ) -> Union[int, tuple[int, Optional[int]]]:
         """
         Execute an INSERT, UPDATE, or DELETE query.
 
@@ -131,8 +133,10 @@ class DatabaseConnection:
                 affected_rows = cursor.rowcount
 
                 if return_last_id:
-                    last_id_cursor = conn.execute("SELECT last_insert_rowid()")
-                    last_insert_id = last_id_cursor.fetchone()[0]
+                    # Use the cursor's lastrowid which is the reliable last row id for
+                    # the connection that executed the INSERT. Avoid querying
+                    # last_insert_rowid() on a separate connection which is unreliable.
+                    last_insert_id = cursor.lastrowid
                     return affected_rows, last_insert_id
                 else:
                     return affected_rows
@@ -167,6 +171,15 @@ class DatabaseConnection:
             Last insert ID or None if no connection
         """
         try:
+            # This method is inherently unreliable because it opens a new
+            # connection and calls SQLite's last_insert_rowid() which only
+            # reports the last insert for that connection. Prefer using
+            # `execute_update(..., return_last_id=True)` which returns the
+            # `cursor.lastrowid` from the same connection used to perform the
+            # INSERT.
+            logger.warning(
+                "get_last_insert_id() is deprecated and unreliable; use execute_update(..., return_last_id=True) instead"
+            )
             with self.get_connection() as conn:
                 cursor = conn.execute("SELECT last_insert_rowid()")
                 return cursor.fetchone()[0]

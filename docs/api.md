@@ -4,7 +4,7 @@ This section documents the primary services and interfaces used throughout the I
 
 Database
 
-- `inventory_app.database.connection.DatabaseConnection` — context-managed SQLite connection with query helpers: `execute_query`, `execute_update`, `execute_script`, and `get_last_insert_id`.
+- `inventory_app.database.connection.DatabaseConnection` — context-managed SQLite connection with query helpers: `execute_query`, `execute_update`, `execute_script`. Note: `get_last_insert_id` is deprecated and unreliable across connections; prefer `execute_update(..., return_last_id=True)` to obtain the `lastrowid` for the INSERT.
 
 Services
 

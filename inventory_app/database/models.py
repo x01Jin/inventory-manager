@@ -12,9 +12,11 @@ from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 
+
 @dataclass
 class Category:
     """Represents an item category."""
+
     id: Optional[int] = None
     name: str = ""
 
@@ -26,15 +28,18 @@ class Category:
                 db.execute_update(query, (self.name, self.id))
             else:
                 query = "INSERT INTO Categories (name) VALUES (?)"
-                db.execute_update(query, (self.name,))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, (self.name,), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for Category")
             return True
         except Exception as e:
             logger.error(f"Failed to save category: {e}")
             return False
 
     @classmethod
-    def get_all(cls) -> List['Category']:
+    def get_all(cls) -> List["Category"]:
         """Get all categories."""
         try:
             rows = db.execute_query("SELECT * FROM Categories ORDER BY name")
@@ -50,9 +55,13 @@ class Category:
                 return False
 
             # Check if category is being used by any items
-            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE category_id = ?", (self.id,))
-            if usage_check and usage_check[0]['count'] > 0:
-                logger.warning(f"Cannot delete category {self.id}: category is being used by items")
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE category_id = ?", (self.id,)
+            )
+            if usage_check and usage_check[0]["count"] > 0:
+                logger.warning(
+                    f"Cannot delete category {self.id}: category is being used by items"
+                )
                 return False
 
             db.execute_update("DELETE FROM Categories WHERE id = ?", (self.id,))
@@ -62,18 +71,22 @@ class Category:
             return False
 
     @classmethod
-    def get_by_id(cls, category_id: int) -> Optional['Category']:
+    def get_by_id(cls, category_id: int) -> Optional["Category"]:
         """Get category by ID."""
         try:
-            rows = db.execute_query("SELECT * FROM Categories WHERE id = ?", (category_id,))
+            rows = db.execute_query(
+                "SELECT * FROM Categories WHERE id = ?", (category_id,)
+            )
             return cls(**dict(rows[0])) if rows else None
         except Exception as e:
             logger.error(f"Failed to get category {category_id}: {e}")
             return None
 
+
 @dataclass
 class Supplier:
     """Represents a supplier."""
+
     id: Optional[int] = None
     name: str = ""
 
@@ -85,15 +98,18 @@ class Supplier:
                 db.execute_update(query, (self.name, self.id))
             else:
                 query = "INSERT INTO Suppliers (name) VALUES (?)"
-                db.execute_update(query, (self.name,))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, (self.name,), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for Supplier")
             return True
         except Exception as e:
             logger.error(f"Failed to save supplier: {e}")
             return False
 
     @classmethod
-    def get_all(cls) -> List['Supplier']:
+    def get_all(cls) -> List["Supplier"]:
         """Get all suppliers."""
         try:
             rows = db.execute_query("SELECT * FROM Suppliers ORDER BY name")
@@ -109,9 +125,13 @@ class Supplier:
                 return False
 
             # Check if supplier is being used by any items
-            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE supplier_id = ?", (self.id,))
-            if usage_check and usage_check[0]['count'] > 0:
-                logger.warning(f"Cannot delete supplier {self.id}: supplier is being used by items")
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE supplier_id = ?", (self.id,)
+            )
+            if usage_check and usage_check[0]["count"] > 0:
+                logger.warning(
+                    f"Cannot delete supplier {self.id}: supplier is being used by items"
+                )
                 return False
 
             db.execute_update("DELETE FROM Suppliers WHERE id = ?", (self.id,))
@@ -121,18 +141,22 @@ class Supplier:
             return False
 
     @classmethod
-    def get_by_id(cls, supplier_id: int) -> Optional['Supplier']:
+    def get_by_id(cls, supplier_id: int) -> Optional["Supplier"]:
         """Get supplier by ID."""
         try:
-            rows = db.execute_query("SELECT * FROM Suppliers WHERE id = ?", (supplier_id,))
+            rows = db.execute_query(
+                "SELECT * FROM Suppliers WHERE id = ?", (supplier_id,)
+            )
             return cls(**dict(rows[0])) if rows else None
         except Exception as e:
             logger.error(f"Failed to get supplier {supplier_id}: {e}")
             return None
 
+
 @dataclass
 class Size:
     """Represents a size option."""
+
     id: Optional[int] = None
     name: str = ""
 
@@ -144,15 +168,18 @@ class Size:
                 db.execute_update(query, (self.name, self.id))
             else:
                 query = "INSERT INTO Sizes (name) VALUES (?)"
-                db.execute_update(query, (self.name,))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, (self.name,), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for Size")
             return True
         except Exception as e:
             logger.error(f"Failed to save size: {e}")
             return False
 
     @classmethod
-    def get_all(cls) -> List['Size']:
+    def get_all(cls) -> List["Size"]:
         """Get all sizes."""
         try:
             rows = db.execute_query("SELECT * FROM Sizes ORDER BY name")
@@ -168,9 +195,13 @@ class Size:
                 return False
 
             # Check if size is being used by any items
-            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE size = ?", (self.name,))
-            if usage_check and usage_check[0]['count'] > 0:
-                logger.warning(f"Cannot delete size {self.id}: size is being used by items")
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE size = ?", (self.name,)
+            )
+            if usage_check and usage_check[0]["count"] > 0:
+                logger.warning(
+                    f"Cannot delete size {self.id}: size is being used by items"
+                )
                 return False
 
             db.execute_update("DELETE FROM Sizes WHERE id = ?", (self.id,))
@@ -180,7 +211,7 @@ class Size:
             return False
 
     @classmethod
-    def get_by_id(cls, size_id: int) -> Optional['Size']:
+    def get_by_id(cls, size_id: int) -> Optional["Size"]:
         """Get size by ID."""
         try:
             rows = db.execute_query("SELECT * FROM Sizes WHERE id = ?", (size_id,))
@@ -189,9 +220,11 @@ class Size:
             logger.error(f"Failed to get size {size_id}: {e}")
             return None
 
+
 @dataclass
 class Brand:
     """Represents a brand option."""
+
     id: Optional[int] = None
     name: str = ""
 
@@ -203,15 +236,18 @@ class Brand:
                 db.execute_update(query, (self.name, self.id))
             else:
                 query = "INSERT INTO Brands (name) VALUES (?)"
-                db.execute_update(query, (self.name,))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(query, (self.name,), return_last_id=True)
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for Brand")
             return True
         except Exception as e:
             logger.error(f"Failed to save brand: {e}")
             return False
 
     @classmethod
-    def get_all(cls) -> List['Brand']:
+    def get_all(cls) -> List["Brand"]:
         """Get all brands."""
         try:
             rows = db.execute_query("SELECT * FROM Brands ORDER BY name")
@@ -227,9 +263,13 @@ class Brand:
                 return False
 
             # Check if brand is being used by any items
-            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Items WHERE brand = ?", (self.name,))
-            if usage_check and usage_check[0]['count'] > 0:
-                logger.warning(f"Cannot delete brand {self.id}: brand is being used by items")
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE brand = ?", (self.name,)
+            )
+            if usage_check and usage_check[0]["count"] > 0:
+                logger.warning(
+                    f"Cannot delete brand {self.id}: brand is being used by items"
+                )
                 return False
 
             db.execute_update("DELETE FROM Brands WHERE id = ?", (self.id,))
@@ -239,7 +279,7 @@ class Brand:
             return False
 
     @classmethod
-    def get_by_id(cls, brand_id: int) -> Optional['Brand']:
+    def get_by_id(cls, brand_id: int) -> Optional["Brand"]:
         """Get brand by ID."""
         try:
             rows = db.execute_query("SELECT * FROM Brands WHERE id = ?", (brand_id,))
@@ -248,9 +288,11 @@ class Brand:
             logger.error(f"Failed to get brand {brand_id}: {e}")
             return None
 
+
 @dataclass
 class Item:
     """Represents an inventory item."""
+
     id: Optional[int] = None
     name: str = ""
     category_id: int = 0
@@ -286,13 +328,23 @@ class Item:
                 acquisition_date = ?, last_modified = ? WHERE id = ?
                 """
                 params = (
-                    self.name, self.category_id, self.size, self.brand,
-                    self.other_specifications, self.po_number, self.supplier_id,
+                    self.name,
+                    self.category_id,
+                    self.size,
+                    self.brand,
+                    self.other_specifications,
+                    self.po_number,
+                    self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
-                    self.calibration_date.isoformat() if self.calibration_date else None,
+                    self.calibration_date.isoformat()
+                    if self.calibration_date
+                    else None,
                     self.is_consumable,
-                    self.acquisition_date.isoformat() if self.acquisition_date else None,
-                    current_time.isoformat(), self.id
+                    self.acquisition_date.isoformat()
+                    if self.acquisition_date
+                    else None,
+                    current_time.isoformat(),
+                    self.id,
                 )
                 db.execute_update(query, params)
 
@@ -302,7 +354,7 @@ class Item:
                     f"Updated item: {self.name}",
                     self.id,
                     "item",
-                    editor_name
+                    editor_name,
                 )
             else:
                 # Insert new item
@@ -312,20 +364,28 @@ class Item:
                 acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 params = (
-                    self.name, self.category_id, self.size, self.brand,
-                    self.other_specifications, self.po_number, self.supplier_id,
+                    self.name,
+                    self.category_id,
+                    self.size,
+                    self.brand,
+                    self.other_specifications,
+                    self.po_number,
+                    self.supplier_id,
                     self.expiration_date.isoformat() if self.expiration_date else None,
-                    self.calibration_date.isoformat() if self.calibration_date else None,
+                    self.calibration_date.isoformat()
+                    if self.calibration_date
+                    else None,
                     self.is_consumable,
-                    self.acquisition_date.isoformat() if self.acquisition_date else None,
-                    current_time.isoformat()
+                    self.acquisition_date.isoformat()
+                    if self.acquisition_date
+                    else None,
+                    current_time.isoformat(),
                 )
                 result = db.execute_update(query, params, return_last_id=True)
                 if isinstance(result, tuple):
                     _, self.id = result
                 else:
-                    # Fallback if return_last_id doesn't work as expected
-                    self.id = db.get_last_insert_id()
+                    logger.error("Failed to obtain last insert id for Item")
                 self.last_modified = current_time
 
                 # Create batches if batch_quantity is specified
@@ -338,7 +398,7 @@ class Item:
                     f"Added new item: {self.name} ({batch_quantity} batches)",
                     self.id,
                     "item",
-                    editor_name
+                    editor_name,
                 )
 
             return True
@@ -353,7 +413,9 @@ class Item:
                 logger.error("Cannot create batch: item ID is None")
                 return
 
-            logger.info(f"Creating batch with {quantity} total units for item {self.id} ({self.name})")
+            logger.info(
+                f"Creating batch with {quantity} total units for item {self.id} ({self.name})"
+            )
             current_time = datetime.now().date().isoformat()
 
             # Create ONE batch with the total quantity
@@ -374,10 +436,14 @@ class Item:
             """
             verify_result = db.execute_query(verify_query, (self.id,))
             if verify_result:
-                actual_quantity = verify_result[0]['quantity_received']
-                logger.info(f"Verification: Created batch with {actual_quantity} units for item {self.id}")
+                actual_quantity = verify_result[0]["quantity_received"]
+                logger.info(
+                    f"Verification: Created batch with {actual_quantity} units for item {self.id}"
+                )
                 if actual_quantity != quantity:
-                    logger.error(f"Batch quantity mismatch: expected {quantity}, got {actual_quantity}")
+                    logger.error(
+                        f"Batch quantity mismatch: expected {quantity}, got {actual_quantity}"
+                    )
             else:
                 logger.error(f"Could not verify batch creation for item {self.id}")
 
@@ -405,8 +471,10 @@ class Item:
             )
             """
             requested_result = db.execute_query(requested_check, (self.id,))
-            if requested_result and requested_result[0]['requested_count'] > 0:
-                logger.warning(f"Cannot delete item {self.id}: item is currently requested")
+            if requested_result and requested_result[0]["requested_count"] > 0:
+                logger.warning(
+                    f"Cannot delete item {self.id}: item is currently requested"
+                )
                 return False
 
             # Log to disposal history FIRST (before deleting related records)
@@ -425,12 +493,16 @@ class Item:
 
             # 1. Delete requisition items first (has dual dependencies: item + requisition)
             logger.info(f"Deleting Requisition_Items for item {self.id}")
-            db.execute_update("DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Requisition_Items WHERE item_id = ?", (self.id,)
+            )
             time.sleep(0.1)  # 0.1s delay to prevent constraint timing issues
 
             # 2. Delete stock movements (references both items and batches)
             logger.info(f"Deleting Stock_Movements for item {self.id}")
-            db.execute_update("DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,)
+            )
             time.sleep(0.1)  # 0.1s delay
 
             # 3. Delete item batches (only depends on items, safe after movements deleted)
@@ -440,12 +512,16 @@ class Item:
 
             # 4. Delete update history (only depends on items)
             logger.info(f"Deleting Update_History for item {self.id}")
-            db.execute_update("DELETE FROM Update_History WHERE item_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Update_History WHERE item_id = ?", (self.id,)
+            )
             time.sleep(0.1)  # 0.1s delay
 
             # 5. Delete disposal history (only depends on items)
             logger.info(f"Deleting Disposal_History for item {self.id}")
-            db.execute_update("DELETE FROM Disposal_History WHERE item_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Disposal_History WHERE item_id = ?", (self.id,)
+            )
             time.sleep(0.1)  # 0.1s delay
 
             # 6. Finally delete the item itself (no dependencies remain)
@@ -461,7 +537,7 @@ class Item:
             return False
 
     @classmethod
-    def get_all(cls) -> List['Item']:
+    def get_all(cls) -> List["Item"]:
         """Get all items."""
         try:
             rows = db.execute_query("SELECT * FROM Items ORDER BY name")
@@ -469,14 +545,22 @@ class Item:
             for row in rows:
                 item_dict = dict(row)
                 # Convert date strings back to date objects
-                if item_dict.get('expiration_date'):
-                    item_dict['expiration_date'] = date.fromisoformat(item_dict['expiration_date'])
-                if item_dict.get('calibration_date'):
-                    item_dict['calibration_date'] = date.fromisoformat(item_dict['calibration_date'])
-                if item_dict.get('acquisition_date'):
-                    item_dict['acquisition_date'] = date.fromisoformat(item_dict['acquisition_date'])
-                if item_dict.get('last_modified'):
-                    item_dict['last_modified'] = datetime.fromisoformat(item_dict['last_modified'])
+                if item_dict.get("expiration_date"):
+                    item_dict["expiration_date"] = date.fromisoformat(
+                        item_dict["expiration_date"]
+                    )
+                if item_dict.get("calibration_date"):
+                    item_dict["calibration_date"] = date.fromisoformat(
+                        item_dict["calibration_date"]
+                    )
+                if item_dict.get("acquisition_date"):
+                    item_dict["acquisition_date"] = date.fromisoformat(
+                        item_dict["acquisition_date"]
+                    )
+                if item_dict.get("last_modified"):
+                    item_dict["last_modified"] = datetime.fromisoformat(
+                        item_dict["last_modified"]
+                    )
                 items.append(cls(**item_dict))
             return items
         except Exception as e:
@@ -484,7 +568,7 @@ class Item:
             return []
 
     @classmethod
-    def get_by_id(cls, item_id: int) -> Optional['Item']:
+    def get_by_id(cls, item_id: int) -> Optional["Item"]:
         """Get item by ID."""
         try:
             rows = db.execute_query("SELECT * FROM Items WHERE id = ?", (item_id,))
@@ -493,14 +577,22 @@ class Item:
 
             item_dict = dict(rows[0])
             # Convert date strings
-            if item_dict.get('expiration_date'):
-                item_dict['expiration_date'] = date.fromisoformat(item_dict['expiration_date'])
-            if item_dict.get('calibration_date'):
-                item_dict['calibration_date'] = date.fromisoformat(item_dict['calibration_date'])
-            if item_dict.get('acquisition_date'):
-                item_dict['acquisition_date'] = date.fromisoformat(item_dict['acquisition_date'])
-            if item_dict.get('last_modified'):
-                item_dict['last_modified'] = datetime.fromisoformat(item_dict['last_modified'])
+            if item_dict.get("expiration_date"):
+                item_dict["expiration_date"] = date.fromisoformat(
+                    item_dict["expiration_date"]
+                )
+            if item_dict.get("calibration_date"):
+                item_dict["calibration_date"] = date.fromisoformat(
+                    item_dict["calibration_date"]
+                )
+            if item_dict.get("acquisition_date"):
+                item_dict["acquisition_date"] = date.fromisoformat(
+                    item_dict["acquisition_date"]
+                )
+            if item_dict.get("last_modified"):
+                item_dict["last_modified"] = datetime.fromisoformat(
+                    item_dict["last_modified"]
+                )
 
             return cls(**item_dict)
         except Exception as e:
@@ -508,7 +600,7 @@ class Item:
             return None
 
     @classmethod
-    def search(cls, search_term: str) -> List['Item']:
+    def search(cls, search_term: str) -> List["Item"]:
         """Search items by name."""
         try:
             query = "SELECT * FROM Items WHERE name LIKE ? ORDER BY name"
@@ -517,14 +609,22 @@ class Item:
             for row in rows:
                 item_dict = dict(row)
                 # Convert dates (same as above)
-                if item_dict.get('expiration_date'):
-                    item_dict['expiration_date'] = date.fromisoformat(item_dict['expiration_date'])
-                if item_dict.get('calibration_date'):
-                    item_dict['calibration_date'] = date.fromisoformat(item_dict['calibration_date'])
-                if item_dict.get('acquisition_date'):
-                    item_dict['acquisition_date'] = date.fromisoformat(item_dict['acquisition_date'])
-                if item_dict.get('last_modified'):
-                    item_dict['last_modified'] = datetime.fromisoformat(item_dict['last_modified'])
+                if item_dict.get("expiration_date"):
+                    item_dict["expiration_date"] = date.fromisoformat(
+                        item_dict["expiration_date"]
+                    )
+                if item_dict.get("calibration_date"):
+                    item_dict["calibration_date"] = date.fromisoformat(
+                        item_dict["calibration_date"]
+                    )
+                if item_dict.get("acquisition_date"):
+                    item_dict["acquisition_date"] = date.fromisoformat(
+                        item_dict["acquisition_date"]
+                    )
+                if item_dict.get("last_modified"):
+                    item_dict["last_modified"] = datetime.fromisoformat(
+                        item_dict["last_modified"]
+                    )
                 items.append(cls(**item_dict))
             return items
         except Exception as e:
@@ -535,6 +635,7 @@ class Item:
 @dataclass
 class Requester:
     """Represents a requester."""
+
     id: Optional[int] = None
     name: str = ""
     affiliation: str = ""
@@ -546,13 +647,27 @@ class Requester:
         try:
             if self.id:
                 query = "UPDATE Requesters SET name = ?, affiliation = ?, group_name = ? WHERE id = ?"
-                db.execute_update(query, (self.name, self.affiliation, self.group_name, self.id))
+                db.execute_update(
+                    query, (self.name, self.affiliation, self.group_name, self.id)
+                )
             else:
                 # For new requesters, explicitly set created_at to local time
                 current_time = datetime.now()
                 query = "INSERT INTO Requesters (name, affiliation, group_name, created_at) VALUES (?, ?, ?, ?)"
-                db.execute_update(query, (self.name, self.affiliation, self.group_name, current_time.isoformat()))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(
+                    query,
+                    (
+                        self.name,
+                        self.affiliation,
+                        self.group_name,
+                        current_time.isoformat(),
+                    ),
+                    return_last_id=True,
+                )
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for Requester")
                 self.created_at = current_time
             return True
         except Exception as e:
@@ -560,7 +675,7 @@ class Requester:
             return False
 
     @classmethod
-    def get_all(cls) -> List['Requester']:
+    def get_all(cls) -> List["Requester"]:
         """Get all requesters."""
         try:
             rows = db.execute_query("SELECT * FROM Requesters ORDER BY name")
@@ -568,8 +683,10 @@ class Requester:
             for row in rows:
                 req_dict = dict(row)
                 # Convert datetime string to datetime object
-                if req_dict.get('created_at'):
-                    req_dict['created_at'] = datetime.fromisoformat(req_dict['created_at'])
+                if req_dict.get("created_at"):
+                    req_dict["created_at"] = datetime.fromisoformat(
+                        req_dict["created_at"]
+                    )
                 requesters.append(cls(**req_dict))
             return requesters
         except Exception as e:
@@ -577,17 +694,19 @@ class Requester:
             return []
 
     @classmethod
-    def get_by_id(cls, requester_id: int) -> Optional['Requester']:
+    def get_by_id(cls, requester_id: int) -> Optional["Requester"]:
         """Get requester by ID."""
         try:
-            rows = db.execute_query("SELECT * FROM Requesters WHERE id = ?", (requester_id,))
+            rows = db.execute_query(
+                "SELECT * FROM Requesters WHERE id = ?", (requester_id,)
+            )
             if not rows:
                 return None
 
             req_dict = dict(rows[0])
             # Convert datetime string to datetime object
-            if req_dict.get('created_at'):
-                req_dict['created_at'] = datetime.fromisoformat(req_dict['created_at'])
+            if req_dict.get("created_at"):
+                req_dict["created_at"] = datetime.fromisoformat(req_dict["created_at"])
 
             return cls(**req_dict)
         except Exception as e:
@@ -601,9 +720,14 @@ class Requester:
                 return False
 
             # Check if requester has any associated requisitions
-            usage_check = db.execute_query("SELECT COUNT(*) as count FROM Requisitions WHERE requester_id = ?", (self.id,))
-            if usage_check and usage_check[0]['count'] > 0:
-                logger.warning(f"Cannot delete requester {self.id}: requester has associated requisitions")
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Requisitions WHERE requester_id = ?",
+                (self.id,),
+            )
+            if usage_check and usage_check[0]["count"] > 0:
+                logger.warning(
+                    f"Cannot delete requester {self.id}: requester has associated requisitions"
+                )
                 return False
 
             db.execute_update("DELETE FROM Requesters WHERE id = ?", (self.id,))
@@ -612,16 +736,20 @@ class Requester:
             logger.error(f"Failed to delete requester {self.id}: {e}")
             return False
 
+
 @dataclass
 class Requisition:
     """Represents a requesting requisition."""
+
     id: Optional[int] = None
     requester_id: int = 0
     expected_request: datetime = datetime.now()
     expected_return: datetime = datetime.now()
     status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
     lab_activity_name: str = ""
-    lab_activity_description: Optional[str] = None  # For detailed activity information stored for reports
+    lab_activity_description: Optional[str] = (
+        None  # For detailed activity information stored for reports
+    )
     lab_activity_date: date = date.today()
     num_students: Optional[int] = None
     num_groups: Optional[int] = None
@@ -635,7 +763,9 @@ class Requisition:
                 INSERT INTO Requisition_History (requisition_id, editor_name, reason)
                 VALUES (?, ?, ?)
                 """
-                db.execute_update(history_query, (self.id, editor_name, "Requisition updated"))
+                db.execute_update(
+                    history_query, (self.id, editor_name, "Requisition updated")
+                )
 
                 # Update requisition
                 query = """
@@ -644,18 +774,21 @@ class Requisition:
                 lab_activity_name = ?, lab_activity_description = ?, lab_activity_date = ?,
                 num_students = ?, num_groups = ? WHERE id = ?
                 """
-                db.execute_update(query, (
-                    self.requester_id,
-                    self.expected_request.isoformat(),
-                    self.expected_return.isoformat(),
-                    self.status,
-                    self.lab_activity_name,
-                    self.lab_activity_description,
-                    self.lab_activity_date.isoformat(),
-                    self.num_students,
-                    self.num_groups,
-                    self.id
-                ))
+                db.execute_update(
+                    query,
+                    (
+                        self.requester_id,
+                        self.expected_request.isoformat(),
+                        self.expected_return.isoformat(),
+                        self.status,
+                        self.lab_activity_name,
+                        self.lab_activity_description,
+                        self.lab_activity_date.isoformat(),
+                        self.num_students,
+                        self.num_groups,
+                        self.id,
+                    ),
+                )
             else:
                 # Insert new
                 query = """
@@ -663,22 +796,25 @@ class Requisition:
                 expected_return, status, lab_activity_name, lab_activity_description, lab_activity_date,
                 num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                result = db.execute_update(query, (
-                    self.requester_id,
-                    self.expected_request.isoformat(),
-                    self.expected_return.isoformat(),
-                    self.status,
-                    self.lab_activity_name,
-                    self.lab_activity_description,
-                    self.lab_activity_date.isoformat(),
-                    self.num_students,
-                    self.num_groups
-                ), return_last_id=True)
+                result = db.execute_update(
+                    query,
+                    (
+                        self.requester_id,
+                        self.expected_request.isoformat(),
+                        self.expected_return.isoformat(),
+                        self.status,
+                        self.lab_activity_name,
+                        self.lab_activity_description,
+                        self.lab_activity_date.isoformat(),
+                        self.num_students,
+                        self.num_groups,
+                    ),
+                    return_last_id=True,
+                )
                 if isinstance(result, tuple):
                     _, self.id = result
                 else:
-                    # Fallback to separate call (shouldn't happen with return_last_id=True)
-                    self.id = db.get_last_insert_id()
+                    logger.error("Failed to obtain last insert id for Requisition")
 
             return True
         except Exception as e:
@@ -692,20 +828,29 @@ class Requisition:
                 return False
 
             # Delete related stock movements first
-            db.execute_update("DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = 'CONSUMPTION'", (self.id,))
+            db.execute_update(
+                "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = 'CONSUMPTION'",
+                (self.id,),
+            )
 
             # Delete requisition items
-            db.execute_update("DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Requisition_Items WHERE requisition_id = ?", (self.id,)
+            )
 
             # Delete history records (to avoid foreign key constraint)
-            db.execute_update("DELETE FROM Requisition_History WHERE requisition_id = ?", (self.id,))
+            db.execute_update(
+                "DELETE FROM Requisition_History WHERE requisition_id = ?", (self.id,)
+            )
 
             # Log the deletion after cleaning up references
             history_query = """
             INSERT INTO Requisition_History (requisition_id, editor_name, reason)
             VALUES (?, ?, ?)
             """
-            db.execute_update(history_query, (self.id, editor_name, "Requisition deleted"))
+            db.execute_update(
+                history_query, (self.id, editor_name, "Requisition deleted")
+            )
 
             # Finally delete the requisition
             db.execute_update("DELETE FROM Requisitions WHERE id = ?", (self.id,))
@@ -715,41 +860,57 @@ class Requisition:
             return False
 
     @classmethod
-    def get_all(cls) -> List['Requisition']:
+    def get_all(cls) -> List["Requisition"]:
         """Get all requisitions."""
         try:
-            rows = db.execute_query("SELECT * FROM Requisitions ORDER BY expected_request DESC")
+            rows = db.execute_query(
+                "SELECT * FROM Requisitions ORDER BY expected_request DESC"
+            )
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
                 # Convert dates with error handling
-                if req_dict.get('expected_request'):
+                if req_dict.get("expected_request"):
                     try:
-                        req_dict['expected_request'] = datetime.fromisoformat(req_dict['expected_request'])
+                        req_dict["expected_request"] = datetime.fromisoformat(
+                            req_dict["expected_request"]
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid expected_request format: {req_dict['expected_request']}")
-                        req_dict['expected_request'] = datetime.now()
-                if req_dict.get('expected_return'):
+                        logger.warning(
+                            f"Invalid expected_request format: {req_dict['expected_request']}"
+                        )
+                        req_dict["expected_request"] = datetime.now()
+                if req_dict.get("expected_return"):
                     try:
-                        req_dict['expected_return'] = datetime.fromisoformat(req_dict['expected_return'])
+                        req_dict["expected_return"] = datetime.fromisoformat(
+                            req_dict["expected_return"]
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid expected_return format: {req_dict['expected_return']}")
-                        req_dict['expected_return'] = datetime.now()
-                if req_dict.get('lab_activity_date'):
+                        logger.warning(
+                            f"Invalid expected_return format: {req_dict['expected_return']}"
+                        )
+                        req_dict["expected_return"] = datetime.now()
+                if req_dict.get("lab_activity_date"):
                     try:
-                        req_dict['lab_activity_date'] = date.fromisoformat(req_dict['lab_activity_date'])
+                        req_dict["lab_activity_date"] = date.fromisoformat(
+                            req_dict["lab_activity_date"]
+                        )
                     except (ValueError, TypeError):
-                        logger.warning(f"Invalid lab_activity_date format: {req_dict['lab_activity_date']}")
-                        req_dict['lab_activity_date'] = date.today()
+                        logger.warning(
+                            f"Invalid lab_activity_date format: {req_dict['lab_activity_date']}"
+                        )
+                        req_dict["lab_activity_date"] = date.today()
                 requisitions.append(cls(**req_dict))
             return requisitions
         except Exception as e:
             logger.error(f"Failed to get requisitions: {e}")
             return []
 
+
 @dataclass
 class RequisitionItem:
     """Represents an item in a requisition."""
+
     id: Optional[int] = None
     requisition_id: int = 0
     item_id: int = 0
@@ -763,23 +924,38 @@ class RequisitionItem:
                 UPDATE Requisition_Items SET requisition_id = ?, item_id = ?, quantity_requested = ?
                 WHERE id = ?
                 """
-                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_requested, self.id))
+                db.execute_update(
+                    query,
+                    (
+                        self.requisition_id,
+                        self.item_id,
+                        self.quantity_requested,
+                        self.id,
+                    ),
+                )
             else:
                 query = "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)"
-                db.execute_update(query, (self.requisition_id, self.item_id, self.quantity_requested))
-                self.id = db.get_last_insert_id()
+                result = db.execute_update(
+                    query,
+                    (self.requisition_id, self.item_id, self.quantity_requested),
+                    return_last_id=True,
+                )
+                if isinstance(result, tuple):
+                    _, self.id = result
+                else:
+                    logger.error("Failed to obtain last insert id for RequisitionItem")
             return True
         except Exception as e:
             logger.error(f"Failed to save requisition item: {e}")
             return False
 
     @classmethod
-    def get_by_requisition(cls, requisition_id: int) -> List['RequisitionItem']:
+    def get_by_requisition(cls, requisition_id: int) -> List["RequisitionItem"]:
         """Get all items for a requisition."""
         try:
             rows = db.execute_query(
                 "SELECT * FROM Requisition_Items WHERE requisition_id = ?",
-                (requisition_id,)
+                (requisition_id,),
             )
             return [cls(**dict(row)) for row in rows]
         except Exception as e:
