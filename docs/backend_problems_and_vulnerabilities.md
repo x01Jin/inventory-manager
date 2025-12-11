@@ -35,7 +35,7 @@ How to read this document
   - Evidence: `ItemSelectionManager.create_stock_movements_for_requisition()` inserts movements without transactional revalidation [inventory_app/gui/requisitions/requisition_management/item_selection_manager.py](inventory_app/gui/requisitions/requisition_management/item_selection_manager.py#L180-L240)
   - Severity: Critical
   - Remediation: Use transactions with SELECT ... FOR UPDATE semantics (or SQLite `BEGIN IMMEDIATE`) to re-check and reserve stock atomically; reject requests when insufficient stock.
-    - Status: **Partially Completed** — `ItemSelectionManager.create_stock_movements_for_requisition()` now re-checks availability inside an IMMEDIATE transaction and rejects requests when stock is insufficient. This prevents race conditions for typical single-process concurrency; consider additional integration tests or distributed locks if the app is used in a multi-process environment.
+    - Status: **Completed** — `ItemSelectionManager.create_stock_movements_for_requisition()` now re-checks availability inside an IMMEDIATE transaction and rejects requests when stock is insufficient. Added an integration test to verify concurrent reservation attempts do not oversubscribe inventory. Note: IMMEDIATE transactions rely on SQLite locking semantics; for multi-process distributed deployments consider stronger locking (e.g., advisory locks or using a DBMS that supports row-level locking).
 
 ---
 
