@@ -8,6 +8,7 @@ from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.utils.logger import logger
+from inventory_app.services.movement_types import MovementType
 
 
 class InventoryController:
@@ -42,13 +43,18 @@ class InventoryController:
             LEFT JOIN (
                 SELECT
                     sm.item_id,
-                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
         """
+        base_query = base_query % (
+            MovementType.CONSUMPTION.value,
+            MovementType.DISPOSAL.value,
+            MovementType.RETURN.value,
+        )
 
         if item_id:
             base_query += f" WHERE ib.item_id = {item_id}"
@@ -75,17 +81,21 @@ class InventoryController:
                 WHERE sm.item_id = ri.item_id
                 AND sm.source_id = r.id
                 AND (
-                    (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
-                    (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+                    (i.is_consumable = 1 AND sm.movement_type = '%s') OR
+                    (i.is_consumable = 0 AND sm.movement_type = '%s')
                 )
             )
             GROUP BY ri.item_id
-        """
+        """ % (
+            MovementType.RESERVATION.value,
+            MovementType.REQUEST.value,
+        )
 
     def load_inventory_data(self) -> List[Dict[str, Any]]:
         """Load inventory items with related data from database."""
         try:
-            query = """
+            query = (
+                """
             SELECT
                 i.id,
                 i.name,
@@ -100,7 +110,6 @@ class InventoryController:
                 i.is_consumable,
                 i.acquisition_date,
                 i.last_modified,
-                ib.date_received as first_batch_date,
                 COALESCE(stock.total_stock, 0) as total_stock,
                 COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
@@ -111,7 +120,7 @@ class InventoryController:
                         AND NOT EXISTS (
                             SELECT 1 FROM Stock_Movements sm
                             WHERE sm.item_id = ri.item_id
-                            AND sm.movement_type = 'RETURN'
+                            AND sm.movement_type = '%s'
                             AND sm.source_id = r.id
                         )
                     ) THEN 1
@@ -126,14 +135,20 @@ class InventoryController:
                 GROUP BY item_id
             ) ib ON i.id = ib.item_id
             LEFT JOIN (
-                """ + self._get_stock_calculations() + """
+                """
+                + self._get_stock_calculations()
+                + """
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                """ + self._get_requested_calculations() + """
+                """
+                + self._get_requested_calculations()
+                + """
             ) requested ON i.id = requested.item_id
             ORDER BY c.name, i.name
             """
+            )
 
+            query = query % (MovementType.RETURN.value,)
             rows = db.execute_query(query)
             logger.info(f"Loaded {len(rows)} inventory items from database")
             return rows
@@ -148,7 +163,8 @@ class InventoryController:
             if not search_term:
                 return []
 
-            query = """
+            query = (
+                """
             SELECT
                 i.id, i.name, c.name as category_name, i.size, i.brand,
                 s.name as supplier_name, i.other_specifications, i.po_number,
@@ -164,7 +180,7 @@ class InventoryController:
                         AND NOT EXISTS (
                             SELECT 1 FROM Stock_Movements sm
                             WHERE sm.item_id = ri.item_id
-                            AND sm.movement_type = 'RETURN'
+                            AND sm.movement_type = '%s'
                             AND sm.source_id = r.id
                         )
                     ) THEN 1
@@ -174,17 +190,25 @@ class InventoryController:
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
             LEFT JOIN (
-                """ + self._get_stock_calculations() + """
+                """
+                + self._get_stock_calculations()
+                + """
             ) stock ON i.id = stock.item_id
             LEFT JOIN (
-                """ + self._get_requested_calculations() + """
+                """
+                + self._get_requested_calculations()
+                + """
             ) requested ON i.id = requested.item_id
             WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ?
             ORDER BY c.name, i.name
             """
+            )
 
             search_pattern = f"%{search_term}%"
-            rows = db.execute_query(query, (search_pattern, search_pattern, search_pattern))
+            query = query % (MovementType.RETURN.value,)
+            rows = db.execute_query(
+                query, (search_pattern, search_pattern, search_pattern)
+            )
 
             logger.debug(f"Search for '{search_term}' returned {len(rows)} items")
             return rows
@@ -193,7 +217,12 @@ class InventoryController:
             logger.error(f"Search failed: {e}")
             raise
 
-    def get_item_usage(self, item_id: int, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Dict[str, Any]:
+    def get_item_usage(
+        self,
+        item_id: int,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
         """Get usage statistics for a specific item (Spec #12)."""
         try:
             query = """
@@ -220,16 +249,16 @@ class InventoryController:
             if rows:
                 row = rows[0]
                 return {
-                    "total_requisitions": row['total_requisitions'] or 0,
-                    "total_quantity_used": row['total_quantity_used'] or 0,
-                    "first_used": row['first_used'],
-                    "last_used": row['last_used']
+                    "total_requisitions": row["total_requisitions"] or 0,
+                    "total_quantity_used": row["total_quantity_used"] or 0,
+                    "first_used": row["first_used"],
+                    "last_used": row["last_used"],
                 }
             return {
                 "total_requisitions": 0,
                 "total_quantity_used": 0,
                 "first_used": None,
-                "last_used": None
+                "last_used": None,
             }
 
         except Exception as e:
@@ -238,7 +267,7 @@ class InventoryController:
                 "total_requisitions": 0,
                 "total_quantity_used": 0,
                 "first_used": None,
-                "last_used": None
+                "last_used": None,
             }
 
     def get_batch_statistics(self) -> Dict[str, int]:
@@ -259,16 +288,20 @@ class InventoryController:
             FROM Item_Batches ib
             LEFT JOIN (
                 SELECT
-                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as total_consumed,
-                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as total_disposed,
-                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as total_returned
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_consumed,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_disposed,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_returned
                 FROM Stock_Movements sm
             ) movements ON 1=1
             """
-
+            stock_query = stock_query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
             stock_rows = db.execute_query(stock_query)
             if not stock_rows:
-                return {'total_batches': 0, 'total_stock': 0, 'available_stock': 0}
+                return {"total_batches": 0, "total_stock": 0, "available_stock": 0}
 
             batch_stats = stock_rows[0]
 
@@ -284,30 +317,39 @@ class InventoryController:
                 WHERE sm.item_id = ri.item_id
                 AND sm.source_id = r.id
                 AND (
-                    (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
-                    (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+                    (i.is_consumable = 1 AND sm.movement_type = '%s') OR
+                    (i.is_consumable = 0 AND sm.movement_type = '%s')
                 )
             )
             """
-
+            available_query = available_query % (
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+            )
             requested_rows = db.execute_query(available_query)
-            total_requested = requested_rows[0]['total_requested'] if requested_rows else 0
+            total_requested = (
+                requested_rows[0]["total_requested"] if requested_rows else 0
+            )
 
             return {
-                'total_batches': batch_stats['total_batches'] or 0,
-                'total_stock': batch_stats['total_stock'] or 0,
-                'available_stock': max(0, (batch_stats['total_stock'] or 0) - total_requested)
+                "total_batches": batch_stats["total_batches"] or 0,
+                "total_stock": batch_stats["total_stock"] or 0,
+                "available_stock": max(
+                    0, (batch_stats["total_stock"] or 0) - total_requested
+                ),
             }
 
         except Exception as e:
             logger.error(f"Failed to get batch statistics: {e}")
-            return {'total_batches': 0, 'total_stock': 0, 'available_stock': 0}
+            return {"total_batches": 0, "total_stock": 0, "available_stock": 0}
 
     def get_categories(self) -> List[str]:
         """Get list of unique categories."""
         try:
-            rows = db.execute_query("SELECT DISTINCT name FROM Categories ORDER BY name")
-            return [row['name'] for row in rows]
+            rows = db.execute_query(
+                "SELECT DISTINCT name FROM Categories ORDER BY name"
+            )
+            return [row["name"] for row in rows]
         except Exception as e:
             logger.error(f"Failed to get categories: {e}")
             return []
@@ -316,7 +358,7 @@ class InventoryController:
         """Get list of unique suppliers."""
         try:
             rows = db.execute_query("SELECT DISTINCT name FROM Suppliers ORDER BY name")
-            return [row['name'] for row in rows]
+            return [row["name"] for row in rows]
         except Exception as e:
             logger.error(f"Failed to get suppliers: {e}")
             return []
@@ -335,9 +377,9 @@ class InventoryController:
             SELECT COUNT(*) as count FROM (
                 SELECT ib.item_id,
                         SUM(ib.quantity_received) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END), 0) +
-                        COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END), 0) as current_stock
+                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) as current_stock
                 FROM Item_Batches ib
                 LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
                 WHERE ib.disposal_date IS NULL
@@ -345,19 +387,24 @@ class InventoryController:
                 HAVING current_stock < 10 AND current_stock > 0
             )
             """
+            low_stock_query = low_stock_query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
             low_stock_result = db.execute_query(low_stock_query)
-            low_stock_count = low_stock_result[0]['count'] if low_stock_result else 0
+            low_stock_count = low_stock_result[0]["count"] if low_stock_result else 0
 
             # Combine all statistics
             stats = {
-                'total_batches': batch_stats['total_batches'],
-                'total_stock': batch_stats['total_stock'],
-                'available_stock': batch_stats['available_stock'],
-                'low_stock': low_stock_count,
-                'expiring': alert_counts.get('expiring', 0),
-                'expired': alert_counts.get('expired', 0),
-                'calibration_warning': alert_counts.get('calibration_warning', 0),
-                'calibration_due': alert_counts.get('calibration_due', 0)
+                "total_batches": batch_stats["total_batches"],
+                "total_stock": batch_stats["total_stock"],
+                "available_stock": batch_stats["available_stock"],
+                "low_stock": low_stock_count,
+                "expiring": alert_counts.get("expiring", 0),
+                "expired": alert_counts.get("expired", 0),
+                "calibration_warning": alert_counts.get("calibration_warning", 0),
+                "calibration_due": alert_counts.get("calibration_due", 0),
             }
 
             logger.debug(f"Generated complete inventory statistics: {stats}")
@@ -366,12 +413,12 @@ class InventoryController:
         except Exception as e:
             logger.error(f"Failed to get inventory statistics: {e}")
             return {
-                'total_batches': 0,
-                'total_stock': 0,
-                'available_stock': 0,
-                'low_stock': 0,
-                'expiring': 0,
-                'expired': 0,
-                'calibration_warning': 0,
-                'calibration_due': 0
+                "total_batches": 0,
+                "total_stock": 0,
+                "available_stock": 0,
+                "low_stock": 0,
+                "expiring": 0,
+                "expired": 0,
+                "calibration_warning": 0,
+                "calibration_due": 0,
             }

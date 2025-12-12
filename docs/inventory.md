@@ -15,4 +15,4 @@ Item Management
 
 Stock & Alerts
 
-- Stock computations use Stock_Movements to produce on-hand counts. Visual alerts indicate expiration and calibration due.
+- Stock computations use Stock_Movements to produce on-hand counts. Movement types are standardized using the `MovementType` enum and enforced by a `CHECK` constraint in the database schema. Visual alerts indicate expiration and calibration due.

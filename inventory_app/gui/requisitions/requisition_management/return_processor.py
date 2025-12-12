@@ -8,6 +8,7 @@ No partial returns, no editing after processing.
 from typing import List, Optional
 
 from inventory_app.services.stock_movement_service import StockMovementService
+from inventory_app.services.movement_types import MovementType
 from inventory_app.services.requisition_activity import requisition_activity_manager
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
@@ -217,14 +218,16 @@ class ReturnProcessor:
         if batch_id is not None:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = '%s'
             """
+            query = query % (MovementType.RESERVATION.value,)
             params = (item_id, batch_id, requisition_id)
         else:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND source_id = ? AND movement_type = 'RESERVATION'
+            WHERE item_id = ? AND source_id = ? AND movement_type = '%s'
             """
+            query = query % (MovementType.RESERVATION.value,)
             params = (item_id, requisition_id)
 
         db.execute_update(query, params)
@@ -239,14 +242,16 @@ class ReturnProcessor:
         if batch_id is not None:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = 'REQUEST'
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = '%s'
             """
+            query = query % (MovementType.REQUEST.value,)
             params = (item_id, batch_id, requisition_id)
         else:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND source_id = ? AND movement_type = 'REQUEST'
+            WHERE item_id = ? AND source_id = ? AND movement_type = '%s'
             """
+            query = query % (MovementType.REQUEST.value,)
             params = (item_id, requisition_id)
 
         db.execute_update(query, params)
@@ -376,8 +381,8 @@ class ReturnProcessor:
             movements_query = """
             SELECT sm.item_id, sm.movement_type, sm.quantity
             FROM Stock_Movements sm
-            WHERE sm.source_id = ? AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
-            """
+            WHERE sm.source_id = ? AND sm.movement_type IN ('%s', '%s')
+            """ % (MovementType.CONSUMPTION.value, MovementType.DISPOSAL.value)
             movement_rows = db.execute_query(movements_query, (requisition_id,))
 
             # Create lookup for movements by item_id and type

@@ -11,7 +11,11 @@ from pathlib import Path
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
-from inventory_app.gui.reports.query_builder import ReportQueryBuilder, ReportStatisticsBuilder
+from inventory_app.gui.reports.query_builder import (
+    ReportQueryBuilder,
+    ReportStatisticsBuilder,
+)
+from inventory_app.services.movement_types import MovementType
 
 # Import openpyxl directly since it's in requirements.txt
 from openpyxl import Workbook
@@ -28,7 +32,6 @@ class ReportGenerator:
     def __init__(self):
         """Initialize report generator."""
 
-
     def get_granularity(self, start_date: date, end_date: date) -> str:
         """
         Determine the appropriate reporting granularity based on date range.
@@ -42,11 +45,15 @@ class ReportGenerator:
         """
         return date_formatter.get_smart_granularity(start_date, end_date)
 
-    def generate_report(self, start_date: date, end_date: date,
-                       output_path: Optional[str] = None,
-                       grade_filter: str = "",
-                       section_filter: str = "",
-                       include_consumables: bool = True) -> str:
+    def generate_report(
+        self,
+        start_date: date,
+        end_date: date,
+        output_path: Optional[str] = None,
+        grade_filter: str = "",
+        section_filter: str = "",
+        include_consumables: bool = True,
+    ) -> str:
         """
         Generate dynamic usage report in Excel format based on date range.
 
@@ -65,12 +72,18 @@ class ReportGenerator:
         granularity = self.get_granularity(start_date, end_date)
 
         try:
-            logger.info(f"Generating {granularity} report from {start_date} to {end_date}")
+            logger.info(
+                f"Generating {granularity} report from {start_date} to {end_date}"
+            )
 
             # Get report data with dynamic granularity
             report_data = self._get_dynamic_report_data(
-                start_date, end_date, granularity,
-                grade_filter, section_filter, include_consumables
+                start_date,
+                end_date,
+                granularity,
+                grade_filter,
+                section_filter,
+                include_consumables,
             )
 
             if not report_data:
@@ -85,8 +98,9 @@ class ReportGenerator:
 
             output_path_obj = Path(output_path)
             title = f"{granularity.title()} Usage Report"
-            self._create_excel_report(report_data, output_path_obj, title,
-                                    start_date, end_date)
+            self._create_excel_report(
+                report_data, output_path_obj, title, start_date, end_date
+            )
 
             logger.info(f"{granularity.title()} report generated: {output_path}")
             return str(output_path)
@@ -95,13 +109,15 @@ class ReportGenerator:
             logger.error(f"Failed to generate {granularity} report: {e}")
             return ""
 
-
-
-    def _get_dynamic_report_data(self, start_date: date, end_date: date,
-                                granularity: str,
-                                grade_filter: str = "",
-                                section_filter: str = "",
-                                include_consumables: bool = True) -> List[Dict]:
+    def _get_dynamic_report_data(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str,
+        grade_filter: str = "",
+        section_filter: str = "",
+        include_consumables: bool = True,
+    ) -> List[Dict]:
         """
         Get dynamic report data from database using QueryBuilder.
 
@@ -122,8 +138,12 @@ class ReportGenerator:
 
             # Build the dynamic query (optimized approach with built-in period columns)
             query, params = query_builder.build_dynamic_report_query(
-                start_date, end_date, granularity,
-                grade_filter, section_filter, include_consumables
+                start_date,
+                end_date,
+                granularity,
+                grade_filter,
+                section_filter,
+                include_consumables,
             )
 
             # Execute query and return results
@@ -133,9 +153,9 @@ class ReportGenerator:
             logger.error(f"Failed to get dynamic report data: {e}")
             return []
 
-
-
-    def _format_excel_headers(self, headers: List[str], start_date: date, end_date: date) -> List[str]:
+    def _format_excel_headers(
+        self, headers: List[str], start_date: date, end_date: date
+    ) -> List[str]:
         """
         Format Excel headers by converting period keys to user-friendly format.
 
@@ -154,8 +174,13 @@ class ReportGenerator:
 
             # Fixed headers that don't need formatting
             fixed_headers = {
-                "ITEMS", "CATEGORIES", "ACTUAL_INVENTORY", "SIZE",
-                "BRAND", "OTHER SPECIFICATIONS", "TOTAL QUANTITY"
+                "ITEMS",
+                "CATEGORIES",
+                "ACTUAL_INVENTORY",
+                "SIZE",
+                "BRAND",
+                "OTHER SPECIFICATIONS",
+                "TOTAL QUANTITY",
             }
 
             for header in headers:
@@ -165,7 +190,9 @@ class ReportGenerator:
                 else:
                     # Try to parse as period key and format it
                     try:
-                        formatted_header = self._parse_and_format_period_key(header, granularity)
+                        formatted_header = self._parse_and_format_period_key(
+                            header, granularity
+                        )
                         formatted_headers.append(formatted_header)
                     except Exception:
                         # If parsing fails, keep original header
@@ -191,14 +218,26 @@ class ReportGenerator:
         """
         try:
             # Handle excess period keys first (format: YYYY-MM-DDtoDD)
-            if 'to' in period_key:
-                start_date_str, end_date_str = period_key.split('to')
+            if "to" in period_key:
+                start_date_str, end_date_str = period_key.split("to")
                 start_date = date.fromisoformat(start_date_str)
                 end_date = date.fromisoformat(end_date_str)
 
                 # Format as (Month/DayRange/Year)
-                month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                month_names = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                ]
 
                 start_month = month_names[start_date.month - 1]
                 end_month = month_names[end_date.month - 1]
@@ -211,17 +250,17 @@ class ReportGenerator:
                     return f"({start_month}/{start_date.day:02d}-{end_month}/{end_date.day:02d}/{start_date.year})"
 
             # Parse different period key formats
-            if granularity == 'daily':
+            if granularity == "daily":
                 # Format: '2023-01-01'
                 parsed_date = date.fromisoformat(period_key)
-                return date_formatter.format_period_header(parsed_date, 'daily')
+                return date_formatter.format_period_header(parsed_date, "daily")
 
-            elif granularity == 'weekly':
+            elif granularity == "weekly":
                 # Format: '2023-01-W1' (year-month-week)
                 try:
-                    year_str, month_str, week_part = period_key.split('-')
+                    year_str, month_str, week_part = period_key.split("-")
                     year, month = int(year_str), int(month_str)
-                    week_str = week_part.replace('W', '')
+                    week_str = week_part.replace("W", "")
                     week_num = int(week_str)
 
                     # Calculate a representative date for this month-week
@@ -229,36 +268,36 @@ class ReportGenerator:
                     first_day_of_month = date(year, month, 1)
                     week_date = first_day_of_month + timedelta(days=(week_num - 1) * 7)
 
-                    return date_formatter.format_period_header(week_date, 'weekly')
+                    return date_formatter.format_period_header(week_date, "weekly")
                 except (ValueError, IndexError):
                     # Fallback if parsing fails
                     return period_key
 
-            elif granularity == 'monthly':
+            elif granularity == "monthly":
                 # Format: '2023-01'
-                year_str, month_str = period_key.split('-')
+                year_str, month_str = period_key.split("-")
                 year, month = int(year_str), int(month_str)
                 month_date = date(year, month, 1)
 
-                return date_formatter.format_period_header(month_date, 'monthly')
+                return date_formatter.format_period_header(month_date, "monthly")
 
-            elif granularity == 'quarterly':
+            elif granularity == "quarterly":
                 # Format: '2023-Q1'
-                year_str, quarter_str = period_key.split('-Q')
+                year_str, quarter_str = period_key.split("-Q")
                 year, quarter = int(year_str), int(quarter_str)
 
                 # Calculate first month of quarter
                 quarter_month = (quarter - 1) * 3 + 1
                 quarter_date = date(year, quarter_month, 1)
 
-                return date_formatter.format_period_header(quarter_date, 'quarterly')
+                return date_formatter.format_period_header(quarter_date, "quarterly")
 
-            elif granularity in ['yearly', 'multi_year']:
+            elif granularity in ["yearly", "multi_year"]:
                 # Format: '2023'
                 year = int(period_key)
                 year_date = date(year, 1, 1)
 
-                return date_formatter.format_period_header(year_date, 'yearly')
+                return date_formatter.format_period_header(year_date, "yearly")
 
             else:
                 # Unknown granularity, return as-is
@@ -268,10 +307,14 @@ class ReportGenerator:
             logger.error(f"Failed to parse period key '{period_key}': {e}")
             return period_key
 
-
-
-    def _create_excel_report(self, data: List[Dict], output_path: Path,
-                           title: str, start_date: date, end_date: date) -> None:
+    def _create_excel_report(
+        self,
+        data: List[Dict],
+        output_path: Path,
+        title: str,
+        start_date: date,
+        end_date: date,
+    ) -> None:
         """
         Create Excel file with report data.
 
@@ -292,31 +335,40 @@ class ReportGenerator:
 
             # Define styles
             header_font = Font(bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-            border = Border(
-                left=Side(style='thin'), right=Side(style='thin'),
-                top=Side(style='thin'), bottom=Side(style='thin')
+            header_fill = PatternFill(
+                start_color="366092", end_color="366092", fill_type="solid"
             )
-            center_align = Alignment(horizontal='center')
+            border = Border(
+                left=Side(style="thin"),
+                right=Side(style="thin"),
+                top=Side(style="thin"),
+                bottom=Side(style="thin"),
+            )
+            center_align = Alignment(horizontal="center")
 
             # Add title
-            ws['A1'] = title
-            ws['A1'].font = Font(bold=True, size=16)
+            ws["A1"] = title
+            ws["A1"].font = Font(bold=True, size=16)
 
             # Use enhanced date formatting for period display
-            period_description = date_formatter.get_date_range_description(start_date, end_date)
-            ws['A2'] = f"Period: {period_description}"
-            ws['A2'].font = Font(italic=True)
+            period_description = date_formatter.get_date_range_description(
+                start_date, end_date
+            )
+            ws["A2"] = f"Period: {period_description}"
+            ws["A2"].font = Font(italic=True)
 
             # Add headers
             if data:
                 headers = list(data[0].keys())
-                formatted_headers = self._format_excel_headers(headers, start_date, end_date)
+                formatted_headers = self._format_excel_headers(
+                    headers, start_date, end_date
+                )
 
                 for col_num, header_text in enumerate(formatted_headers, 1):
                     cell = ws.cell(row=4, column=col_num)
                     # Check if this is a merged cell to avoid type errors
                     from openpyxl.cell import MergedCell
+
                     if not isinstance(cell, MergedCell):
                         cell.value = header_text
                         cell.font = header_font
@@ -326,7 +378,9 @@ class ReportGenerator:
 
                     # Auto-adjust column width (always do this)
                     column_letter = get_column_letter(col_num)
-                    ws.column_dimensions[column_letter].width = max(len(str(header_text)) + 2, 12)
+                    ws.column_dimensions[column_letter].width = max(
+                        len(str(header_text)) + 2, 12
+                    )
 
             # Add data rows
             for row_num, row_data in enumerate(data, 5):
@@ -335,6 +389,7 @@ class ReportGenerator:
                         cell = ws.cell(row=row_num, column=col_num)
                         # Check if this is a merged cell to avoid type errors
                         from openpyxl.cell import MergedCell
+
                         if not isinstance(cell, MergedCell):
                             cell.value = value
                             cell.border = border
@@ -343,10 +398,14 @@ class ReportGenerator:
                         column_letter = get_column_letter(col_num)
                         content_length = len(str(value)) + 2
                         current_width = ws.column_dimensions[column_letter].width or 12
-                        ws.column_dimensions[column_letter].width = max(current_width, content_length)
+                        ws.column_dimensions[column_letter].width = max(
+                            current_width, content_length
+                        )
                     except Exception as e:
                         # Skip cells that can't be written to (e.g., merged cells)
-                        logger.debug(f"Skipping cell at row {row_num}, column {col_num}: {e}")
+                        logger.debug(
+                            f"Skipping cell at row {row_num}, column {col_num}: {e}"
+                        )
 
             # Save the workbook
             wb.save(output_path)
@@ -371,37 +430,52 @@ class ReportGenerator:
             stats_builder = ReportStatisticsBuilder()
 
             # Get total items used
-            total_query, total_params = stats_builder.build_usage_statistics_query(start_date, end_date)
+            total_query, total_params = stats_builder.build_usage_statistics_query(
+                start_date, end_date
+            )
             total_rows = db.execute_query(total_query, total_params)
-            total_used = total_rows[0]['total_used'] if total_rows and total_rows[0]['total_used'] else 0
+            total_used = (
+                total_rows[0]["total_used"]
+                if total_rows and total_rows[0]["total_used"]
+                else 0
+            )
 
             # Get items by category
-            category_query, category_params = stats_builder.build_category_statistics_query(start_date, end_date)
+            category_query, category_params = (
+                stats_builder.build_category_statistics_query(start_date, end_date)
+            )
             category_rows = db.execute_query(category_query, category_params) or []
 
             # Get top used items
-            top_items_query, top_items_params = stats_builder.build_top_items_query(start_date, end_date)
+            top_items_query, top_items_params = stats_builder.build_top_items_query(
+                start_date, end_date
+            )
             top_items_rows = db.execute_query(top_items_query, top_items_params) or []
 
             return {
-                'total_items_used': total_used,
-                'categories': category_rows,
-                'top_items': top_items_rows,
-                'date_range': f"{start_date} to {end_date}"
+                "total_items_used": total_used,
+                "categories": category_rows,
+                "top_items": top_items_rows,
+                "date_range": f"{start_date} to {end_date}",
             }
 
         except Exception as e:
             logger.error(f"Failed to get usage statistics: {e}")
             return {
-                'total_items_used': 0,
-                'categories': [],
-                'top_items': [],
-                'date_range': f"{start_date} to {end_date}"
+                "total_items_used": 0,
+                "categories": [],
+                "top_items": [],
+                "date_range": f"{start_date} to {end_date}",
             }
 
-
-    def generate_inventory_report(self, report_type: str, start_date: date, end_date: date,
-                                category_filter: str = "", output_path: Optional[str] = None) -> str:
+    def generate_inventory_report(
+        self,
+        report_type: str,
+        start_date: date,
+        end_date: date,
+        category_filter: str = "",
+        output_path: Optional[str] = None,
+    ) -> str:
         """
         Generate inventory report based on type.
 
@@ -416,23 +490,31 @@ class ReportGenerator:
             Path to generated Excel file
         """
         try:
-            logger.info(f"Generating {report_type} report from {start_date} to {end_date}")
+            logger.info(
+                f"Generating {report_type} report from {start_date} to {end_date}"
+            )
 
             # Get report data based on type
             if report_type == "Stock Levels Report":
                 report_data = self._get_stock_levels_data(category_filter)
                 title = "Stock Levels Report"
             elif report_type == "Expiration Report":
-                report_data = self._get_expiration_data(start_date, end_date, category_filter)
+                report_data = self._get_expiration_data(
+                    start_date, end_date, category_filter
+                )
                 title = "Expiration Report"
             elif report_type == "Low Stock Alert":
                 report_data = self._get_low_stock_data(category_filter)
                 title = "Low Stock Alert Report"
             elif report_type == "Acquisition History":
-                report_data = self._get_acquisition_history_data(start_date, end_date, category_filter)
+                report_data = self._get_acquisition_history_data(
+                    start_date, end_date, category_filter
+                )
                 title = "Acquisition History Report"
             elif report_type == "Calibration Due Report":
-                report_data = self._get_calibration_due_data(start_date, end_date, category_filter)
+                report_data = self._get_calibration_due_data(
+                    start_date, end_date, category_filter
+                )
                 title = "Calibration Due Report"
             else:
                 return f"Unknown inventory report type: {report_type}"
@@ -448,7 +530,9 @@ class ReportGenerator:
                 output_path = f"inventory_{report_type.lower().replace(' ', '_')}_{timestamp}.xlsx"
 
             output_path_obj = Path(output_path)
-            self._create_excel_report(report_data, output_path_obj, title, start_date, end_date)
+            self._create_excel_report(
+                report_data, output_path_obj, title, start_date, end_date
+            )
 
             logger.info(f"{report_type} report generated: {output_path}")
             return str(output_path)
@@ -471,7 +555,7 @@ class ReportGenerator:
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('%s', '%s')
             """
 
             params = []
@@ -480,6 +564,10 @@ class ReportGenerator:
                 params.append(category_filter)
 
             query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications ORDER BY c.name, i.name"
+            query = query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+            )
 
             return db.execute_query(query, tuple(params)) or []
 
@@ -487,7 +575,9 @@ class ReportGenerator:
             logger.error(f"Failed to get stock levels data: {e}")
             return []
 
-    def _get_expiration_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+    def _get_expiration_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
         """Get items expiring within date range."""
         try:
             query = """
@@ -533,7 +623,7 @@ class ReportGenerator:
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('CONSUMPTION', 'DISPOSAL')
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('%s', '%s')
             """
 
             params = []
@@ -541,7 +631,11 @@ class ReportGenerator:
                 query += " WHERE c.name = ?"
                 params.append(category_filter)
 
-            query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications HAVING \"Current Stock\" < 10 ORDER BY \"Current Stock\" ASC"
+            query += ' GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications HAVING "Current Stock" < 10 ORDER BY "Current Stock" ASC'
+            query = query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+            )
 
             return db.execute_query(query, tuple(params)) or []
 
@@ -549,7 +643,9 @@ class ReportGenerator:
             logger.error(f"Failed to get low stock data: {e}")
             return []
 
-    def _get_acquisition_history_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+    def _get_acquisition_history_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
         """Get acquisition history within date range."""
         try:
             query = """
@@ -582,7 +678,9 @@ class ReportGenerator:
             logger.error(f"Failed to get acquisition history data: {e}")
             return []
 
-    def _get_calibration_due_data(self, start_date: date, end_date: date, category_filter: str = "") -> List[Dict]:
+    def _get_calibration_due_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
         """Get items needing calibration within date range."""
         try:
             query = """

@@ -6,7 +6,7 @@ Overview
 
 Features
 
-- Preset date ranges and custom ranges, automatic granularity selection for usage reports, and background processing to avoid UI blocking.
+- Preset date ranges and custom ranges, automatic granularity selection for usage reports, and background processing to avoid UI blocking. The report engine uses `MovementType` to categorize movements and parameterized queries to prevent injection while building dynamic report columns.
 
 Common Reports
 

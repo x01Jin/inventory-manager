@@ -3,10 +3,11 @@ Stock movement service - handles stock movement operations.
 Provides centralized stock tracking and movement recording.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.services.movement_types import MovementType, sql_values_in_clause
 
 
 class StockMovementService:
@@ -38,7 +39,7 @@ class StockMovementService:
             batch_id: Specific batch being consumed (optional)
         """
         self._record_movement(
-            item_id, "CONSUMPTION", quantity, source_id, note, batch_id
+            item_id, MovementType.CONSUMPTION, quantity, source_id, note, batch_id
         )
 
     def record_reservation(
@@ -60,7 +61,7 @@ class StockMovementService:
             batch_id: Specific batch being reserved (optional)
         """
         self._record_movement(
-            item_id, "RESERVATION", quantity, source_id, note, batch_id
+            item_id, MovementType.RESERVATION, quantity, source_id, note, batch_id
         )
 
     def record_return(
@@ -81,7 +82,9 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being returned (optional)
         """
-        self._record_movement(item_id, "RETURN", quantity, source_id, note, batch_id)
+        self._record_movement(
+            item_id, MovementType.RETURN, quantity, source_id, note, batch_id
+        )
 
     def record_disposal(
         self,
@@ -101,7 +104,9 @@ class StockMovementService:
             note: Description/note for the movement
             batch_id: Specific batch being disposed (optional)
         """
-        self._record_movement(item_id, "DISPOSAL", quantity, source_id, note, batch_id)
+        self._record_movement(
+            item_id, MovementType.DISPOSAL, quantity, source_id, note, batch_id
+        )
 
     def record_lost(
         self,
@@ -123,7 +128,9 @@ class StockMovementService:
         """
         # For backward compatibility, map LOST to DISPOSAL
         # In future versions, this should be removed and callers should use appropriate methods
-        self._record_movement(item_id, "DISPOSAL", quantity, source_id, note, batch_id)
+        self._record_movement(
+            item_id, MovementType.DISPOSAL, quantity, source_id, note, batch_id
+        )
 
     def process_return(
         self, requisition_id: int, return_data: List[Dict], editor_name: str
@@ -170,7 +177,7 @@ class StockMovementService:
     def _record_movement(
         self,
         item_id: int,
-        movement_type: str,
+        movement_type: Union[MovementType, str],
         quantity: int,
         source_id: int,
         note: str,
@@ -187,6 +194,13 @@ class StockMovementService:
             note: Descriptive note
             batch_id: Specific batch ID (optional)
         """
+        # Accept MovementType enum or raw string; normalize to string value
+        mv = (
+            movement_type.value
+            if isinstance(movement_type, MovementType)
+            else str(movement_type)
+        )
+
         if batch_id is not None:
             query = """
             INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id, note)
@@ -195,7 +209,7 @@ class StockMovementService:
             params = (
                 item_id,
                 batch_id,
-                movement_type,
+                mv,
                 quantity,
                 date.today().isoformat(),
                 source_id,
@@ -208,7 +222,7 @@ class StockMovementService:
             """
             params = (
                 item_id,
-                movement_type,
+                mv,
                 quantity,
                 date.today().isoformat(),
                 source_id,
@@ -218,7 +232,7 @@ class StockMovementService:
         db.execute_update(query, params)
         batch_info = f" (batch {batch_id})" if batch_id else ""
         logger.debug(
-            f"Recorded {movement_type} movement for item {item_id}{batch_info}: {quantity} units"
+            f"Recorded {mv} movement for item {item_id}{batch_info}: {quantity} units"
         )
 
     def get_current_stock_level(self, item_id: int) -> int:
@@ -247,16 +261,23 @@ class StockMovementService:
             movement_query = """
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN movement_type = 'CONSUMPTION' THEN -quantity
-                    WHEN movement_type = 'DISPOSAL' THEN -quantity
-                    WHEN movement_type = 'RETURN' THEN quantity
-                    WHEN movement_type = 'LOST' THEN -quantity  -- Backward compatibility
+                    WHEN movement_type = '%s' THEN -quantity
+                    WHEN movement_type = '%s' THEN -quantity
+                    WHEN movement_type = '%s' THEN quantity
+                    WHEN movement_type = '%s' THEN -quantity  -- Backward compatibility
                     ELSE 0
                 END
             ), 0) as net_adjustment
             FROM Stock_Movements
             WHERE item_id = ?
             """
+            movement_query = movement_query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+                MovementType.LOST.value,
+            )
+
             movement_rows = db.execute_query(movement_query, (item_id,))
             net_adjustment = movement_rows[0]["net_adjustment"] if movement_rows else 0
 
@@ -279,8 +300,8 @@ class StockMovementService:
             query = """
             SELECT COALESCE(SUM(quantity), 0) as reserved_qty
             FROM Stock_Movements
-            WHERE item_id = ? AND movement_type IN ('RESERVATION', 'REQUEST')
-            """
+            WHERE item_id = ? AND movement_type IN %s
+            """ % sql_values_in_clause()
             rows = db.execute_query(query, (item_id,))
             return rows[0]["reserved_qty"] if rows else 0
         except Exception as e:

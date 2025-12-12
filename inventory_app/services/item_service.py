@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 from inventory_app.database.connection import db
 from inventory_app.database.models import Category, Supplier
 from inventory_app.utils.logger import logger
+from inventory_app.services.movement_types import MovementType
 
 
 class ItemService:
@@ -21,9 +22,12 @@ class ItemService:
 
     # Removed redundant build_item_dict method - using batch-centric approach now
 
-    def get_inventory_items_for_selection(self, search_term: Optional[str] = None,
-                                       exclude_requested: bool = True,
-                                       exclude_requisition_id: Optional[int] = None) -> List[Dict]:
+    def get_inventory_items_for_selection(
+        self,
+        search_term: Optional[str] = None,
+        exclude_requested: bool = True,
+        exclude_requisition_id: Optional[int] = None,
+    ) -> List[Dict]:
         """
         Get inventory items formatted for selection in requisitions.
         LEGACY METHOD: Now delegates to batch-centric method for backward compatibility.
@@ -37,12 +41,17 @@ class ItemService:
             List of item dictionaries
         """
         # For backward compatibility, convert batch data to item format
-        batch_data = self.get_inventory_batches_for_selection(search_term, exclude_requested, exclude_requisition_id)
+        batch_data = self.get_inventory_batches_for_selection(
+            search_term, exclude_requested, exclude_requisition_id
+        )
         return self._convert_batch_data_to_item_format(batch_data)
 
-    def get_inventory_batches_for_selection(self, search_term: Optional[str] = None,
-                                          exclude_requested: bool = True,
-                                          exclude_requisition_id: Optional[int] = None) -> List[Dict]:
+    def get_inventory_batches_for_selection(
+        self,
+        search_term: Optional[str] = None,
+        exclude_requested: bool = True,
+        exclude_requisition_id: Optional[int] = None,
+    ) -> List[Dict]:
         """
         Get inventory batches formatted for selection in requisitions.
         Shows individual batches with their specific available stock.
@@ -93,18 +102,22 @@ class ItemService:
                 batch_dict = dict(row)
 
                 # Calculate available stock for this specific batch
-                available_stock = self._get_available_stock_for_batch(batch_dict['batch_id'], exclude_requisition_id)
+                available_stock = self._get_available_stock_for_batch(
+                    batch_dict["batch_id"], exclude_requisition_id
+                )
 
                 # Skip batches with no available stock if exclude_requested is True
                 if exclude_requested and available_stock <= 0:
                     continue
 
                 # Add availability information
-                batch_dict.update({
-                    'available_stock': available_stock,
-                    'total_stock': batch_dict['quantity_received'],
-                    'batch_display_name': f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})"
-                })
+                batch_dict.update(
+                    {
+                        "available_stock": available_stock,
+                        "total_stock": batch_dict["quantity_received"],
+                        "batch_display_name": f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})",
+                    }
+                )
 
                 result.append(batch_dict)
 
@@ -129,26 +142,26 @@ class ItemService:
             # Group batches by item
             item_groups = {}
             for batch in batch_data:
-                item_id = batch['item_id']
+                item_id = batch["item_id"]
                 if item_id not in item_groups:
                     item_groups[item_id] = {
-                        'id': item_id,
-                        'name': batch['item_name'],
-                        'category_name': batch['category_name'],
-                        'supplier_name': batch['supplier_name'],
-                        'size': batch['size'],
-                        'brand': batch['brand'],
-                        'other_specifications': batch['other_specifications'],
-                        'is_consumable': batch['is_consumable'],
-                        'total_stock': 0,
-                        'available_stock': 0,
-                        'batches': []
+                        "id": item_id,
+                        "name": batch["item_name"],
+                        "category_name": batch["category_name"],
+                        "supplier_name": batch["supplier_name"],
+                        "size": batch["size"],
+                        "brand": batch["brand"],
+                        "other_specifications": batch["other_specifications"],
+                        "is_consumable": batch["is_consumable"],
+                        "total_stock": 0,
+                        "available_stock": 0,
+                        "batches": [],
                     }
 
                 # Aggregate stock information
-                item_groups[item_id]['total_stock'] += batch['total_stock']
-                item_groups[item_id]['available_stock'] += batch['available_stock']
-                item_groups[item_id]['batches'].append(batch)
+                item_groups[item_id]["total_stock"] += batch["total_stock"]
+                item_groups[item_id]["available_stock"] += batch["available_stock"]
+                item_groups[item_id]["batches"].append(batch)
 
             return list(item_groups.values())
 
@@ -181,8 +194,6 @@ class ItemService:
         except Exception as e:
             logger.error(f"Failed to get requisition items for {requisition_id}: {e}")
             return []
-
-
 
     def _get_category_name(self, category_id: int) -> str:
         """Get category name by ID."""
@@ -219,22 +230,29 @@ class ItemService:
             LEFT JOIN (
                 SELECT
                     sm.item_id,
-                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 WHERE sm.item_id = ?
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
             WHERE ib.item_id = ?
             """
+            query = query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
             rows = db.execute_query(query, (item_id, item_id))
-            return rows[0]['total_stock'] if rows else 0
+            return rows[0]["total_stock"] if rows else 0
         except Exception as e:
             logger.error(f"Failed to get total stock for item {item_id}: {e}")
             return 0
 
-    def _get_available_stock_for_batch(self, batch_id: int, exclude_requisition_id: Optional[int] = None) -> int:
+    def _get_available_stock_for_batch(
+        self, batch_id: int, exclude_requisition_id: Optional[int] = None
+    ) -> int:
         """
         Get available stock for a specific batch using consistent calculations.
         Accounts for all stock movements: CONSUMPTION, DISPOSAL, RETURN.
@@ -262,9 +280,9 @@ class ItemService:
             LEFT JOIN (
                 SELECT
                     sm.batch_id,
-                    SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END) as returned_qty
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 WHERE sm.batch_id = ?
                 GROUP BY sm.batch_id
@@ -273,12 +291,17 @@ class ItemService:
             """
 
             params = (batch_id, batch_id)
+            query = query % (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
             rows = db.execute_query(query, params)
             if not rows:
                 return 0
 
             batch_data = rows[0]
-            total_stock = batch_data['total_stock'] or 0
+            total_stock = batch_data["total_stock"] or 0
 
             # Get currently requested quantity from this batch (excluding specified requisition)
             requested_query = """
@@ -287,10 +310,13 @@ class ItemService:
             JOIN Items i ON sm.item_id = i.id
             WHERE sm.batch_id = ?
             AND (
-                (i.is_consumable = 1 AND sm.movement_type = 'RESERVATION') OR
-                (i.is_consumable = 0 AND sm.movement_type = 'REQUEST')
+                (i.is_consumable = 1 AND sm.movement_type = '%s') OR
+                (i.is_consumable = 0 AND sm.movement_type = '%s')
             )
-            """
+            """ % (
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+            )
 
             params = (batch_id,)
             if exclude_requisition_id:
@@ -298,7 +324,7 @@ class ItemService:
                 params = (batch_id, exclude_requisition_id)
 
             requested_rows = db.execute_query(requested_query, params)
-            requested_qty = requested_rows[0]['requested_qty'] if requested_rows else 0
+            requested_qty = requested_rows[0]["requested_qty"] if requested_rows else 0
 
             return max(0, total_stock - requested_qty)
 

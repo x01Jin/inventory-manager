@@ -55,6 +55,7 @@ How to read this document
   - Evidence: `stock_movement_service.py` and `item_service.py` reference multiple types inconsistently [inventory_app/services/stock_movement_service.py](inventory_app/services/stock_movement_service.py#L1-L60), [inventory_app/services/item_service.py](inventory_app/services/item_service.py#L1-L120)
   - Severity: High
   - Remediation: Introduce a single source-of-truth enum for movement types in code and add a DB CHECK constraint limiting allowed values in `Stock_Movements`.
+  - Status: **Completed** — Added `MovementType` enum (`inventory_app/services/movement_types.py`), refactored services and models to use the enum, added a CHECK constraint to `Stock_Movements` in `schema.sql`, and added unit tests (`tests/test_movement_types.py`).
 
 - **Deletion logic relies on timing delays (time.sleep)**
   - Description: `Item.delete()` performs a deletion sequence with `time.sleep(0.1)` between deletes to "prevent constraint timing issues" rather than relying on correct FK constraints and transactions.
@@ -136,20 +137,14 @@ these are actual reasonable problems for this system but are not really a proble
 
 ## Suggested Prioritized Work Plan (short)
 
-1. Fix last-insert ID behavior (Critical) — ensures basic correctness of inserts.
-2. Add transaction support & convert critical flows to atomic transactions (Critical).
-3. Add concurrency controls to stock reservation flow (Critical).
-4. Parameterize queries and remove direct SQL interpolation (High).
-5. Standardize and enforce movement type enum in schema and code (High).
-6. Replace deletion `sleep()` hacks with transactional deletes and/or `ON DELETE CASCADE` (High).
-7. Add authentication and audited user identity (High).
-8. Add tests for critical flows (Medium) and add missing DB indexes where needed (Medium).
-
----
-
-## Next steps
-
-- I can implement the highest-priority fixes (start with `execute_update`/`get_last_insert_id` and adding a `transaction()` context manager) and add unit tests demonstrating correctness. Let me know if you want me to proceed and which item to start with.
+1. Fix last-insert ID behavior (Critical) — Completed: `execute_update(..., return_last_id=True)` now returns `cursor.lastrowid` and model `save()` code uses it.
+2. Add transaction support & convert critical flows to atomic transactions (Critical) — Completed: `DatabaseConnection.transaction()` is in use across major flows including item save, requisition creation, and deletion flows.
+3. Add concurrency controls to stock reservation flow (Critical) — Completed: `ItemSelectionManager.create_stock_movements_for_requisition()` now re-checks availability inside an IMMEDIATE transaction and rejects insufficient requests.
+4. Parameterize queries and remove direct SQL interpolation (High) — Completed: Major query builders have been refactored to use parameterized queries and validated dynamic columns.
+5. Standardize and enforce movement type enum in schema and code (High) — Completed: `MovementType` enum added and a `CHECK` constraint enforces allowed values in `Stock_Movements`.
+6. Replace deletion `sleep()` hacks with transactional deletes and/or `ON DELETE CASCADE` (High) — Partially Completed: Time-based delays removed in favor of transactions; consider adding migration tests for schema-level cascade rules where not yet applied.
+7. Add authentication and audited user identity (High) — Not implemented: remains a recommended next step.
+8. Add tests for critical flows and add missing DB indexes where needed (Medium) — Completed/On-going: Tests added for transactions, concurrency, and movement types; `idx_movements_source` and `idx_movements_item_date` added to support lookups.
 
 ---
 

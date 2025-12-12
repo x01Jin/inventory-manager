@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.services.movement_types import MovementType
 from inventory_app.utils.activity_logger import activity_logger
 
 
@@ -479,11 +480,13 @@ class Item:
             AND NOT EXISTS (
                 SELECT 1 FROM Stock_Movements sm
                 WHERE sm.item_id = ri.item_id
-                AND sm.movement_type = 'RETURN'
+                AND sm.movement_type = ?
                 AND sm.source_id = r.id
             )
             """
-            requested_result = db.execute_query(requested_check, (self.id,))
+            requested_result = db.execute_query(
+                requested_check, (self.id, MovementType.RETURN.value)
+            )
             if requested_result and requested_result[0]["requested_count"] > 0:
                 logger.warning(
                     f"Cannot delete item {self.id}: item is currently requested"
@@ -837,8 +840,8 @@ class Requisition:
             with db.transaction():
                 # Delete related stock movements first
                 db.execute_update(
-                    "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = 'CONSUMPTION'",
-                    (self.id,),
+                    "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = ?",
+                    (self.id, MovementType.CONSUMPTION.value),
                 )
 
                 # Delete requisition items

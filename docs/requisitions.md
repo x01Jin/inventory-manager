@@ -10,7 +10,7 @@ Key Components
 
 Workflow
 
-- Create requisitions with requester selection and item selection. The system performs stock validation and reservations.
+- Create requisitions with requester selection and item selection. The system performs stock validation and reservations. Requisitions creation now uses `DatabaseConnection.transaction()` with an IMMEDIATE transaction to re-check and reserve stock atomically to prevent oversubscription. Concurrent reservation attempts will be rejected when stock is insufficient.
 - Returns and partial returns supported with logging of consumed or lost items.
 
 Validation & Audit
