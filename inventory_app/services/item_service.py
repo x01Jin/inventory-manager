@@ -8,6 +8,7 @@ from inventory_app.database.connection import db
 from inventory_app.database.models import Category, Supplier
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+import warnings
 
 
 class ItemService:
@@ -40,7 +41,14 @@ class ItemService:
         Returns:
             List of item dictionaries
         """
-        # For backward compatibility, convert batch data to item format
+        # Deprecated: Use batch-centric selection APIs (`get_inventory_batches_for_selection`) where possible
+        with warnings.catch_warnings():
+            warnings.simplefilter("once", DeprecationWarning)
+            warnings.warn(
+                "get_inventory_items_for_selection() is deprecated and will be removed in a future release; use get_inventory_batches_for_selection() instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         batch_data = self.get_inventory_batches_for_selection(
             search_term, exclude_requested, exclude_requisition_id
         )
@@ -136,6 +144,9 @@ class ItemService:
             batch_data: List of batch dictionaries
 
         Returns:
+
+            stacklevel=2,
+        )
             List of item dictionaries
         """
         try:

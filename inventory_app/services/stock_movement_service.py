@@ -108,30 +108,6 @@ class StockMovementService:
             item_id, MovementType.DISPOSAL, quantity, source_id, note, batch_id
         )
 
-    def record_lost(
-        self,
-        item_id: int,
-        quantity: int,
-        source_id: int,
-        note: str,
-        batch_id: Optional[int] = None,
-    ) -> None:
-        """
-        Record item loss (deprecated - use record_disposal for non-consumables, record_consumption for consumables).
-
-        Args:
-            item_id: ID of the item
-            quantity: Quantity lost
-            source_id: Requisition ID
-            note: Description/note for the movement
-            batch_id: Specific batch being lost (optional)
-        """
-        # For backward compatibility, map LOST to DISPOSAL
-        # In future versions, this should be removed and callers should use appropriate methods
-        self._record_movement(
-            item_id, MovementType.DISPOSAL, quantity, source_id, note, batch_id
-        )
-
     def process_return(
         self, requisition_id: int, return_data: List[Dict], editor_name: str
     ) -> bool:
@@ -264,7 +240,7 @@ class StockMovementService:
                     WHEN movement_type = '%s' THEN -quantity
                     WHEN movement_type = '%s' THEN -quantity
                     WHEN movement_type = '%s' THEN quantity
-                    WHEN movement_type = '%s' THEN -quantity  -- Backward compatibility
+
                     ELSE 0
                 END
             ), 0) as net_adjustment
@@ -275,7 +251,6 @@ class StockMovementService:
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
-                MovementType.LOST.value,
             )
 
             movement_rows = db.execute_query(movement_query, (item_id,))

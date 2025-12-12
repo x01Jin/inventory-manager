@@ -97,7 +97,7 @@ CREATE TABLE Stock_Movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
     batch_id INTEGER,              -- Nullable for non-batch items
-    movement_type TEXT NOT NULL CHECK (movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL','RETURN','REQUEST','LOST')),
+    movement_type TEXT NOT NULL CHECK (movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL','RETURN','REQUEST')),
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     source_id INTEGER,             -- e.g., requisition_id for usage

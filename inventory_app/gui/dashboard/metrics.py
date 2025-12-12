@@ -123,16 +123,18 @@ class MetricsManager:
             from datetime import datetime, timedelta
 
             expiry_date = (datetime.now() + timedelta(days=30)).date().isoformat()
-            expiring_query = f"SELECT COUNT(*) as count FROM Items WHERE expiration_date <= '{expiry_date}' AND expiration_date IS NOT NULL"
-            expiring_result = db.execute_query(expiring_query)
+            expiring_query = "SELECT COUNT(*) as count FROM Items WHERE expiration_date <= ? AND expiration_date IS NOT NULL"
+            expiring_result = db.execute_query(expiring_query, (expiry_date,))
             metrics["expiring_soon"] = (
                 expiring_result[0]["count"] if expiring_result else 0
             )
 
             # Recent additions (last 7 days)
             recent_date = (datetime.now() - timedelta(days=7)).date().isoformat()
-            recent_query = f"SELECT COUNT(*) as count FROM Items WHERE last_modified >= '{recent_date}'"
-            recent_result = db.execute_query(recent_query)
+            recent_query = (
+                "SELECT COUNT(*) as count FROM Items WHERE last_modified >= ?"
+            )
+            recent_result = db.execute_query(recent_query, (recent_date,))
             metrics["recent_adds"] = recent_result[0]["count"] if recent_result else 0
 
             # Ongoing requisitions (requested + active + overdue)

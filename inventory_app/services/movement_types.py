@@ -14,7 +14,6 @@ class MovementType(Enum):
     RETURN = "RETURN"
     DISPOSAL = "DISPOSAL"
     REQUEST = "REQUEST"
-    LOST = "LOST"
 
 
 def allowed_values() -> List[str]:

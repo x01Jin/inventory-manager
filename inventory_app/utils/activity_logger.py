@@ -4,7 +4,7 @@ Provides centralized logging for dashboard recent activity display.
 """
 
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 
@@ -54,7 +54,7 @@ class ActivityLogger:
             VALUES (?, ?, ?, ?, ?, ?)
             """
 
-            timestamp = datetime.now().isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()
             db.execute_update(
                 query,
                 (
@@ -140,7 +140,9 @@ class ActivityLogger:
         """
         try:
             # Compute cutoff timestamp in Python to allow parameterized queries
-            cutoff = (datetime.utcnow() - timedelta(days=days_to_keep)).isoformat()
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+            ).isoformat()
 
             # Get count before deletion
             count_query = (

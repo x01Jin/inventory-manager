@@ -10,7 +10,7 @@ Database
 Services
 
 - `inventory_app.services.item_service` — operations related to item creation, editing, searching and stock aggregation.
-- `inventory_app.services.movement_types.MovementType` — the canonical enum of movement types (CONSUMPTION, RESERVATION, RETURN, DISPOSAL, REQUEST, LOST). Services, GUI and models should use this enum to avoid divergent string values and the DB schema enforces valid values via a `CHECK` constraint.
+- `inventory_app.services.movement_types.MovementType` — the canonical enum of movement types (CONSUMPTION, RESERVATION, RETURN, DISPOSAL, REQUEST). Services, GUI and models should use this enum to avoid divergent string values and the DB schema enforces valid values via a `CHECK` constraint.
 - `inventory_app.services.stock_movement_service` — creates/updates `Stock_Movements` records and reconciles item quantities.
 - `inventory_app.services.requesters_activity` — logs and manages requester activities and audit trail.
 - `inventory_app.services.requisition_activity` — handles requisition lifecycle (request, active, return) and related stock reservations.
