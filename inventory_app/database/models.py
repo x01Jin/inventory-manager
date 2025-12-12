@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.services.movement_types import MovementType
 from inventory_app.utils.activity_logger import activity_logger
 
 
@@ -484,6 +483,8 @@ class Item:
                 AND sm.source_id = r.id
             )
             """
+            from inventory_app.services.movement_types import MovementType
+
             requested_result = db.execute_query(
                 requested_check, (self.id, MovementType.RETURN.value)
             )
@@ -839,6 +840,8 @@ class Requisition:
                 return False
             with db.transaction():
                 # Delete related stock movements first
+                from inventory_app.services.movement_types import MovementType
+
                 db.execute_update(
                     "DELETE FROM Stock_Movements WHERE source_id = ? AND movement_type = ?",
                     (self.id, MovementType.CONSUMPTION.value),
@@ -881,40 +884,48 @@ class Requisition:
             requisitions = []
             for row in rows:
                 req_dict = dict(row)
-                # Convert dates with error handling
+                # Convert dates; do not silently fall back to 'now' on parse errors
                 if req_dict.get("expected_request"):
+                    val = req_dict["expected_request"]
                     try:
-                        req_dict["expected_request"] = datetime.fromisoformat(
-                            req_dict["expected_request"]
+                        req_dict["expected_request"] = datetime.fromisoformat(val)
+                    except (ValueError, TypeError) as e:
+                        logger.error(
+                            f"Invalid expected_request format for requisition {req_dict.get('id')}: {val}"
                         )
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            f"Invalid expected_request format: {req_dict['expected_request']}"
-                        )
-                        req_dict["expected_request"] = datetime.now()
+                        raise ValueError(
+                            f"Invalid expected_request format for requisition {req_dict.get('id')}: {val}"
+                        ) from e
                 if req_dict.get("expected_return"):
+                    val = req_dict["expected_return"]
                     try:
-                        req_dict["expected_return"] = datetime.fromisoformat(
-                            req_dict["expected_return"]
+                        req_dict["expected_return"] = datetime.fromisoformat(val)
+                    except (ValueError, TypeError) as e:
+                        logger.error(
+                            f"Invalid expected_return format for requisition {req_dict.get('id')}: {val}"
                         )
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            f"Invalid expected_return format: {req_dict['expected_return']}"
-                        )
-                        req_dict["expected_return"] = datetime.now()
+                        raise ValueError(
+                            f"Invalid expected_return format for requisition {req_dict.get('id')}: {val}"
+                        ) from e
                 if req_dict.get("lab_activity_date"):
+                    val = req_dict["lab_activity_date"]
                     try:
-                        req_dict["lab_activity_date"] = date.fromisoformat(
-                            req_dict["lab_activity_date"]
+                        req_dict["lab_activity_date"] = date.fromisoformat(val)
+                    except (ValueError, TypeError) as e:
+                        logger.error(
+                            f"Invalid lab_activity_date format for requisition {req_dict.get('id')}: {val}"
                         )
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            f"Invalid lab_activity_date format: {req_dict['lab_activity_date']}"
-                        )
-                        req_dict["lab_activity_date"] = date.today()
+                        raise ValueError(
+                            f"Invalid lab_activity_date format for requisition {req_dict.get('id')}: {val}"
+                        ) from e
                 requisitions.append(cls(**req_dict))
             return requisitions
         except Exception as e:
+            # If parsing error was raised intentionally (ValueError), re-raise it so
+            # callers and tests can catch and handle it; otherwise log database
+            # or unexpected errors and return an empty list as before.
+            if isinstance(e, ValueError):
+                raise
             logger.error(f"Failed to get requisitions: {e}")
             return []
 
