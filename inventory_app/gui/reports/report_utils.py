@@ -192,36 +192,46 @@ class ReportDateFormatter:
     def _get_monthly_period_keys(start_date: date, end_date: date) -> List[str]:
         """Generate monthly period keys with excess handling."""
         period_keys = []
-
-        # Add excess days before first day of month
-        if start_date.day > 1:
-            month_start = start_date.replace(day=1)
-            excess_start = month_start
-            excess_end = start_date - timedelta(days=1)
+        # Edge case: range entirely within one month -> single partial range
+        if start_date.year == end_date.year and start_date.month == end_date.month:
             period_keys.append(
-                f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
+                f"{start_date.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
             )
+            return period_keys
 
-        # Add main months
-        current_month = start_date.replace(day=1)
+        # Helper to get first day of next month
+        def _first_day_next_month(d: date) -> date:
+            if d.month == 12:
+                return d.replace(year=d.year + 1, month=1, day=1)
+            return d.replace(month=d.month + 1, day=1)
+
+        # If the range starts mid-month, add the first partial (start_date -> end_of_start_month)
+        if start_date.day > 1:
+            next_month_first = _first_day_next_month(start_date)
+            end_of_start_month = next_month_first - timedelta(days=1)
+            period_keys.append(
+                f"{start_date.strftime('%Y-%m-%d')}to{end_of_start_month.strftime('%Y-%m-%d')}"
+            )
+            current_month = next_month_first
+        else:
+            current_month = start_date.replace(day=1)
+
+        # Add full months as long as the entire month fits in the range
         while current_month <= end_date:
-            period_keys.append(current_month.strftime("%Y-%m"))
-            if current_month.month == 12:
-                current_month = current_month.replace(
-                    year=current_month.year + 1, month=1
-                )
-            else:
-                current_month = current_month.replace(month=current_month.month + 1)
+            next_month_first = _first_day_next_month(current_month)
+            last_day_of_month = next_month_first - timedelta(days=1)
 
-        # Add excess days after last day of month
-        last_month_end = current_month - timedelta(days=1)
-        if last_month_end < end_date:
-            excess_start = last_month_end + timedelta(days=1)
-            excess_end = end_date
-            if excess_start <= excess_end:
+            if last_day_of_month <= end_date:
+                period_keys.append(current_month.strftime("%Y-%m"))
+                current_month = next_month_first
+                continue
+
+            # Tail partial month: from first day of this month to end_date
+            if current_month <= end_date:
                 period_keys.append(
-                    f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
+                    f"{current_month.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
                 )
+            break
 
         return list(dict.fromkeys(period_keys))  # Remove duplicates
 
