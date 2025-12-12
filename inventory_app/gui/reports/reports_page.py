@@ -4,9 +4,20 @@ Provides comprehensive reporting with multiple report types and modern UI.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QLabel, QPushButton, QProgressBar, QTextEdit, QComboBox,
-    QCheckBox, QListWidget, QSplitter, QMessageBox, QTabWidget
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QProgressBar,
+    QTextEdit,
+    QComboBox,
+    QCheckBox,
+    QListWidget,
+    QSplitter,
+    QMessageBox,
+    QTabWidget,
 )
 from PyQt6.QtCore import Qt, QDate
 
@@ -34,6 +45,7 @@ class ReportsPage(QWidget):
     def apply_dark_theme(self):
         """Apply dark theme to the reports page."""
         from PyQt6.QtWidgets import QApplication
+
         app = QApplication.instance()
         if app and isinstance(app, QApplication):
             DarkTheme.apply_dark_theme(app)
@@ -101,14 +113,6 @@ class ReportsPage(QWidget):
         inventory_tab = self.create_inventory_tab()
         self.tab_widget.addTab(inventory_tab, "📦 Inventory Reports")
 
-        # Requisition Reports Tab
-        requisition_tab = self.create_requisition_tab()
-        self.tab_widget.addTab(requisition_tab, "📋 Requisition Reports")
-
-        # Statistics Reports Tab
-        statistics_tab = self.create_statistics_tab()
-        self.tab_widget.addTab(statistics_tab, "📊 Statistics")
-
         config_layout.addWidget(self.tab_widget)
 
         # Generate Button
@@ -140,16 +144,18 @@ class ReportsPage(QWidget):
         preset_layout.addWidget(QLabel("Quick Select:"))
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItems([
-            "Custom Range",
-            "Last 7 Days",
-            "Last 30 Days",
-            "Last 90 Days",
-            "This Month",
-            "Last Month",
-            "This Year",
-            "Last Year"
-        ])
+        self.preset_combo.addItems(
+            [
+                "Custom Range",
+                "Last 7 Days",
+                "Last 30 Days",
+                "Last 90 Days",
+                "This Month",
+                "Last Month",
+                "This Year",
+                "Last Year",
+            ]
+        )
         self.preset_combo.currentTextChanged.connect(self.on_preset_changed)
         preset_layout.addWidget(self.preset_combo)
 
@@ -190,8 +196,8 @@ class ReportsPage(QWidget):
         options_layout = QVBoxLayout(options_group)
 
         # No options needed for usage reports now
-        options_label = QLabel("Idk what to put here tbh but theres still space so ye...")
-        options_label.setStyleSheet("color: #666; font-style: italic;")
+        options_label = QLabel("No additional options available for Usage Reports.")
+        options_label.setStyleSheet("color: #666;")
         options_layout.addWidget(options_label)
 
         layout.addWidget(options_group)
@@ -209,13 +215,15 @@ class ReportsPage(QWidget):
         type_layout = QVBoxLayout(type_group)
 
         self.inventory_report_type = QComboBox()
-        self.inventory_report_type.addItems([
-            "Stock Levels Report",
-            "Expiration Report",
-            "Low Stock Alert",
-            "Acquisition History",
-            "Calibration Due Report"
-        ])
+        self.inventory_report_type.addItems(
+            [
+                "Stock Levels Report",
+                "Expiration Report",
+                "Low Stock Alert",
+                "Acquisition History",
+                "Calibration Due Report",
+            ]
+        )
         type_layout.addWidget(self.inventory_report_type)
         layout.addWidget(type_group)
 
@@ -245,103 +253,6 @@ class ReportsPage(QWidget):
         layout.addStretch()
         return tab
 
-    def create_requisition_tab(self) -> QWidget:
-        """Create requisition reports configuration tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # Report Type
-        type_group = QGroupBox("📋 Report Type")
-        type_layout = QVBoxLayout(type_group)
-
-        self.req_report_type = QComboBox()
-        self.req_report_type.addItems([
-            "Requisition Summary",
-            "Requester Analysis",
-            "Activity Patterns",
-            "Overdue Items",
-            "Return History"
-        ])
-        type_layout.addWidget(self.req_report_type)
-        layout.addWidget(type_group)
-
-        # Date Range
-        date_group = QGroupBox("📅 Date Range")
-        date_layout = QVBoxLayout(date_group)
-
-        self.req_date_selector = DateRangeSelector()
-        date_layout.addWidget(self.req_date_selector)
-        layout.addWidget(date_group)
-
-        # Filters
-        filters_group = QGroupBox("🔍 Filters")
-        filters_layout = QVBoxLayout(filters_group)
-
-        # Status filter
-        status_layout = QHBoxLayout()
-        status_layout.addWidget(QLabel("Status:"))
-        self.req_status_combo = QComboBox()
-        self.req_status_combo.addItems([
-            "All Statuses",
-            "Requested",
-            "Active",
-            "Returned",
-            "Overdue"
-        ])
-        status_layout.addWidget(self.req_status_combo)
-        filters_layout.addLayout(status_layout)
-
-        layout.addWidget(filters_group)
-
-        layout.addStretch()
-        return tab
-
-    def create_statistics_tab(self) -> QWidget:
-        """Create statistics reports configuration tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # Report Type
-        type_group = QGroupBox("📊 Report Type")
-        type_layout = QVBoxLayout(type_group)
-
-        self.stat_report_type = QComboBox()
-        self.stat_report_type.addItems([
-            "Usage Statistics",
-            "Top Items Report",
-            "Category Analysis",
-            "Monthly Trends",
-            "Yearly Summary"
-        ])
-        type_layout.addWidget(self.stat_report_type)
-        layout.addWidget(type_group)
-
-        # Date Range
-        date_group = QGroupBox("📅 Date Range")
-        date_layout = QVBoxLayout(date_group)
-
-        self.stat_date_selector = DateRangeSelector()
-        date_layout.addWidget(self.stat_date_selector)
-        layout.addWidget(date_group)
-
-        # Options
-        options_group = QGroupBox("⚙️ Options")
-        options_layout = QVBoxLayout(options_group)
-
-        self.stat_top_n = QComboBox()
-        self.stat_top_n.addItems(["10", "25", "50", "100"])
-        self.stat_top_n.setCurrentText("25")
-
-        top_layout = QHBoxLayout()
-        top_layout.addWidget(QLabel("Top N items:"))
-        top_layout.addWidget(self.stat_top_n)
-        options_layout.addLayout(top_layout)
-
-        layout.addWidget(options_group)
-
-        layout.addStretch()
-        return tab
-
     def create_status_panel(self) -> QWidget:
         """Create the status and results panel."""
         status_widget = QWidget()
@@ -354,7 +265,9 @@ class ReportsPage(QWidget):
         self.status_text = QTextEdit()
         self.status_text.setReadOnly(True)
         self.status_text.setMaximumHeight(150)
-        self.status_text.setPlainText("Ready to generate reports.\n\nSelect your parameters and click 'Generate Report'.")
+        self.status_text.setPlainText(
+            "Ready to generate reports.\n\nSelect your parameters and click 'Generate Report'."
+        )
         status_layout_inner.addWidget(self.status_text)
 
         status_layout.addWidget(status_group)
@@ -390,10 +303,11 @@ class ReportsPage(QWidget):
 
         try:
             from inventory_app.database.connection import db
+
             categories = db.execute_query("SELECT name FROM Categories ORDER BY name")
             if categories:
                 for cat in categories:
-                    combo_box.addItem(cat['name'])
+                    combo_box.addItem(cat["name"])
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
 
@@ -401,16 +315,17 @@ class ReportsPage(QWidget):
         """Load suppliers from database."""
         try:
             from inventory_app.database.connection import db
+
             suppliers = db.execute_query("SELECT name FROM Suppliers ORDER BY name")
             if suppliers:
                 for sup in suppliers:
-                    self.supplier_combo.addItem(sup['name'])
+                    self.supplier_combo.addItem(sup["name"])
         except Exception as e:
             logger.error(f"Failed to load suppliers: {e}")
 
     def on_report_type_changed(self, index):
         """Handle report type tab changes."""
-        report_types = ["usage", "inventory", "requisition", "statistics"]
+        report_types = ["usage", "inventory"]
         self.current_report_type = report_types[index]
 
     def on_preset_changed(self, preset):
@@ -420,25 +335,25 @@ class ReportsPage(QWidget):
             start_date = today - timedelta(days=7)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(today.year, today.month, today.day)
+                QDate(today.year, today.month, today.day),
             )
         elif preset == "Last 30 Days":
             start_date = today - timedelta(days=30)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(today.year, today.month, today.day)
+                QDate(today.year, today.month, today.day),
             )
         elif preset == "Last 90 Days":
             start_date = today - timedelta(days=90)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(today.year, today.month, today.day)
+                QDate(today.year, today.month, today.day),
             )
         elif preset == "This Month":
             start_date = today.replace(day=1)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(today.year, today.month, today.day)
+                QDate(today.year, today.month, today.day),
             )
         elif preset == "Last Month":
             # Get first day of last month
@@ -447,20 +362,20 @@ class ReportsPage(QWidget):
             start_date = last_month_end.replace(day=1)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(last_month_end.year, last_month_end.month, last_month_end.day)
+                QDate(last_month_end.year, last_month_end.month, last_month_end.day),
             )
         elif preset == "This Year":
             start_date = today.replace(month=1, day=1)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(today.year, today.month, today.day)
+                QDate(today.year, today.month, today.day),
             )
         elif preset == "Last Year":
             start_date = today.replace(year=today.year - 1, month=1, day=1)
             end_date = start_date.replace(month=12, day=31)
             self.date_range_selector.set_date_range(
                 QDate(start_date.year, start_date.month, start_date.day),
-                QDate(end_date.year, end_date.month, end_date.day)
+                QDate(end_date.year, end_date.month, end_date.day),
             )
 
     def generate_report(self):
@@ -475,21 +390,26 @@ class ReportsPage(QWidget):
             # Clear previous status
             if self.ui_updater:
                 self.ui_updater.clear_status()
-                self.ui_updater.update_status(f"Generating {self.current_report_type} report...")
+                self.ui_updater.update_status(
+                    f"Generating {self.current_report_type} report..."
+                )
 
             # Generate based on current tab
             if self.current_report_type == "usage":
                 self.generate_usage_report()
             elif self.current_report_type == "inventory":
                 self.generate_inventory_report()
-            elif self.current_report_type == "requisition":
-                self.generate_requisition_report()
-            elif self.current_report_type == "statistics":
-                self.generate_statistics_report()
+            else:
+                QMessageBox.critical(
+                    self, "Error", f"Unknown report type: {self.current_report_type}"
+                )
+                self.reset_ui()
 
         except Exception as e:
             logger.error(f"Failed to start report generation: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to start report generation: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to start report generation: {str(e)}"
+            )
             self.reset_ui()
 
     def generate_usage_report(self):
@@ -497,7 +417,9 @@ class ReportsPage(QWidget):
         start_date, end_date = self.date_range_selector.to_py_dates()
 
         if start_date > end_date:
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            QMessageBox.warning(
+                self, "Invalid Date Range", "Start date cannot be after end date."
+            )
             self.reset_ui()
             return
 
@@ -519,7 +441,7 @@ class ReportsPage(QWidget):
             end_date,
             category_filter=category_filter,
             supplier_filter=supplier_filter,
-            include_consumables=include_consumables
+            include_consumables=include_consumables,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
@@ -531,7 +453,9 @@ class ReportsPage(QWidget):
         start_date, end_date = self.inventory_date_selector.to_py_dates()
 
         if start_date > end_date:
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            QMessageBox.warning(
+                self, "Invalid Date Range", "Start date cannot be after end date."
+            )
             self.reset_ui()
             return
 
@@ -548,24 +472,12 @@ class ReportsPage(QWidget):
             start_date,
             end_date,
             category_filter=category_filter,
-            inventory_report_type=inventory_report_type
+            inventory_report_type=inventory_report_type,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
         self.worker.error.connect(self.on_report_error)
         self.worker.start()
-
-    def generate_requisition_report(self):
-        """Generate requisition report."""
-        # Implementation for requisition reports
-        QMessageBox.information(self, "Coming Soon", "Requisition reports will be implemented in the next update.")
-        self.reset_ui()
-
-    def generate_statistics_report(self):
-        """Generate statistics report."""
-        # Implementation for statistics reports
-        QMessageBox.information(self, "Coming Soon", "Statistics reports will be implemented in the next update.")
-        self.reset_ui()
 
     def update_progress(self, message):
         """Update progress message."""

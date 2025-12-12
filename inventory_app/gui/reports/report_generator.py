@@ -157,7 +157,7 @@ class ReportGenerator:
                 rows and "PERIOD" in rows[0] and "PERIOD_QUANTITY" in rows[0]
             ):
                 # Build pivoted structure keyed by item identity
-                from collections import OrderedDict, defaultdict
+                from collections import OrderedDict
 
                 # Fetch period keys in the same order as the formatter
                 period_keys = date_formatter.get_period_keys(
@@ -601,7 +601,12 @@ class ReportGenerator:
             return ""
 
     def _get_stock_levels_data(self, category_filter: str = "") -> List[Dict]:
-        """Get current stock levels data."""
+        """Get current stock levels data.
+
+        Parameters:
+            category_filter: Optional category filter
+            min_stock: If provided, return only items with current stock < min_stock
+        """
         try:
             query = """
             SELECT
@@ -668,35 +673,18 @@ class ReportGenerator:
             logger.error(f"Failed to get expiration data: {e}")
             return []
 
-    def _get_low_stock_data(self, category_filter: str = "") -> List[Dict]:
-        """Get items with low stock (less than 10 units)."""
+    def _get_low_stock_data(
+        self, category_filter: str = "", threshold: int = 10
+    ) -> List[Dict]:
+        """Get items with low stock (< threshold). Re-uses stock levels query to avoid duplication."""
         try:
-            query = """
-            SELECT
-                i.name AS "Item Name",
-                c.name AS "Category",
-                i.size AS "Size",
-                i.brand AS "Brand",
-                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(SUM(sm.quantity), 0) AS "Current Stock",
-                i.other_specifications AS "Specifications"
-            FROM Items i
-            JOIN Categories c ON c.id = i.category_id
-            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('%s', '%s')
-            """
+            rows = self._get_stock_levels_data(category_filter=category_filter)
+            if not rows:
+                return []
 
-            params = []
-            if category_filter:
-                query += " WHERE c.name = ?"
-                params.append(category_filter)
-
-            query += ' GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications HAVING "Current Stock" < 10 ORDER BY "Current Stock" ASC'
-            query = query % (
-                MovementType.CONSUMPTION.value,
-                MovementType.DISPOSAL.value,
-            )
-
-            return db.execute_query(query, tuple(params)) or []
+            filtered = [r for r in rows if (r.get("Current Stock") or 0) < threshold]
+            filtered = sorted(filtered, key=lambda r: (r.get("Current Stock") or 0))
+            return filtered
 
         except Exception as e:
             logger.error(f"Failed to get low stock data: {e}")

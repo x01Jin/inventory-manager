@@ -2,7 +2,7 @@
 
 Overview
 
-- Reports support Usage, Inventory, and (future) Requisition analytics. Exports are generated as Excel files using `openpyxl`.
+- Reports support Usage and Inventory analytics. Exports are generated as Excel files using `openpyxl`.
 
 Detailed Implementation
 
@@ -37,15 +37,10 @@ Inventory Reports
 - Implemented inventory report types (UI and code):
   - Stock Levels Report — aggregates `Item_Batches` receipts minus `Stock_Movements` consumption/disposal to compute current stock.
   - Expiration Report — items with `expiration_date` within the given range.
-  - Low Stock Alert — items with computed "Current Stock" less than 10 (HAVING clause).
+  - Low Stock Alert — items with computed "Current Stock" less than the configured threshold (default 10). Implemented by reusing the Stock Levels query and applying a Python-filtering step to avoid duplicating SQL.
   - Acquisition History — lists `Item_Batches` `date_received` events in range and supplier info.
   - Calibration Due Report — items with `calibration_date` within the range.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
-
-Statistics and Requisition Reports
-
-- The GUI exposes tabs for Requisition and Statistics reports, but the generator currently returns "not yet implemented" for those report types. The `ReportWorker` and page code provide the UI and placeholders for future implementations.
-- The `ReportGenerator.get_usage_statistics(start_date, end_date)` method uses `ReportStatisticsBuilder` to run smaller statistics queries: total items used, category roll-ups, and top used items. This is used by the UI to quickly show summary information.
 
 Background Processing and UI Integration
 
@@ -61,7 +56,7 @@ Security and SQL Safety
 
 Limitations & Notes
 
-- Requisition and Statistics exports are currently placeholders — selecting them in the UI displays a "Coming Soon" message or returns a not implemented string from the worker.
+- Usage statistics are still available programmatically via `ReportGenerator.get_usage_statistics(start_date, end_date)`.
 - The optimized dynamic query builds one CASE WHEN per period. For very large date ranges and extremely small granularity (e.g., daily over many years), the SQL can be large and slow — the `date_formatter.get_smart_granularity` aims to keep queries performant by automatically selecting a coarser granularity when a wide range is requested.
 - The query builder includes logic to add "excess" ranges (partial weeks/months/quarters) to ensure coverage and correctness for dates that don't start on period boundaries.
 
