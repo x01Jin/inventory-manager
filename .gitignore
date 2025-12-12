@@ -6,6 +6,7 @@ __pycache__/
 plan/
 build/
 dist/
+scripts/
 tests/
 .VSCodeCounter/
 .vscode/

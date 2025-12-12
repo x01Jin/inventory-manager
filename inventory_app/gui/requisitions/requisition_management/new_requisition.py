@@ -19,6 +19,7 @@ from .base_requisition_dialog import BaseRequisitionDialog
 from .requester_selector_widget import RequesterSelectorWidget
 from .activity_details_widget import ActivityDetailsWidget
 from inventory_app.utils.logger import logger
+from inventory_app.services import ValidationService
 
 
 class NewRequisitionDialog(BaseRequisitionDialog):
@@ -160,6 +161,30 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             if activity_date and not is_valid_date_format(activity_date):
                 QMessageBox.warning(
                     self, "Invalid Date", "Please select a valid activity date."
+                )
+                return
+
+            from datetime import date
+
+            # Server-side validation using ValidationService to enforce bounds and types
+            svc = ValidationService()
+            requisition_data = {
+                "date_requested": expected_request.isoformat(),
+                "expected_return": expected_return.isoformat(),
+                "lab_activity_name": activity_name,
+                "lab_activity_date": activity_date or date.today().isoformat(),
+            }
+            items_payload = [
+                {"item_id": item["item_id"], "quantity_requested": item["quantity"]}
+                for item in self.selected_items
+            ]
+            if not svc.validate_requisition_creation(
+                self.selected_requester.id, requisition_data, items_payload
+            ):
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    svc.get_last_error() or "Invalid requisition data",
                 )
                 return
 

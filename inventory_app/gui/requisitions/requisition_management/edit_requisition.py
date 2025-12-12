@@ -277,6 +277,37 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                 activity_name,
             ):
                 return
+            from datetime import date
+
+            # Server-side validation using ValidationService
+            from inventory_app.services import ValidationService
+
+            svc = ValidationService()
+            requisition_data = {
+                "date_requested": expected_request.isoformat()
+                if expected_request
+                else "",
+                "expected_return": expected_return.isoformat()
+                if expected_return
+                else "",
+                "lab_activity_name": activity_name,
+                "lab_activity_date": activity_date or date.today().isoformat(),
+            }
+            items_payload = [
+                {"item_id": item["item_id"], "quantity_requested": item["quantity"]}
+                for item in self.selected_items
+            ]
+            if not svc.validate_requisition_creation(
+                self.selected_requester.id if self.selected_requester else None,
+                requisition_data,
+                items_payload,
+            ):
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    svc.get_last_error() or "Invalid requisition data",
+                )
+                return
 
             # Update requisition
             from datetime import date
