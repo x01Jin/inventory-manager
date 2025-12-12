@@ -4,7 +4,7 @@ Provides centralized logging for dashboard recent activity display.
 """
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 
@@ -28,8 +28,13 @@ class ActivityLogger:
     REPORT_GENERATED = "REPORT_GENERATED"
 
     @staticmethod
-    def log_activity(activity_type: str, description: str, entity_id: Optional[int] = None,
-                    entity_type: Optional[str] = None, user_name: str = "System") -> bool:
+    def log_activity(
+        activity_type: str,
+        description: str,
+        entity_id: Optional[int] = None,
+        entity_type: Optional[str] = None,
+        user_name: str = "System",
+    ) -> bool:
         """
         Log an activity to the database.
 
@@ -50,7 +55,17 @@ class ActivityLogger:
             """
 
             timestamp = datetime.now().isoformat()
-            db.execute_update(query, (activity_type, description, entity_id, entity_type, user_name, timestamp))
+            db.execute_update(
+                query,
+                (
+                    activity_type,
+                    description,
+                    entity_id,
+                    entity_type,
+                    user_name,
+                    timestamp,
+                ),
+            )
 
             logger.debug(f"Logged activity: {activity_type} - {description}")
 
@@ -87,7 +102,7 @@ class ActivityLogger:
 
             for row in rows:
                 # Parse timestamp to datetime object
-                timestamp = row['timestamp']
+                timestamp = row["timestamp"]
                 if timestamp:
                     try:
                         dt = datetime.fromisoformat(timestamp)
@@ -96,13 +111,15 @@ class ActivityLogger:
                 else:
                     dt = None
 
-                activities.append({
-                    'type': row['activity_type'],
-                    'description': row['description'],
-                    'entity_type': row['entity_type'],
-                    'user': row['user_name'] or 'System',
-                    'time': dt
-                })
+                activities.append(
+                    {
+                        "type": row["activity_type"],
+                        "description": row["description"],
+                        "entity_type": row["entity_type"],
+                        "user": row["user_name"] or "System",
+                        "time": dt,
+                    }
+                )
 
             return activities
 
@@ -122,16 +139,17 @@ class ActivityLogger:
             Number of records deleted
         """
         try:
-            query = """
-            DELETE FROM Activity_Log
-            WHERE timestamp < datetime('now', '-{} days')
-            """.format(days_to_keep)
+            # Compute cutoff timestamp in Python to allow parameterized queries
+            cutoff = (datetime.utcnow() - timedelta(days=days_to_keep)).isoformat()
 
             # Get count before deletion
-            count_query = "SELECT COUNT(*) as count FROM Activity_Log WHERE timestamp < datetime('now', '-{} days')".format(days_to_keep)
-            before_count = db.execute_query(count_query)[0]['count']
+            count_query = (
+                "SELECT COUNT(*) as count FROM Activity_Log WHERE timestamp < ?"
+            )
+            before_count = db.execute_query(count_query, (cutoff,))[0]["count"]
 
-            db.execute_update(query)
+            delete_query = "DELETE FROM Activity_Log WHERE timestamp < ?"
+            db.execute_update(delete_query, (cutoff,))
 
             logger.info(f"Cleaned up {before_count} old activity records")
             return before_count
@@ -154,25 +172,30 @@ class ActivityLogger:
         try:
             # First, get the total count
             count_query = "SELECT COUNT(*) as count FROM Activity_Log"
-            total_count = db.execute_query(count_query)[0]['count']
+            total_count = db.execute_query(count_query)[0]["count"]
 
             if total_count <= max_activities:
                 return 0  # No cleanup needed
 
-            # Delete older records beyond the limit
-            delete_query = """
-            DELETE FROM Activity_Log
-            WHERE id NOT IN (
-                SELECT id FROM Activity_Log
-                ORDER BY timestamp DESC
-                LIMIT ?
-            )
-            """
+            # Delete older records beyond the limit in a parameterized, efficient way.
+            # First, fetch the ids to keep (most recent `max_activities` entries).
+            ids_query = "SELECT id FROM Activity_Log ORDER BY timestamp DESC LIMIT ?"
+            ids_rows = db.execute_query(ids_query, (max_activities,))
+            keep_ids = [r["id"] for r in ids_rows]
 
+            # If we couldn't fetch the ids or there is nothing to delete, return 0.
+            if not keep_ids:
+                return 0
+
+            # Build parameter placeholders for the NOT IN clause and pass values as params
+            placeholders = ",".join("?" for _ in keep_ids)
+            delete_query = f"DELETE FROM Activity_Log WHERE id NOT IN ({placeholders})"
             records_to_delete = total_count - max_activities
-            db.execute_update(delete_query, (max_activities,))
+            db.execute_update(delete_query, tuple(keep_ids))
 
-            logger.debug(f"Cleaned up {records_to_delete} old activity records to maintain limit of {max_activities}")
+            logger.debug(
+                f"Cleaned up {records_to_delete} old activity records to maintain limit of {max_activities}"
+            )
             return records_to_delete
 
         except Exception as e:
