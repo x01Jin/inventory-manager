@@ -60,10 +60,10 @@ How to read this document
 - **Deletion logic relies on timing delays (time.sleep)**
   - Description: `Item.delete()` performs a deletion sequence with `time.sleep(0.1)` between deletes to "prevent constraint timing issues" rather than relying on correct FK constraints and transactions.
   - Impact: Fragile; can fail under load/concurrency and indicates schema or transaction design problems.
-  - Evidence: `inventory_app/database/models.py` uses sequential deletes with `time.sleep` [inventory_app/database/models.py](inventory_app/database/models.py#L400-L480)
+  - Evidence: `inventory_app/database/models.py` implements transactional deletes in `Item.delete()` and `Requisition.delete()` instead of timing-based hacks, `inventory_app/database/schema.sql` contains `ON DELETE CASCADE` constraints, and unit tests verify behavior (`tests/test_cascade_deletes.py`, `tests/test_deletion_transactions.py`).
   - Severity: High
   - Remediation: Use `ON DELETE CASCADE` where appropriate or perform deletions within a single transaction and trust FK constraints; remove `sleep()` calls.
-    - Status: **Partially Completed** — `time.sleep()`-based deletion sequences were replaced with transactional deletes in `Item.delete()` and `Requisition.delete()` (where applicable) removing fragile timing hacks. Consider schema-level `ON DELETE CASCADE` and migration tests as further steps.
+    - Status: **Completed** — `time.sleep()`-based deletion sequences were replaced with transactional deletes in `Item.delete()` and `Requisition.delete()` (where applicable), removing fragile timing hacks. Schema-level `ON DELETE CASCADE` constraints were added to dependent tables (e.g., `Item_Batches`, `Stock_Movements`, `Requisition_Items`, `Update_History`, `Requisition_History`, `Disposal_History`) in `inventory_app/database/schema.sql`. Added `idx_movements_source` index for `Stock_Movements(source_id)` and unit/integration tests verifying cascade delete behavior and transactional rollback (`tests/test_cascade_deletes.py`, `tests/test_deletion_transactions.py`).
 
 ---
 
@@ -142,7 +142,7 @@ these are actual reasonable problems for this system but are not really a proble
 3. Add concurrency controls to stock reservation flow (Critical) — Completed: `ItemSelectionManager.create_stock_movements_for_requisition()` now re-checks availability inside an IMMEDIATE transaction and rejects insufficient requests.
 4. Parameterize queries and remove direct SQL interpolation (High) — Completed: Major query builders have been refactored to use parameterized queries and validated dynamic columns.
 5. Standardize and enforce movement type enum in schema and code (High) — Completed: `MovementType` enum added and a `CHECK` constraint enforces allowed values in `Stock_Movements`.
-6. Replace deletion `sleep()` hacks with transactional deletes and/or `ON DELETE CASCADE` (High) — Partially Completed: Time-based delays removed in favor of transactions; consider adding migration tests for schema-level cascade rules where not yet applied.
+6. Replace deletion `sleep()` hacks with transactional deletes and/or `ON DELETE CASCADE` (High) — Completed: Removed time-based delays in deletion flows in favor of transactional deletes and added schema-level `ON DELETE CASCADE` constraints for dependent tables; added unit/integration tests for cascade behavior and transactional rollback.
 7. Add authentication and audited user identity (High) — Not implemented: remains a recommended next step.
 8. Add tests for critical flows and add missing DB indexes where needed (Medium) — Completed/On-going: Tests added for transactions, concurrency, and movement types; `idx_movements_source` and `idx_movements_item_date` added to support lookups.
 
