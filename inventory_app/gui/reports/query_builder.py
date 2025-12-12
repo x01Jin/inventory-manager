@@ -298,7 +298,16 @@ class ReportQueryBuilder:
                     return quarter_start.isoformat(), quarter_end.isoformat()
 
             elif granularity in ["yearly", "multi_year"]:
-                # Year: '2023'
+                # Year: handle both full-year labels and partial ranges
+                if "to" in period_key:
+                    start_str, end_str = period_key.split("to")
+                    start_date = date.fromisoformat(start_str)
+                    end_date = date.fromisoformat(end_str)
+                    return start_date.isoformat(), (
+                        end_date + timedelta(days=1)
+                    ).isoformat()
+
+                # Full year: '2023'
                 year = int(period_key)
                 year_start = date(year, 1, 1)
                 year_end = date(year + 1, 1, 1)

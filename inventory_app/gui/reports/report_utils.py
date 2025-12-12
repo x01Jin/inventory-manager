@@ -127,11 +127,35 @@ class ReportDateFormatter:
             )
 
         elif granularity in ["yearly", "multi_year"]:
-            # Yearly: Just include the years
-            current_year = start_date.year
-            while current_year <= end_date.year:
+            # Yearly: Include partial start/year and full years in the middle and partial end
+            # If entirely within one year, return a single partial year range
+            if start_date.year == end_date.year:
+                period_keys.append(
+                    f"{start_date.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
+                )
+                return period_keys
+
+            # If start is mid-year, add partial start year (start_date -> end_of_year)
+            if not (start_date.month == 1 and start_date.day == 1):
+                end_of_start_year = date(start_date.year, 12, 31)
+                period_keys.append(
+                    f"{start_date.strftime('%Y-%m-%d')}to{end_of_start_year.strftime('%Y-%m-%d')}"
+                )
+
+            # Add full years
+            current_year = start_date.year + (
+                0 if start_date.month == 1 and start_date.day == 1 else 1
+            )
+            while current_year <= end_date.year - 1:
                 period_keys.append(str(current_year))
                 current_year += 1
+
+            # If end is mid-year, add a partial end-year after the loop
+            if not (end_date.month == 12 and end_date.day == 31):
+                start_of_end_year = date(end_date.year, 1, 1)
+                period_keys.append(
+                    f"{start_of_end_year.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
+                )
 
         return period_keys
 
@@ -139,24 +163,25 @@ class ReportDateFormatter:
     def _get_weekly_period_keys(start_date: date, end_date: date) -> List[str]:
         """Generate weekly period keys with excess handling."""
         period_keys = []
+        # Find the Monday on or before start_date
+        first_monday = start_date - timedelta(days=start_date.weekday())
 
-        # Find the first Monday on or before start_date
-        first_monday = start_date - timedelta(days=(start_date.weekday() - 0) % 7)
-        if first_monday < start_date:
-            # Add excess days before first Monday
+        # If range starts mid-week (not Monday), create a first partial range from start_date to that week's Sunday
+        if start_date.weekday() != 0:
             excess_start = start_date
-            excess_end = first_monday + timedelta(days=6)  # Sunday before first Monday
+            excess_end = first_monday + timedelta(days=6)
             if excess_start <= excess_end:
                 period_keys.append(
                     f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
                 )
-
-        # Add main weeks (Monday to Sunday)
-        current_monday = first_monday
+            # Start main weeks from the Monday after that week to avoid duplication
+            current_monday = first_monday + timedelta(days=7)
+        else:
+            current_monday = first_monday
         while current_monday <= end_date:
             week_sunday = current_monday + timedelta(days=6)
-            if current_monday >= start_date or week_sunday >= start_date:
-                # Only include weeks that have days in our range
+            if week_sunday <= end_date:
+                # Full week included within the range: add a week label
                 week_year = current_monday.year
                 week_month = current_monday.month
                 # Calculate week number within month
@@ -170,14 +195,18 @@ class ReportDateFormatter:
 
                 week_num = ((current_monday - first_monday_of_month).days // 7) + 1
                 period_keys.append(f"{week_year}-{week_month:02d}-W{week_num}")
+                current_monday += timedelta(days=7)
+                continue
 
-            current_monday += timedelta(days=7)
+            # If the week spans beyond end_date, add a tail partial and exit
+            if current_monday <= end_date:
+                period_keys.append(
+                    f"{current_monday.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
+                )
+            break
 
-        # Add excess days after last Sunday
-        # Find the last Sunday that was actually processed in the loop
-        last_sunday = current_monday - timedelta(
-            days=8
-        )  # Go back to the last processed Sunday
+        # Add excess days after last processed Sunday (if any)
+        last_sunday = current_monday - timedelta(days=1)
         if last_sunday < end_date:
             excess_start = last_sunday + timedelta(days=1)
             excess_end = end_date
@@ -239,21 +268,40 @@ class ReportDateFormatter:
     def _get_quarterly_period_keys(start_date: date, end_date: date) -> List[str]:
         """Generate quarterly period keys with excess handling."""
         period_keys = []
-
         # Find quarter start
         quarter_start_month = ((start_date.month - 1) // 3) * 3 + 1
         quarter_start = start_date.replace(month=quarter_start_month, day=1)
 
-        # Add excess days before quarter start
-        if start_date > quarter_start:
-            excess_start = quarter_start
-            excess_end = start_date - timedelta(days=1)
+        # If the whole range is within the same quarter, return a single partial range
+        quarter_end_month = quarter_start_month + 2
+        if quarter_end_month > 12:
+            quarter_end = date(quarter_start.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            quarter_end = date(
+                quarter_start.year, quarter_end_month + 1, 1
+            ) - timedelta(days=1)
+        if start_date >= quarter_start and end_date <= quarter_end:
             period_keys.append(
-                f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
+                f"{start_date.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
             )
+            return period_keys
 
-        # Add main quarters only when the full quarter is within the range.
-        current_quarter_start = quarter_start
+        # If range starts mid-quarter, add the first partial (start_date -> end_of_quarter)
+        if start_date > quarter_start:
+            period_keys.append(
+                f"{start_date.strftime('%Y-%m-%d')}to{quarter_end.strftime('%Y-%m-%d')}"
+            )
+            # Start main quarters from the next quarter
+            # Determine next quarter start
+            next_month = quarter_start.month + 3
+            if next_month > 12:
+                current_quarter_start = quarter_start.replace(
+                    year=quarter_start.year + 1, month=1, day=1
+                )
+            else:
+                current_quarter_start = quarter_start.replace(month=next_month, day=1)
+        else:
+            current_quarter_start = quarter_start
         while current_quarter_start <= end_date:
             # Determine next quarter start and current quarter end
             next_month = current_quarter_start.month + 3
@@ -288,15 +336,7 @@ class ReportDateFormatter:
             # We've handled the tail, so exit the loop
             break
 
-        # Add excess days after quarter end
-        quarter_end = current_quarter_start - timedelta(days=1)
-        if quarter_end < end_date:
-            excess_start = quarter_end + timedelta(days=1)
-            excess_end = end_date
-            if excess_start <= excess_end:
-                period_keys.append(
-                    f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
-                )
+        # No extra tail handling needed because the loop covers partial quarters
 
         return list(dict.fromkeys(period_keys))  # Remove duplicates
 
