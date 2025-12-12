@@ -207,6 +207,22 @@ CREATE TABLE Activity_Log (
 CREATE INDEX idx_activity_timestamp ON Activity_Log(timestamp DESC);
 CREATE INDEX idx_activity_type ON Activity_Log(activity_type);
 
+-- Triggers to automatically enforce activity log retention policies
+-- 1) Remove activities older than 90 days on insert
+CREATE TRIGGER IF NOT EXISTS trg_activity_log_cleanup_after_insert
+AFTER INSERT ON Activity_Log
+BEGIN
+    DELETE FROM Activity_Log WHERE timestamp < datetime('now', '-90 days');
+END;
+
+-- 2) Maintain a maximum of 20 recent activities by deleting older ones on insert
+CREATE TRIGGER IF NOT EXISTS trg_activity_log_maintain_limit_after_insert
+AFTER INSERT ON Activity_Log
+WHEN (SELECT COUNT(*) FROM Activity_Log) > 20
+BEGIN
+    DELETE FROM Activity_Log WHERE id NOT IN (SELECT id FROM Activity_Log ORDER BY timestamp DESC LIMIT 20);
+END;
+
 -- VIEWS FOR REPORTS AND ALERTS
 
 -- Item_Start_Dates View: Helper for alerts
