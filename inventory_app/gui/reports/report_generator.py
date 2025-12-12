@@ -600,6 +600,64 @@ class ReportGenerator:
             logger.error(f"Failed to generate {report_type} report: {e}")
             return ""
 
+    def generate_trends_report(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str = "monthly",
+        group_by: str = "item",
+        top_n: Optional[int] = None,
+        include_consumables: bool = True,
+        output_path: Optional[str] = None,
+    ) -> str:
+        """
+        Generate a trends report (time-series) grouped by item or category.
+
+        Args:
+            start_date, end_date: Date range
+            granularity: daily/weekly/monthly/quarterly
+            group_by: 'item' or 'category'
+            top_n: Limit to top N rows by total quantity (None for all)
+            include_consumables: whether to include consumable items
+            output_path: optional output path
+
+        Returns:
+            Path to generated Excel file or error string
+        """
+        try:
+            logger.info(f"Generating trends report from {start_date} to {end_date}")
+
+            report_data = self._get_trends_data(
+                start_date,
+                end_date,
+                granularity,
+                group_by=group_by,
+                top_n=top_n,
+                include_consumables=include_consumables,
+            )
+
+            if not report_data:
+                logger.warning("No data found for trends report")
+                return "Failed to generate trends report\nReason: No data found"
+
+            # Create Excel file
+            if not output_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = f"trends_report_{group_by}_{timestamp}.xlsx"
+
+            output_path_obj = Path(output_path)
+            title = f"Trends Report - {group_by.title()}"
+            self._create_excel_report(
+                report_data, output_path_obj, title, start_date, end_date
+            )
+
+            logger.info(f"Trends report generated: {output_path}")
+            return str(output_path)
+
+        except Exception as e:
+            logger.error(f"Failed to generate trends report: {e}")
+            return ""
+
     def _get_stock_levels_data(self, category_filter: str = "") -> List[Dict]:
         """Get current stock levels data.
 
@@ -637,6 +695,89 @@ class ReportGenerator:
 
         except Exception as e:
             logger.error(f"Failed to get stock levels data: {e}")
+            return []
+
+    def _get_trends_data(
+        self,
+        start_date: date,
+        end_date: date,
+        granularity: str = "monthly",
+        group_by: str = "item",
+        top_n: Optional[int] = None,
+        include_consumables: bool = True,
+        category_filter: str = "",
+    ) -> List[Dict]:
+        """Return time-series pivot data for trends reports.
+
+        The method leverages existing dynamic report pivoting and then optionally
+        aggregates by category and applies top-N filtering.
+        """
+        try:
+            # Reuse dynamic report query path to perform pivoting
+            rows = self._get_dynamic_report_data(
+                start_date,
+                end_date,
+                granularity,
+                grade_filter="",
+                section_filter="",
+                include_consumables=include_consumables,
+            )
+
+            if not rows:
+                return []
+
+            # If grouping by category, aggregate rows by 'CATEGORIES'
+            period_keys = [
+                k
+                for k in rows[0].keys()
+                if k
+                not in {
+                    "ITEMS",
+                    "CATEGORIES",
+                    "ACTUAL_INVENTORY",
+                    "SIZE",
+                    "BRAND",
+                    "OTHER SPECIFICATIONS",
+                    "TOTAL QUANTITY",
+                }
+            ]
+
+            if group_by == "category":
+                from collections import OrderedDict
+
+                grouped = OrderedDict()
+                for r in rows:
+                    key = r.get("CATEGORIES")
+                    if key is None:
+                        key = "<Uncategorized>"
+                    if key not in grouped:
+                        base = {"CATEGORIES": key}
+                        for k in period_keys:
+                            base[k] = 0
+                        base["TOTAL QUANTITY"] = 0
+                        grouped[key] = base
+                    # Sum across period columns
+                    for k in period_keys:
+                        grouped[key][k] += r.get(k, 0) or 0
+                    grouped[key]["TOTAL QUANTITY"] += r.get("TOTAL QUANTITY", 0) or 0
+
+                result_rows = list(grouped.values())
+            else:
+                # Group by item: ensure ordering and top_n
+                result_rows = rows
+
+            # Sort by total quantity descending
+            result_rows = sorted(
+                result_rows, key=lambda r: (r.get("TOTAL QUANTITY") or 0), reverse=True
+            )
+
+            if top_n and isinstance(top_n, int):
+                result_rows = result_rows[:top_n]
+
+            return result_rows
+
+        except Exception as e:
+            logger.error(f"Failed to get trends data: {e}")
             return []
 
     def _get_expiration_data(

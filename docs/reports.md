@@ -95,6 +95,7 @@ Common Reports
 - Low Stock Alerts
 - Acquisition History
 - Calibration Due
+- Trends (grouping by item or category; time-series heatmap/top-N)
 
 References
 

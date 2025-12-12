@@ -28,6 +28,10 @@ class ReportWorker(QThread):
         self.inventory_report_type = kwargs.get(
             "inventory_report_type", "Stock Levels Report"
         )
+        # Trends report params
+        self.granularity = kwargs.get("granularity", "monthly")
+        self.group_by = kwargs.get("group_by", "item")
+        self.top_n = kwargs.get("top_n", None)
 
     def run(self):
         """Generate the dynamic report in background thread."""
@@ -39,6 +43,8 @@ class ReportWorker(QThread):
                 file_path = self._generate_usage_report()
             elif self.report_type == "inventory":
                 file_path = self._generate_inventory_report()
+            elif self.report_type == "trends":
+                file_path = self._generate_trends_report()
             else:
                 file_path = f"Unknown report type: {self.report_type}"
 
@@ -76,3 +82,21 @@ class ReportWorker(QThread):
             self.end_date,
             category_filter=self.category_filter,
         )
+
+    def _generate_trends_report(self):
+        """Generate trends report using ReportGenerator."""
+        granularity = getattr(self, "granularity", "monthly")
+        group_by = getattr(self, "group_by", "item")
+        top_n = getattr(self, "top_n", None)
+        include_consumables = getattr(self, "include_consumables", True)
+
+        return report_generator.generate_trends_report(
+            self.start_date,
+            self.end_date,
+            granularity=granularity,
+            group_by=group_by,
+            top_n=top_n,
+            include_consumables=include_consumables,
+        )
+
+    # end of class

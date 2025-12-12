@@ -113,6 +113,10 @@ class ReportsPage(QWidget):
         inventory_tab = self.create_inventory_tab()
         self.tab_widget.addTab(inventory_tab, "📦 Inventory Reports")
 
+        # Trends Reports Tab
+        trends_tab = self.create_trends_tab()
+        self.tab_widget.addTab(trends_tab, "📉 Trends Reports")
+
         config_layout.addWidget(self.tab_widget)
 
         # Generate Button
@@ -253,6 +257,54 @@ class ReportsPage(QWidget):
         layout.addStretch()
         return tab
 
+    def create_trends_tab(self) -> QWidget:
+        """Create the trends reports configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Date Range
+        date_group = QGroupBox("📅 Date Range")
+        date_layout = QVBoxLayout(date_group)
+        self.trends_date_selector = DateRangeSelector()
+        date_layout.addWidget(self.trends_date_selector)
+        layout.addWidget(date_group)
+
+        # Granularity
+        gran_group = QGroupBox("📈 Granularity")
+        gran_layout = QHBoxLayout(gran_group)
+        self.trends_granularity = QComboBox()
+        self.trends_granularity.addItems(["Daily", "Weekly", "Monthly", "Quarterly"])
+        gran_layout.addWidget(self.trends_granularity)
+        layout.addWidget(gran_group)
+
+        # Group By and Top N
+        options_group = QGroupBox("⚙️ Options")
+        options_layout = QVBoxLayout(options_group)
+
+        group_layout = QHBoxLayout()
+        group_layout.addWidget(QLabel("Group By:"))
+        self.trends_group_by = QComboBox()
+        self.trends_group_by.addItems(["Item", "Category"])
+        group_layout.addWidget(self.trends_group_by)
+        options_layout.addLayout(group_layout)
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(QLabel("Top Items:"))
+        self.trends_top_combo = QComboBox()
+        self.trends_top_combo.addItems(["Top 10", "Top 20", "Top 50", "All"])
+        top_layout.addWidget(self.trends_top_combo)
+        options_layout.addLayout(top_layout)
+
+        # Consumable filter
+        self.trends_include_consumables = QCheckBox("Include consumable items")
+        self.trends_include_consumables.setChecked(True)
+        options_layout.addWidget(self.trends_include_consumables)
+
+        layout.addWidget(options_group)
+
+        layout.addStretch()
+        return tab
+
     def create_status_panel(self) -> QWidget:
         """Create the status and results panel."""
         status_widget = QWidget()
@@ -325,7 +377,7 @@ class ReportsPage(QWidget):
 
     def on_report_type_changed(self, index):
         """Handle report type tab changes."""
-        report_types = ["usage", "inventory"]
+        report_types = ["usage", "inventory", "trends"]
         self.current_report_type = report_types[index]
 
     def on_preset_changed(self, preset):
@@ -399,6 +451,8 @@ class ReportsPage(QWidget):
                 self.generate_usage_report()
             elif self.current_report_type == "inventory":
                 self.generate_inventory_report()
+            elif self.current_report_type == "trends":
+                self.generate_trends_report()
             else:
                 QMessageBox.critical(
                     self, "Error", f"Unknown report type: {self.current_report_type}"
@@ -473,6 +527,47 @@ class ReportsPage(QWidget):
             end_date,
             category_filter=category_filter,
             inventory_report_type=inventory_report_type,
+        )
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_report_finished)
+        self.worker.error.connect(self.on_report_error)
+        self.worker.start()
+
+    def generate_trends_report(self):
+        """Generate trends report based on current selection."""
+        start_date, end_date = self.trends_date_selector.to_py_dates()
+
+        if start_date > end_date:
+            QMessageBox.warning(
+                self, "Invalid Date Range", "Start date cannot be after end date."
+            )
+            self.reset_ui()
+            return
+
+        group_by = self.trends_group_by.currentText()
+        group_by_key = "item" if group_by == "Item" else "category"
+
+        top_text = self.trends_top_combo.currentText()
+        top_n = None
+        if top_text.startswith("Top"):
+            try:
+                top_n = int(top_text.split()[1])
+            except Exception:
+                top_n = None
+
+        include_consumables = self.trends_include_consumables.isChecked()
+
+        gran_text = self.trends_granularity.currentText().lower()
+
+        # Start background worker
+        self.worker = ReportWorker(
+            "trends",
+            start_date,
+            end_date,
+            granularity=gran_text,
+            group_by=group_by_key,
+            top_n=top_n,
+            include_consumables=include_consumables,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
