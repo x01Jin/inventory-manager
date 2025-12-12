@@ -23,6 +23,10 @@ class ReportQueryBuilder:
             "brand AS BRAND",
             'other_specifications AS "OTHER SPECIFICATIONS"',
         ]
+        # Maximum number of period columns before falling back to normalized query
+        self.MAX_PERIOD_COLUMNS = 60
+        # Reset after building each query; indicates if build used normalized fallback
+        self.normalized_fallback = False
 
     def build_dynamic_report_query(
         self,
@@ -76,6 +80,8 @@ class ReportQueryBuilder:
     ) -> Tuple[str, list]:
         """Build optimized single query without CTEs for better performance."""
         try:
+            # Reset fallback mode for each query
+            self.normalized_fallback = False
             # Base query with direct JOINs instead of CTEs
             query = """
             SELECT
@@ -87,10 +93,14 @@ class ReportQueryBuilder:
                 i.other_specifications AS "OTHER SPECIFICATIONS"
             """
 
-            # Add dynamic period columns (now returns SQL and params)
-            period_columns_sql, period_params = self._build_optimized_period_columns(
-                start_date, end_date, granularity
+            # Add dynamic period columns (now returns SQL, params, flag, and optional CTE SQL)
+            period_columns_sql, period_params, is_normalized, periods_cte = (
+                self._build_optimized_period_columns(start_date, end_date, granularity)
             )
+            if is_normalized:
+                # Prepend CTE for normalized periods
+                if periods_cte:
+                    query = periods_cte + "\n" + query
             if period_columns_sql:
                 query += "," + period_columns_sql
 
@@ -114,6 +124,9 @@ class ReportQueryBuilder:
                 GROUP BY ib.item_id
             ) stock ON i.id = stock.item_id
             """
+            # If normalized, CROSS JOIN the periods CTE so each item/period row is produced
+            if is_normalized:
+                query += "\nCROSS JOIN periods p\n"
 
             # WHERE clause with filters. Use half-open range to avoid string
             # comparison issues when datetimes are stored as ISO timestamps.
@@ -129,10 +142,13 @@ class ReportQueryBuilder:
                 query += " AND i.is_consumable = 0"
 
             # GROUP BY clause
-            query += """
-            GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications
-            ORDER BY c.name, i.name
-            """
+            group_by_columns = (
+                "i.id, i.name, c.name, i.size, i.brand, i.other_specifications"
+            )
+            if is_normalized:
+                group_by_columns += ", p.period_key"
+
+            query += f"\nGROUP BY {group_by_columns}\nORDER BY c.name, i.name\n"
 
             # Build params in stable order: period ranges, global date bounds, then filters
             # This ordering matches placeholders in the SQL where period scoped
@@ -146,13 +162,22 @@ class ReportQueryBuilder:
             from datetime import timedelta
 
             if period_params:
-                # Extract ISO strings from the period param pairs
-                period_starts = [
-                    period_params[i] for i in range(0, len(period_params), 2)
-                ]
-                period_ends = [
-                    period_params[i] for i in range(1, len(period_params), 2)
-                ]
+                # Extract ISO strings from the period param pairs or triples
+                if is_normalized:
+                    # params are [key, start, end, key, start, end, ...]
+                    period_starts = [
+                        period_params[i] for i in range(1, len(period_params), 3)
+                    ]
+                    period_ends = [
+                        period_params[i] for i in range(2, len(period_params), 3)
+                    ]
+                else:
+                    period_starts = [
+                        period_params[i] for i in range(0, len(period_params), 2)
+                    ]
+                    period_ends = [
+                        period_params[i] for i in range(1, len(period_params), 2)
+                    ]
                 params.append(min(period_starts))
                 params.append(max(period_ends))
             else:
@@ -171,7 +196,7 @@ class ReportQueryBuilder:
 
     def _build_optimized_period_columns(
         self, start_date: date, end_date: date, granularity: str
-    ) -> Tuple[str, list]:
+    ) -> Tuple[str, list, bool, str]:
         """Build optimized period columns using correct logic from report_utils."""
         try:
             # Use the correct period generation from report_utils
@@ -180,7 +205,44 @@ class ReportQueryBuilder:
             )
 
             if not period_keys:
-                return "", []
+                return "", [], False, ""
+
+            # If period count is too large, fall back to a normalized query
+            # that returns rows for (item, period_key, value) instead of
+            # producing wide pivot columns.
+            if len(period_keys) > self.MAX_PERIOD_COLUMNS:
+                self.normalized_fallback = True
+                # Build a CTE with period values: (period_key, start, end)
+                values_sql = ", ".join(["(?, ?, ?)" for _ in period_keys])
+                cte_sql = (
+                    f"WITH periods(period_key, start, end) AS (VALUES {values_sql})"
+                )
+                # Select p.period_key as PERIOD and a parameterized CASE that
+                # aggregates values for each period via CROSS JOIN
+                # Instead of returning a full SELECT snippet here, we provide
+                # the normalized SELECT fragment for use in the caller.
+                normalized_select = (
+                    'p.period_key AS "PERIOD", '
+                    "SUM(CASE WHEN r.expected_request >= p.start "
+                    "AND r.expected_request < p.end THEN ri.quantity_requested ELSE 0 END) "
+                    'AS "PERIOD_QUANTITY"'
+                )
+
+                params: list = []
+                for k in period_keys:
+                    # Validate and build param tuple (key, start, end)
+                    import re
+
+                    if not re.match(r"^[0-9A-Za-z\-]+(?:to[0-9A-Za-z\-]+)?$", k):
+                        logger.warning(f"Skipping invalid period key: {k}")
+                        continue
+                    # compute start/end for the period
+                    pstart, pend = self._parse_period_key_to_dates(
+                        k, start_date, end_date, granularity
+                    )
+                    params.extend([k, pstart, pend])
+
+                return normalized_select, params, True, cte_sql
 
             column_parts = []
             params: list = []
@@ -205,11 +267,11 @@ class ReportQueryBuilder:
                 )
                 params.extend([period_start, period_end])
 
-            return ",".join(column_parts), params
+            return ",".join(column_parts), params, False, ""
 
         except Exception as e:
             logger.error(f"Failed to build optimized period columns: {e}")
-            return "", []
+            return "", [], False, ""
 
     def _parse_period_key_to_dates(
         self, period_key: str, report_start: date, report_end: date, granularity: str

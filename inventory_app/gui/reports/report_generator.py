@@ -146,8 +146,67 @@ class ReportGenerator:
                 include_consumables,
             )
 
-            # Execute query and return results
-            return query_builder.execute_report_query(query, params)
+            # Execute query and process results; pivot if normalized fallback was used
+            rows = query_builder.execute_report_query(query, params)
+            if not rows:
+                return []
+
+            # If query builder used normalized fallback, rows will include
+            # PERIOD and PERIOD_QUANTITY columns that we need to pivot
+            if query_builder.normalized_fallback or (
+                rows and "PERIOD" in rows[0] and "PERIOD_QUANTITY" in rows[0]
+            ):
+                # Build pivoted structure keyed by item identity
+                from collections import OrderedDict, defaultdict
+
+                # Fetch period keys in the same order as the formatter
+                period_keys = date_formatter.get_period_keys(
+                    start_date, end_date, granularity
+                )
+                pivoted = OrderedDict()
+                for row in rows:
+                    # Build a stable item key from the fixed columns
+                    item_key = (
+                        row.get("ITEMS"),
+                        row.get("CATEGORIES"),
+                        row.get("ACTUAL_INVENTORY"),
+                        row.get("SIZE"),
+                        row.get("BRAND"),
+                        row.get("OTHER SPECIFICATIONS"),
+                    )
+                    if item_key not in pivoted:
+                        # Initialize base structure with zeros for all periods
+                        base = {
+                            "ITEMS": item_key[0],
+                            "CATEGORIES": item_key[1],
+                            "ACTUAL_INVENTORY": item_key[2],
+                            "SIZE": item_key[3],
+                            "BRAND": item_key[4],
+                            "OTHER SPECIFICATIONS": item_key[5],
+                        }
+                        for k in period_keys:
+                            base[k] = 0
+                        pivoted[item_key] = base
+
+                    # Map period_quantity into the pivot map
+                    pkey = row.get("PERIOD")
+                    qty = row.get("PERIOD_QUANTITY") or 0
+                    if pkey in pivoted[item_key]:
+                        pivoted[item_key][pkey] += qty
+                    else:
+                        pivoted[item_key][pkey] = qty
+
+                # Convert pivoted OrderedDict values into a list and compute total quantity
+                result_rows = []
+                for base in pivoted.values():
+                    total = 0
+                    for k in period_keys:
+                        total += base.get(k, 0) or 0
+                    base["TOTAL QUANTITY"] = total
+                    result_rows.append(base)
+                return result_rows
+
+            return rows
 
         except Exception as e:
             logger.error(f"Failed to get dynamic report data: {e}")
