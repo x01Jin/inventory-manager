@@ -40,8 +40,12 @@ class DarkTheme:
         palette.setColor(QPalette.ColorRole.Window, QColor(DarkTheme.PRIMARY_DARK))
         palette.setColor(QPalette.ColorRole.WindowText, QColor(DarkTheme.TEXT_PRIMARY))
         palette.setColor(QPalette.ColorRole.Base, QColor(DarkTheme.SECONDARY_DARK))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(DarkTheme.PRIMARY_DARK))
-        palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(DarkTheme.SECONDARY_DARK))
+        palette.setColor(
+            QPalette.ColorRole.AlternateBase, QColor(DarkTheme.PRIMARY_DARK)
+        )
+        palette.setColor(
+            QPalette.ColorRole.ToolTipBase, QColor(DarkTheme.SECONDARY_DARK)
+        )
         palette.setColor(QPalette.ColorRole.ToolTipText, QColor(DarkTheme.TEXT_PRIMARY))
 
         # Text colors
@@ -50,7 +54,9 @@ class DarkTheme:
         palette.setColor(QPalette.ColorRole.ButtonText, QColor(DarkTheme.TEXT_PRIMARY))
         palette.setColor(QPalette.ColorRole.Link, QColor(DarkTheme.ACCENT_COLOR))
         palette.setColor(QPalette.ColorRole.Highlight, QColor(DarkTheme.ACCENT_COLOR))
-        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(DarkTheme.TEXT_PRIMARY))
+        palette.setColor(
+            QPalette.ColorRole.HighlightedText, QColor(DarkTheme.TEXT_PRIMARY)
+        )
 
         # Button colors
         palette.setColor(QPalette.ColorRole.Button, QColor(DarkTheme.SECONDARY_DARK))
@@ -538,7 +544,7 @@ class DarkTheme:
             }}
 
             QComboBox::down-arrow {{
-                image: url();
+                image: none;
                 width: 0px;
                 height: 0px;
             }}
