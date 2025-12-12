@@ -6,7 +6,9 @@ Uses centralized date utilities from inventory_app.utils.date_utils.
 from datetime import date, timedelta
 from typing import List
 from inventory_app.utils.date_utils import (
-    format_date_long, get_month_name, get_day_name
+    format_date_long,
+    get_month_name,
+    get_day_name,
 )
 
 
@@ -83,7 +85,9 @@ class ReportDateFormatter:
             return date_obj.strftime("%Y-%m-%d")
 
     @staticmethod
-    def get_period_keys(start_date: date, end_date: date, granularity: str) -> List[str]:
+    def get_period_keys(
+        start_date: date, end_date: date, granularity: str
+    ) -> List[str]:
         """
         Generate comprehensive period keys including excess periods for complete data coverage.
 
@@ -238,20 +242,41 @@ class ReportDateFormatter:
                 f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
             )
 
-        # Add main quarters
+        # Add main quarters only when the full quarter is within the range.
         current_quarter_start = quarter_start
         while current_quarter_start <= end_date:
-            quarter = ((current_quarter_start.month - 1) // 3) + 1
-            period_keys.append(f"{current_quarter_start.year}-Q{quarter}")
-
-            # Move to next quarter
+            # Determine next quarter start and current quarter end
             next_month = current_quarter_start.month + 3
             if next_month > 12:
-                current_quarter_start = current_quarter_start.replace(
-                    year=current_quarter_start.year + 1, month=1
+                next_quarter_start = current_quarter_start.replace(
+                    year=current_quarter_start.year + 1, month=1, day=1
                 )
             else:
-                current_quarter_start = current_quarter_start.replace(month=next_month)
+                next_quarter_start = current_quarter_start.replace(
+                    month=next_month, day=1
+                )
+
+            quarter_end = next_quarter_start - timedelta(days=1)
+
+            # If the full quarter ends within the requested range, add as main quarter
+            if quarter_end <= end_date:
+                quarter = ((current_quarter_start.month - 1) // 3) + 1
+                period_keys.append(f"{current_quarter_start.year}-Q{quarter}")
+                # Move to next quarter
+                current_quarter_start = next_quarter_start
+                continue
+
+            # If we reach here, the current quarter is partial at the end of the range.
+            # Add the partial (post-excess) range from the quarter start to the report end.
+            if current_quarter_start <= end_date:
+                excess_start = current_quarter_start
+                excess_end = end_date
+                if excess_start <= excess_end:
+                    period_keys.append(
+                        f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
+                    )
+            # We've handled the tail, so exit the loop
+            break
 
         # Add excess days after quarter end
         quarter_end = current_quarter_start - timedelta(days=1)

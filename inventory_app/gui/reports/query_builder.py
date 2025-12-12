@@ -140,11 +140,24 @@ class ReportQueryBuilder:
             params: List[Any] = []
             params.extend(period_params)
 
-            # Convert global date bounds to half-open range: [start_date, end_date + 1 day)
+            # Convert global date bounds to half-open range. When period ranges exist,
+            # pick the min start and max end across generated period params to ensure
+            # the global WHERE covers all period columns (including excess ranges).
             from datetime import timedelta
 
-            params.append(start_date.isoformat())
-            params.append((end_date + timedelta(days=1)).isoformat())
+            if period_params:
+                # Extract ISO strings from the period param pairs
+                period_starts = [
+                    period_params[i] for i in range(0, len(period_params), 2)
+                ]
+                period_ends = [
+                    period_params[i] for i in range(1, len(period_params), 2)
+                ]
+                params.append(min(period_starts))
+                params.append(max(period_ends))
+            else:
+                params.append(start_date.isoformat())
+                params.append((end_date + timedelta(days=1)).isoformat())
             if grade_filter:
                 params.append(grade_filter)
             if section_filter:
