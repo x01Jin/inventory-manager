@@ -290,7 +290,9 @@ class ReportsPage(QWidget):
         gran_group = QGroupBox("📈 Granularity")
         gran_layout = QHBoxLayout(gran_group)
         self.trends_granularity = QComboBox()
-        self.trends_granularity.addItems(["Daily", "Weekly", "Monthly", "Quarterly"])
+        self.trends_granularity.addItems(
+            ["Auto", "Daily", "Weekly", "Monthly", "Quarterly"]
+        )
         from inventory_app.gui.reports.report_config import ReportConfig
 
         self.trends_granularity.setToolTip(ReportConfig.GRANULARITY_TOOLTIP)
@@ -579,13 +581,14 @@ class ReportsPage(QWidget):
         include_consumables = self.trends_include_consumables.isChecked()
 
         gran_text = self.trends_granularity.currentText().lower()
+        granularity = None if gran_text == "auto" else gran_text
 
         # Start background worker
         self.worker = ReportWorker(
             "trends",
             start_date,
             end_date,
-            granularity=gran_text,
+            granularity=granularity,
             group_by=group_by_key,
             top_n=top_n,
             include_consumables=include_consumables,

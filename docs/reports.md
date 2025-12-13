@@ -15,7 +15,7 @@ Detailed Implementation
   - `data_sources` (inventory_app/gui/reports/data_sources.py): Programmatic data retrieval and pivoting. Primary functions:
     - `get_dynamic_report_data(start_date, end_date, granularity, category_filter='', supplier_filter='', include_consumables=True) -> List[Dict]`
     - `get_stock_levels_data(category_filter='') -> List[Dict]`
-    - `get_trends_data(start_date, end_date, granularity='monthly', group_by='item', top_n=None, include_consumables=True, category_filter='') -> List[Dict]`
+    - `get_trends_data(start_date, end_date, granularity=None|'auto', group_by='item', top_n=None, include_consumables=True, category_filter='') -> List[Dict]` — `granularity` defaults to `None` (Auto) and will use the smart granularity computed from the date range when unset.
     - `get_expiration_data(start_date, end_date, category_filter='') -> List[Dict]`
     - `get_low_stock_data(category_filter='', threshold=10) -> List[Dict]`
     - `get_acquisition_history_data(start_date, end_date, category_filter='') -> List[Dict]`
@@ -23,6 +23,7 @@ Detailed Implementation
   - `header_utils` (inventory_app/gui/reports/header_utils.py): Header normalization and period key parsing:
     - `format_excel_headers(headers, start_date, end_date) -> List[str]`
     - `parse_and_format_period_key(period_key, granularity) -> str`
+    - Note: `format_excel_headers` is consumed by `excel_utils.create_excel_report` and is used by both Usage/Trends and Inventory exports (when they contain period column keys). It delegates to `parse_and_format_period_key` to convert period keys into human-friendly labels.
   - `excel_utils` (inventory_app/gui/reports/excel_utils.py): Excel file creation and styling:
     - `create_excel_report(data, output_path, title, start_date, end_date, granularity=None) -> None` — writes the workbook, applies header styling, numeric formatting, autofilter, frozen header pane, and increases header column padding to prevent sort/filter control overlap.
 
@@ -117,7 +118,7 @@ Common Reports
 - Low Stock Alerts
 - Acquisition History
 - Calibration Due
-- Trends (grouping by item or category; time-series heatmap/top-N)
+- Trends (grouping by item or category; time-series heatmap/top-N). Default granularity is `Auto` (uses the same smart granularity rules as Usage reports); manual granularity selection is still supported.
 
 References
 

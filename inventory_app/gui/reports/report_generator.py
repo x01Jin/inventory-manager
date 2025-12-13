@@ -314,7 +314,7 @@ class ReportGenerator:
         self,
         start_date: date,
         end_date: date,
-        granularity: str = "monthly",
+        granularity: Optional[str] = None,
         group_by: str = "item",
         top_n: Optional[int] = None,
         include_consumables: bool = True,
@@ -326,7 +326,7 @@ class ReportGenerator:
 
         Args:
             start_date, end_date: Date range
-            granularity: daily/weekly/monthly/quarterly
+                granularity: daily/weekly/monthly/quarterly or 'auto' (default: auto)
             group_by: 'item' or 'category'
             top_n: Limit to top N rows by total quantity (None for all)
             include_consumables: whether to include consumable items
@@ -337,6 +337,9 @@ class ReportGenerator:
         """
         try:
             logger.info(f"Generating trends report from {start_date} to {end_date}")
+            # Compute smart granularity when caller passes None or 'auto'
+            if granularity is None or granularity == "auto":
+                granularity = self.get_granularity(start_date, end_date)
 
             report_data = self._get_trends_data(
                 start_date,
@@ -390,7 +393,7 @@ class ReportGenerator:
         self,
         start_date: date,
         end_date: date,
-        granularity: str = "monthly",
+        granularity: Optional[str] = None,
         group_by: str = "item",
         top_n: Optional[int] = None,
         include_consumables: bool = True,
@@ -402,6 +405,10 @@ class ReportGenerator:
         aggregates by category and applies top-N filtering.
         """
         try:
+            # Compute smart granularity when caller leaves it to be auto
+            if granularity is None or granularity == "auto":
+                granularity = self.get_granularity(start_date, end_date)
+
             return get_trends_data(
                 start_date,
                 end_date,

@@ -120,13 +120,16 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
 def get_trends_data(
     start_date: date,
     end_date: date,
-    granularity: str = "monthly",
+    granularity: Optional[str] = None,
     group_by: str = "item",
     top_n: Optional[int] = None,
     include_consumables: bool = True,
     category_filter: str = "",
 ) -> List[Dict]:
     try:
+        # Use smart granularity when None or 'auto' is provided
+        if granularity is None or granularity == "auto":
+            granularity = date_formatter.get_smart_granularity(start_date, end_date)
         rows = get_dynamic_report_data(
             start_date,
             end_date,

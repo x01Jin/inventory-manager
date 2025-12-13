@@ -112,7 +112,7 @@ class ReportConfig:
     # Granularity explanation useful for trends vs usage
     GRANULARITY_TOOLTIP = (
         "Usage reports auto-select the appropriate granularity based on date range. "
-        "Trends reports respect the manually selected granularity."
+        "Trends reports default to Auto and will also use the smart granularity unless a manual option is selected."
     )
 
     # Default Values

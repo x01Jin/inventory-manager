@@ -34,7 +34,7 @@ class ReportWorker(QThread):
             "low_stock_threshold", ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD
         )
         # Trends report params
-        self.granularity = kwargs.get("granularity", "monthly")
+        self.granularity = kwargs.get("granularity", None)
         self.group_by = kwargs.get("group_by", "item")
         self.top_n = kwargs.get("top_n", None)
 
@@ -103,7 +103,7 @@ class ReportWorker(QThread):
 
     def _generate_trends_report(self):
         """Generate trends report using ReportGenerator."""
-        granularity = getattr(self, "granularity", "monthly")
+        granularity = getattr(self, "granularity", None)
         group_by = getattr(self, "group_by", "item")
         top_n = getattr(self, "top_n", None)
         include_consumables = getattr(self, "include_consumables", True)
