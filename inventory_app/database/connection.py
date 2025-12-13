@@ -5,7 +5,7 @@ Handles SQLite database creation, connection, and basic operations.
 
 import sqlite3
 from pathlib import Path
-from typing import Optional, Any, List, Dict, Union
+from typing import Optional, Any, List, Dict, Union, overload, Tuple, Literal
 
 from inventory_app.utils.logger import logger
 
@@ -177,9 +177,19 @@ class DatabaseConnection:
             logger.error(f"Params: {params}")
             raise
 
+    @overload
+    def execute_update(
+        self, query: str, params: tuple = (), *, return_last_id: Literal[True]
+    ) -> Tuple[int, Optional[int]]: ...
+
+    @overload
+    def execute_update(
+        self, query: str, params: tuple = (), *, return_last_id: Literal[False] = False
+    ) -> int: ...
+
     def execute_update(
         self, query: str, params: tuple = (), return_last_id: bool = False
-    ) -> Union[int, tuple[int, Optional[int]]]:
+    ) -> Union[int, Tuple[int, Optional[int]]]:
         """
         Execute an INSERT, UPDATE, or DELETE query.
 
