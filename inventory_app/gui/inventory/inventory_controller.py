@@ -9,6 +9,7 @@ from inventory_app.database.connection import db
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+from inventory_app.gui.reports.columns import inventory_common_joins_sql
 
 
 class InventoryController:
@@ -120,8 +121,9 @@ class InventoryController:
                     ELSE 0
                 END as is_requested
             FROM Items i
-            LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            """
+                + inventory_common_joins_sql()
+                + """
             LEFT JOIN (
                 SELECT item_id, MIN(date_received) as date_received
                 FROM Item_Batches

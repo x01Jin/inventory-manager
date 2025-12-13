@@ -7,6 +7,7 @@ from inventory_app.gui.reports.query_builder import (
     ReportQueryBuilder,
     ReportStatisticsBuilder,
 )
+from inventory_app.gui.reports.columns import inventory_base_columns_sql
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
 from inventory_app.services.movement_types import MovementType
@@ -90,14 +91,9 @@ def get_dynamic_report_data(
 
 def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
     try:
-        query = """
+        query = f"""
             SELECT
-                i.name AS "Item Name",
-                c.name AS "Category",
-                i.size AS "Size",
-                i.brand AS "Brand",
-                COALESCE(SUM(ib.quantity_received), 0) - COALESCE(SUM(sm.quantity), 0) AS "Current Stock",
-                i.other_specifications AS "Specifications"
+                {inventory_base_columns_sql()}
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL

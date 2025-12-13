@@ -146,7 +146,9 @@ class ReportsPage(QWidget):
 
         # Preset date ranges
         preset_layout = QHBoxLayout()
-        preset_layout.addWidget(QLabel("Quick Select:"))
+        from inventory_app.gui.reports.report_config import ReportConfig
+
+        preset_layout.addWidget(QLabel(ReportConfig.LABELS["quick_select"]))
 
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(
@@ -173,7 +175,9 @@ class ReportsPage(QWidget):
 
         # Category filter
         category_layout = QHBoxLayout()
-        category_layout.addWidget(QLabel("Category:"))
+        from inventory_app.gui.reports.report_config import ReportConfig
+
+        category_layout.addWidget(QLabel(ReportConfig.LABELS["category"]))
         self.category_combo = QComboBox()
         self.category_combo.addItem("All Categories")
         self.load_categories()
@@ -182,7 +186,7 @@ class ReportsPage(QWidget):
 
         # Supplier filter
         supplier_layout = QHBoxLayout()
-        supplier_layout.addWidget(QLabel("Supplier:"))
+        supplier_layout.addWidget(QLabel(ReportConfig.LABELS["supplier"]))
         self.supplier_combo = QComboBox()
         self.supplier_combo.addItem("All Suppliers")
         self.load_suppliers()
@@ -263,7 +267,7 @@ class ReportsPage(QWidget):
         from inventory_app.gui.reports.report_config import ReportConfig
 
         self.low_stock_spin.setValue(ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD)
-        threshold_layout.addWidget(QLabel("Threshold (units):"))
+        threshold_layout.addWidget(QLabel(ReportConfig.LABELS["threshold"]))
         threshold_layout.addWidget(self.low_stock_spin)
         layout.addWidget(threshold_group)
 
@@ -287,6 +291,9 @@ class ReportsPage(QWidget):
         gran_layout = QHBoxLayout(gran_group)
         self.trends_granularity = QComboBox()
         self.trends_granularity.addItems(["Daily", "Weekly", "Monthly", "Quarterly"])
+        from inventory_app.gui.reports.report_config import ReportConfig
+
+        self.trends_granularity.setToolTip(ReportConfig.GRANULARITY_TOOLTIP)
         gran_layout.addWidget(self.trends_granularity)
         layout.addWidget(gran_group)
 
@@ -295,14 +302,14 @@ class ReportsPage(QWidget):
         options_layout = QVBoxLayout(options_group)
 
         group_layout = QHBoxLayout()
-        group_layout.addWidget(QLabel("Group By:"))
+        group_layout.addWidget(QLabel(ReportConfig.LABELS["group_by"]))
         self.trends_group_by = QComboBox()
         self.trends_group_by.addItems(["Item", "Category"])
         group_layout.addWidget(self.trends_group_by)
         options_layout.addLayout(group_layout)
 
         top_layout = QHBoxLayout()
-        top_layout.addWidget(QLabel("Top Items:"))
+        top_layout.addWidget(QLabel(ReportConfig.LABELS["top_items"]))
         self.trends_top_combo = QComboBox()
         self.trends_top_combo.addItems(["Top 10", "Top 20", "Top 50", "All"])
         top_layout.addWidget(self.trends_top_combo)

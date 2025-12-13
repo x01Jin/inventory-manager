@@ -8,6 +8,7 @@ from inventory_app.database.connection import db
 from inventory_app.database.models import Category, Supplier
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+from inventory_app.gui.reports.columns import inventory_common_joins_sql
 import warnings
 
 
@@ -74,7 +75,8 @@ class ItemService:
         """
         try:
             # Build query to get batches with item details
-            base_query = """
+            base_query = (
+                """
             SELECT
                 ib.id as batch_id,
                 ib.item_id,
@@ -91,10 +93,12 @@ class ItemService:
                 i.is_consumable
             FROM Item_Batches ib
             JOIN Items i ON ib.item_id = i.id
-            LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            """
+                + inventory_common_joins_sql()
+                + """
             WHERE ib.disposal_date IS NULL
             """
+            )
 
             params = ()
             if search_term:
@@ -144,9 +148,6 @@ class ItemService:
             batch_data: List of batch dictionaries
 
         Returns:
-
-            stacklevel=2,
-        )
             List of item dictionaries
         """
         try:
@@ -193,7 +194,7 @@ class ItemService:
         try:
             query = """
             SELECT ri.item_id, ri.quantity_requested, i.name, i.category_id, i.size, i.brand,
-                   c.name as category_name, s.name as supplier_name
+                c.name as category_name, s.name as supplier_name
             FROM Requisition_Items ri
             JOIN Items i ON ri.item_id = i.id
             LEFT JOIN Categories c ON i.category_id = c.id

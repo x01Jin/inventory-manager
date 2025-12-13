@@ -19,11 +19,3 @@ class MovementType(Enum):
 def allowed_values() -> List[str]:
     """Return a list of allowed movement type values."""
     return [m.value for m in MovementType]
-
-
-def sql_values_in_clause() -> str:
-    """Return an SQL IN-list like ('CONSUMPTION','RESERVATION',...)
-    for use in static SQL building. Values are constant and safe.
-    """
-    vals = allowed_values()
-    return "(" + ",".join(f"'{v}'" for v in vals) + ")"

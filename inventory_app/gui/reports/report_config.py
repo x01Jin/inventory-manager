@@ -99,6 +99,22 @@ class ReportConfig:
         "consumables": "Include consumable items",
     }
 
+    # Generic UI labels used across reports page
+    LABELS = {
+        "category": "Category:",
+        "supplier": "Supplier:",
+        "threshold": "Threshold (units):",
+        "quick_select": "Quick Select:",
+        "group_by": "Group By:",
+        "top_items": "Top Items:",
+    }
+
+    # Granularity explanation useful for trends vs usage
+    GRANULARITY_TOOLTIP = (
+        "Usage reports auto-select the appropriate granularity based on date range. "
+        "Trends reports respect the manually selected granularity."
+    )
+
     # Default Values
     DEFAULT_FILTER_VALUES = {
         "grade": "All Grades",

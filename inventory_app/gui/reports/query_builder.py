@@ -8,6 +8,7 @@ from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
+from inventory_app.gui.reports.columns import report_base_columns_sql
 
 
 class ReportQueryBuilder:
@@ -15,14 +16,6 @@ class ReportQueryBuilder:
 
     def __init__(self):
         """Initialize query builder."""
-        self.base_columns = [
-            "item_name AS ITEMS",
-            "category_name AS CATEGORIES",
-            "(SELECT COALESCE(SUM(quantity_received), 0) FROM Item_Batches b WHERE b.item_id = dp.item_id) AS ACTUAL_INVENTORY",
-            "size AS SIZE",
-            "brand AS BRAND",
-            'other_specifications AS "OTHER SPECIFICATIONS"',
-        ]
         # Maximum number of period columns before falling back to normalized query
         self.MAX_PERIOD_COLUMNS = 60
         # Reset after building each query; indicates if build used normalized fallback
@@ -83,15 +76,14 @@ class ReportQueryBuilder:
             # Reset fallback mode for each query
             self.normalized_fallback = False
             # Base query with direct JOINs instead of CTEs
-            query = """
+            query = (
+                """
             SELECT
-                i.name AS ITEMS,
-                c.name AS CATEGORIES,
-                COALESCE(stock.total_stock, 0) AS ACTUAL_INVENTORY,
-                i.size AS SIZE,
-                i.brand AS BRAND,
-                i.other_specifications AS "OTHER SPECIFICATIONS"
+                """
+                + report_base_columns_sql()
+                + """
             """
+            )
 
             # Add dynamic period columns (now returns SQL, params, flag, and optional CTE SQL)
             period_columns_sql, period_params, is_normalized, periods_cte = (
