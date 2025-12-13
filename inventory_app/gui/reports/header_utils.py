@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from datetime import date, timedelta
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
@@ -27,13 +27,17 @@ REPORT_HEADER_MAP = {
 
 
 def format_excel_headers(
-    headers: List[str], start_date: date, end_date: date
+    headers: List[str],
+    start_date: date,
+    end_date: date,
+    granularity: Optional[str] = None,
 ) -> List[str]:
     """
     Format Excel headers by converting period keys to user-friendly format.
     """
     try:
-        granularity = date_formatter.get_smart_granularity(start_date, end_date)
+        if granularity is None:
+            granularity = date_formatter.get_smart_granularity(start_date, end_date)
         formatted_headers = []
 
         for header in headers:

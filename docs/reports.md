@@ -24,7 +24,7 @@ Detailed Implementation
     - `format_excel_headers(headers, start_date, end_date) -> List[str]`
     - `parse_and_format_period_key(period_key, granularity) -> str`
   - `excel_utils` (inventory_app/gui/reports/excel_utils.py): Excel file creation and styling:
-    - `create_excel_report(data, output_path, title, start_date, end_date) -> None` — writes the workbook, applies header styling, numeric formatting, autofilter, frozen header pane, and increases header column padding to prevent sort/filter control overlap.
+    - `create_excel_report(data, output_path, title, start_date, end_date, granularity=None) -> None` — writes the workbook, applies header styling, numeric formatting, autofilter, frozen header pane, and increases header column padding to prevent sort/filter control overlap.
 
 - Excel export details:
   - Uses `openpyxl.Workbook` to construct reports.
@@ -97,7 +97,7 @@ Examples and APIs Referenced in Code
 - Query building: `ReportQueryBuilder.build_dynamic_report_query(start, end, granularity, category_filter, supplier_filter, include_consumables)` returns `(sql, params)`.
 - Headers: Excel headers are normalized via `REPORT_HEADER_MAP` (e.g., `ITEMS`/`Item Name` -> `Item`, `TOTAL QUANTITY` -> `Total Quantity`).
 - Headers: Excel headers are normalized via `header_utils.format_excel_headers` (maps canonical names and formats period keys into human-friendly labels).
-- Excel creation: Use `excel_utils.create_excel_report(data, output_path, title, start_date, end_date)` to write styled workbooks programmatically.
+- Excel creation: Use `excel_utils.create_excel_report(data, output_path, title, start_date, end_date, granularity=None)` to write styled workbooks programmatically.
 - Data retrieval: Use `data_sources.get_dynamic_report_data(...)` for pivoted time-series rows when building reports programmatically.
 - Generating a usage report: `report_generator.generate_report(start, end, output_path=None, category_filter='', supplier_filter='')`.
 - Generating an inventory report: `report_generator.generate_inventory_report(report_type, start_date, end_date, category_filter='', output_path=None)`.

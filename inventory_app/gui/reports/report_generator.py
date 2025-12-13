@@ -109,7 +109,7 @@ class ReportGenerator:
             output_path_obj = Path(output_path)
             title = f"{granularity.title()} Usage Report"
             self._create_excel_report(
-                report_data, output_path_obj, title, start_date, end_date
+                report_data, output_path_obj, title, start_date, end_date, granularity
             )
 
             logger.info(f"{granularity.title()} report generated: {output_path}")
@@ -147,7 +147,11 @@ class ReportGenerator:
             return []
 
     def _format_excel_headers(
-        self, headers: List[str], start_date: date, end_date: date
+        self,
+        headers: List[str],
+        start_date: date,
+        end_date: date,
+        granularity: Optional[str] = None,
     ) -> List[str]:
         """
         Format Excel headers by converting period keys to user-friendly format.
@@ -162,7 +166,7 @@ class ReportGenerator:
         """
         # Delegate to header_utils.format_excel_headers
         try:
-            return format_excel_headers(headers, start_date, end_date)
+            return format_excel_headers(headers, start_date, end_date, granularity)
         except Exception as e:
             logger.error(f"Failed to format Excel headers: {e}")
             return headers
@@ -182,6 +186,7 @@ class ReportGenerator:
         title: str,
         start_date: date,
         end_date: date,
+        granularity: Optional[str] = None,
     ) -> None:
         """
         Create Excel file with report data.
@@ -195,7 +200,9 @@ class ReportGenerator:
         """
         # Delegate to excel_utils
         try:
-            create_excel_report(data, output_path, title, start_date, end_date)
+            create_excel_report(
+                data, output_path, title, start_date, end_date, granularity
+            )
         except Exception as e:
             logger.error(f"Failed to create Excel report: {e}")
             raise
@@ -352,7 +359,7 @@ class ReportGenerator:
             output_path_obj = Path(output_path)
             title = f"Trends Report - {group_by.title()}"
             self._create_excel_report(
-                report_data, output_path_obj, title, start_date, end_date
+                report_data, output_path_obj, title, start_date, end_date, granularity
             )
 
             logger.info(f"Trends report generated: {output_path}")

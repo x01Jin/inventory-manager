@@ -1,4 +1,4 @@
-from typing import List, Dict, cast
+from typing import List, Dict, cast, Optional
 from datetime import date
 from pathlib import Path
 from openpyxl import Workbook
@@ -13,7 +13,12 @@ from inventory_app.gui.reports.report_utils import date_formatter
 
 
 def create_excel_report(
-    data: List[Dict], output_path: Path, title: str, start_date: date, end_date: date
+    data: List[Dict],
+    output_path: Path,
+    title: str,
+    start_date: date,
+    end_date: date,
+    granularity: Optional[str] = None,
 ) -> None:
     """
     Create Excel file with report data.
@@ -62,7 +67,9 @@ def create_excel_report(
         formatted_headers: List[str] = []
         if data:
             headers = list(data[0].keys())
-            formatted_headers = format_excel_headers(headers, start_date, end_date)
+            formatted_headers = format_excel_headers(
+                headers, start_date, end_date, granularity
+            )
 
             # Detect numeric columns (e.g., quantities, totals, stock)
             for idx, head in enumerate(formatted_headers, 1):
