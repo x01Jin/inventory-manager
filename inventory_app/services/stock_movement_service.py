@@ -237,9 +237,9 @@ class StockMovementService:
             movement_query = """
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN movement_type = '%s' THEN -quantity
-                    WHEN movement_type = '%s' THEN -quantity
-                    WHEN movement_type = '%s' THEN quantity
+                    WHEN movement_type = ? THEN -quantity
+                    WHEN movement_type = ? THEN -quantity
+                    WHEN movement_type = ? THEN quantity
 
                     ELSE 0
                 END
@@ -247,13 +247,13 @@ class StockMovementService:
             FROM Stock_Movements
             WHERE item_id = ?
             """
-            movement_query = movement_query % (
+            params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
+                item_id,
             )
-
-            movement_rows = db.execute_query(movement_query, (item_id,))
+            movement_rows = db.execute_query(movement_query, params)
             net_adjustment = movement_rows[0]["net_adjustment"] if movement_rows else 0
 
             return max(0, total_received + net_adjustment)

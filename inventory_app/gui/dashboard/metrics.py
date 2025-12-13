@@ -75,19 +75,19 @@ class MetricsManager:
             FROM Item_Batches ib
             LEFT JOIN (
                 SELECT
-                    SUM(CASE WHEN movement_type = '%s' THEN quantity ELSE 0 END) as total_consumed,
-                    SUM(CASE WHEN movement_type = '%s' THEN quantity ELSE 0 END) as total_disposed,
-                    SUM(CASE WHEN movement_type = '%s' THEN quantity ELSE 0 END) as total_returned
+                    SUM(CASE WHEN movement_type = ? THEN quantity ELSE 0 END) as total_consumed,
+                    SUM(CASE WHEN movement_type = ? THEN quantity ELSE 0 END) as total_disposed,
+                    SUM(CASE WHEN movement_type = ? THEN quantity ELSE 0 END) as total_returned
                 FROM Stock_Movements
             ) movements ON 1=1
             WHERE ib.disposal_date IS NULL
             """
-            stock_query = stock_query % (
+            stock_params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
             )
-            stock_result = db.execute_query(stock_query)
+            stock_result = db.execute_query(stock_query, stock_params)
             metrics["total_stock"] = (
                 stock_result[0]["total_stock"]
                 if stock_result and stock_result[0]["total_stock"]
@@ -99,9 +99,9 @@ class MetricsManager:
             SELECT COUNT(*) as count FROM (
                 SELECT ib.item_id,
                         SUM(ib.quantity_received) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) +
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) as current_stock
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) as current_stock
                 FROM Item_Batches ib
                 LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
                 WHERE ib.disposal_date IS NULL
@@ -109,12 +109,12 @@ class MetricsManager:
                 HAVING current_stock < 10 AND current_stock > 0
             )
             """
-            low_stock_query = low_stock_query % (
+            low_stock_params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
             )
-            low_stock_result = db.execute_query(low_stock_query)
+            low_stock_result = db.execute_query(low_stock_query, low_stock_params)
             metrics["low_stock"] = (
                 low_stock_result[0]["count"] if low_stock_result else 0
             )

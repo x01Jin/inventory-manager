@@ -43,18 +43,14 @@ class InventoryController:
             LEFT JOIN (
                 SELECT
                     sm.item_id,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
         """
-        base_query = base_query % (
-            MovementType.CONSUMPTION.value,
-            MovementType.DISPOSAL.value,
-            MovementType.RETURN.value,
-        )
+        # The movement type params will be passed when executing the final query
 
         if item_id:
             base_query += f" WHERE ib.item_id = {item_id}"
@@ -81,15 +77,12 @@ class InventoryController:
                 WHERE sm.item_id = ri.item_id
                 AND sm.source_id = r.id
                 AND (
-                    (i.is_consumable = 1 AND sm.movement_type = '%s') OR
-                    (i.is_consumable = 0 AND sm.movement_type = '%s')
+                    (i.is_consumable = 1 AND sm.movement_type = ?) OR
+                    (i.is_consumable = 0 AND sm.movement_type = ?)
                 )
             )
             GROUP BY ri.item_id
-        """ % (
-            MovementType.RESERVATION.value,
-            MovementType.REQUEST.value,
-        )
+        """
 
     def load_inventory_data(self) -> List[Dict[str, Any]]:
         """Load inventory items with related data from database."""
@@ -120,7 +113,7 @@ class InventoryController:
                         AND NOT EXISTS (
                             SELECT 1 FROM Stock_Movements sm
                             WHERE sm.item_id = ri.item_id
-                            AND sm.movement_type = '%s'
+                            AND sm.movement_type = ?
                             AND sm.source_id = r.id
                         )
                     ) THEN 1
@@ -148,8 +141,19 @@ class InventoryController:
             """
             )
 
-            query = query % (MovementType.RETURN.value,)
-            rows = db.execute_query(query)
+            # Prepare ordered params for placeholders inside query text.
+            params = (
+                # is_requested clause (RETURN)
+                MovementType.RETURN.value,
+                # _get_stock_calculations() placeholders: CONSUMPTION, DISPOSAL, RETURN
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+                # _get_requested_calculations() placeholders: RESERVATION, REQUEST
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+            )
+            rows = db.execute_query(query, params)
             logger.info(f"Loaded {len(rows)} inventory items from database")
             return rows
 
@@ -180,7 +184,7 @@ class InventoryController:
                         AND NOT EXISTS (
                             SELECT 1 FROM Stock_Movements sm
                             WHERE sm.item_id = ri.item_id
-                            AND sm.movement_type = '%s'
+                            AND sm.movement_type = ?
                             AND sm.source_id = r.id
                         )
                     ) THEN 1
@@ -205,10 +209,19 @@ class InventoryController:
             )
 
             search_pattern = f"%{search_term}%"
-            query = query % (MovementType.RETURN.value,)
-            rows = db.execute_query(
-                query, (search_pattern, search_pattern, search_pattern)
+            # Params order mirrors placeholder order in the query:
+            params = (
+                MovementType.RETURN.value,
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+                search_pattern,
+                search_pattern,
+                search_pattern,
             )
+            rows = db.execute_query(query, params)
 
             logger.debug(f"Search for '{search_term}' returned {len(rows)} items")
             return rows
@@ -288,18 +301,18 @@ class InventoryController:
             FROM Item_Batches ib
             LEFT JOIN (
                 SELECT
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_consumed,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_disposed,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as total_returned
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_consumed,
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_disposed,
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_returned
                 FROM Stock_Movements sm
             ) movements ON 1=1
             """
-            stock_query = stock_query % (
+            stock_params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
             )
-            stock_rows = db.execute_query(stock_query)
+            stock_rows = db.execute_query(stock_query, stock_params)
             if not stock_rows:
                 return {"total_batches": 0, "total_stock": 0, "available_stock": 0}
 
@@ -317,16 +330,16 @@ class InventoryController:
                 WHERE sm.item_id = ri.item_id
                 AND sm.source_id = r.id
                 AND (
-                    (i.is_consumable = 1 AND sm.movement_type = '%s') OR
-                    (i.is_consumable = 0 AND sm.movement_type = '%s')
+                    (i.is_consumable = 1 AND sm.movement_type = ?) OR
+                    (i.is_consumable = 0 AND sm.movement_type = ?)
                 )
             )
             """
-            available_query = available_query % (
+            available_params = (
                 MovementType.RESERVATION.value,
                 MovementType.REQUEST.value,
             )
-            requested_rows = db.execute_query(available_query)
+            requested_rows = db.execute_query(available_query, available_params)
             total_requested = (
                 requested_rows[0]["total_requested"] if requested_rows else 0
             )
@@ -377,9 +390,9 @@ class InventoryController:
             SELECT COUNT(*) as count FROM (
                 SELECT ib.item_id,
                         SUM(ib.quantity_received) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) +
-                        COALESCE(SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END), 0) as current_stock
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) as current_stock
                 FROM Item_Batches ib
                 LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
                 WHERE ib.disposal_date IS NULL
@@ -387,12 +400,12 @@ class InventoryController:
                 HAVING current_stock < 10 AND current_stock > 0
             )
             """
-            low_stock_query = low_stock_query % (
+            low_stock_params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
             )
-            low_stock_result = db.execute_query(low_stock_query)
+            low_stock_result = db.execute_query(low_stock_query, low_stock_params)
             low_stock_count = low_stock_result[0]["count"] if low_stock_result else 0
 
             # Combine all statistics

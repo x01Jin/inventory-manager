@@ -218,17 +218,15 @@ class ReturnProcessor:
         if batch_id is not None:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = '%s'
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = ?
             """
-            query = query % (MovementType.RESERVATION.value,)
-            params = (item_id, batch_id, requisition_id)
+            params = (item_id, batch_id, requisition_id, MovementType.RESERVATION.value)
         else:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND source_id = ? AND movement_type = '%s'
+            WHERE item_id = ? AND source_id = ? AND movement_type = ?
             """
-            query = query % (MovementType.RESERVATION.value,)
-            params = (item_id, requisition_id)
+            params = (item_id, requisition_id, MovementType.RESERVATION.value)
 
         db.execute_update(query, params)
         logger.debug(
@@ -242,17 +240,15 @@ class ReturnProcessor:
         if batch_id is not None:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = '%s'
+            WHERE item_id = ? AND batch_id = ? AND source_id = ? AND movement_type = ?
             """
-            query = query % (MovementType.REQUEST.value,)
-            params = (item_id, batch_id, requisition_id)
+            params = (item_id, batch_id, requisition_id, MovementType.REQUEST.value)
         else:
             query = """
             DELETE FROM Stock_Movements
-            WHERE item_id = ? AND source_id = ? AND movement_type = '%s'
+            WHERE item_id = ? AND source_id = ? AND movement_type = ?
             """
-            query = query % (MovementType.REQUEST.value,)
-            params = (item_id, requisition_id)
+            params = (item_id, requisition_id, MovementType.REQUEST.value)
 
         db.execute_update(query, params)
         logger.debug(
@@ -381,9 +377,16 @@ class ReturnProcessor:
             movements_query = """
             SELECT sm.item_id, sm.movement_type, sm.quantity
             FROM Stock_Movements sm
-            WHERE sm.source_id = ? AND sm.movement_type IN ('%s', '%s')
-            """ % (MovementType.CONSUMPTION.value, MovementType.DISPOSAL.value)
-            movement_rows = db.execute_query(movements_query, (requisition_id,))
+            WHERE sm.source_id = ? AND sm.movement_type IN (?, ?)
+            """
+            movement_rows = db.execute_query(
+                movements_query,
+                (
+                    requisition_id,
+                    MovementType.CONSUMPTION.value,
+                    MovementType.DISPOSAL.value,
+                ),
+            )
 
             # Create lookup for movements by item_id and type
             movements_lookup = {}
