@@ -69,8 +69,8 @@ class ReportWorker(QThread):
         return report_generator.generate_report(
             self.start_date,
             self.end_date,
-            grade_filter=self.category_filter,
-            section_filter=self.supplier_filter,
+            category_filter=self.category_filter,
+            supplier_filter=self.supplier_filter,
             include_consumables=self.include_consumables,
         )
 
