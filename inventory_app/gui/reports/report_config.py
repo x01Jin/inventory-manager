@@ -22,12 +22,18 @@ class ReportConfig:
 
     # Granularity definitions - single source of truth
     GRANULARITY_RANGES = {
-        'daily': {'max_days': 7, 'description': '≤7 days: Daily breakdown'},
-        'weekly': {'max_days': 30, 'description': '8-30 days: Weekly breakdown'},
-        'monthly': {'max_days': 180, 'description': '31-180 days: Monthly breakdown'},
-        'quarterly': {'max_days': 365, 'description': '181-365 days: Quarterly breakdown'},
-        'yearly': {'max_days': 730, 'description': '366-730 days: Yearly breakdown'},
-        'multi_year': {'max_days': float('inf'), 'description': '>730 days: Multi-year breakdown'}
+        "daily": {"max_days": 7, "description": "≤7 days: Daily breakdown"},
+        "weekly": {"max_days": 30, "description": "8-30 days: Weekly breakdown"},
+        "monthly": {"max_days": 180, "description": "31-180 days: Monthly breakdown"},
+        "quarterly": {
+            "max_days": 365,
+            "description": "181-365 days: Quarterly breakdown",
+        },
+        "yearly": {"max_days": 730, "description": "366-730 days: Yearly breakdown"},
+        "multi_year": {
+            "max_days": float("inf"),
+            "description": ">730 days: Multi-year breakdown",
+        },
     }
 
     # UI Layout Constants
@@ -41,7 +47,7 @@ class ReportConfig:
 
     # Styling Constants
     BUTTON_STYLES = {
-        'generate': f"""
+        "generate": f"""
             QPushButton {{
                 font-size: {DarkTheme.FONT_SIZE_LARGE}pt;
                 padding: 15px;
@@ -62,7 +68,7 @@ class ReportConfig:
                 background-color: {DarkTheme.TEXT_MUTED};
             }}
         """,
-        'progress_bar': f"""
+        "progress_bar": f"""
             QProgressBar {{
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 4px;
@@ -74,54 +80,80 @@ class ReportConfig:
                 background-color: {DarkTheme.SUCCESS_COLOR};
                 border-radius: 2px;
             }}
-        """
+        """,
     }
 
     # Group Box Titles
     GROUP_TITLES = {
-        'config': "Report Configuration",
-        'date_range': "Date Range",
-        'filters': "Filters",
-        'status': "Report Status",
-        'recent_reports': "Recent Reports"
+        "config": "Report Configuration",
+        "date_range": "Date Range",
+        "filters": "Filters",
+        "status": "Report Status",
+        "recent_reports": "Recent Reports",
     }
 
     # Filter Labels
     FILTER_LABELS = {
-        'grade': "Grade Level:",
-        'section': "Section:",
-        'consumables': "Include consumable items"
+        "grade": "Grade Level:",
+        "section": "Section:",
+        "consumables": "Include consumable items",
     }
+
+    # Generic UI labels used across reports page
+    LABELS = {
+        "category": "Category:",
+        "supplier": "Supplier:",
+        "threshold": "Threshold (units):",
+        "quick_select": "Quick Select:",
+        "group_by": "Group By:",
+        "top_items": "Top Items:",
+    }
+
+    # Granularity explanation useful for trends vs usage
+    GRANULARITY_TOOLTIP = (
+        "Usage reports auto-select the appropriate granularity based on date range. "
+        "Trends reports default to Auto and will also use the smart granularity unless a manual option is selected."
+    )
 
     # Default Values
     DEFAULT_FILTER_VALUES = {
-        'grade': "All Grades",
-        'section': "All Sections",
-        'include_consumables': True
+        "grade": "All Grades",
+        "section": "All Sections",
+        "include_consumables": True,
     }
+    # Low stock threshold (units) visible to the UI
+    DEFAULT_LOW_STOCK_THRESHOLD = 10
 
     @classmethod
-    def get_granularity_description(cls, granularity: str, is_current: bool = False) -> str:
+    def get_granularity_description(
+        cls, granularity: str, is_current: bool = False
+    ) -> str:
         """Get formatted granularity description with optional current indicator."""
-        desc = cls.GRANULARITY_RANGES[granularity]['description']
+        desc = cls.GRANULARITY_RANGES[granularity]["description"]
         return f"{desc} ← Current" if is_current else desc
 
     @classmethod
-    def get_all_granularity_descriptions(cls, current_granularity: Optional[str] = None) -> str:
+    def get_all_granularity_descriptions(
+        cls, current_granularity: Optional[str] = None
+    ) -> str:
         """Get all granularity descriptions formatted for display."""
         descriptions = []
         for granularity in cls.GRANULARITY_RANGES.keys():
-            is_current = granularity == current_granularity if current_granularity else False
-            descriptions.append(cls.get_granularity_description(granularity, is_current))
+            is_current = (
+                granularity == current_granularity if current_granularity else False
+            )
+            descriptions.append(
+                cls.get_granularity_description(granularity, is_current)
+            )
         return "\n".join(descriptions)
 
     @classmethod
     def get_granularity_for_days(cls, days: int) -> str:
         """Determine granularity based on number of days."""
         for granularity, config in cls.GRANULARITY_RANGES.items():
-            if days <= config['max_days']:
+            if days <= config["max_days"]:
                 return granularity
-        return 'multi_year'
+        return "multi_year"
 
 
 class ReportMessages:
@@ -153,7 +185,9 @@ class ReportMessages:
 
     @staticmethod
     def no_data_found() -> str:
-        return "Failed to generate report\nReason: No data found for the specified period"
+        return (
+            "Failed to generate report\nReason: No data found for the specified period"
+        )
 
     @staticmethod
     def filter_applied(filter_name: str, value: str) -> str:
@@ -180,3 +214,8 @@ class ReportFilters:
     def get_section_display_value(value: str) -> str:
         """Convert filter value to display string."""
         return "All Sections" if not value else value
+
+    @classmethod
+    def get_low_stock_threshold(cls) -> int:
+        """Return the default low stock threshold as configured."""
+        return ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD

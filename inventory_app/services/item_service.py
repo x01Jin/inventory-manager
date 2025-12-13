@@ -8,6 +8,7 @@ from inventory_app.database.connection import db
 from inventory_app.database.models import Category, Supplier
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+from inventory_app.gui.reports.columns import inventory_common_joins_sql
 import warnings
 
 
@@ -74,7 +75,8 @@ class ItemService:
         """
         try:
             # Build query to get batches with item details
-            base_query = """
+            base_query = (
+                """
             SELECT
                 ib.id as batch_id,
                 ib.item_id,
@@ -91,10 +93,12 @@ class ItemService:
                 i.is_consumable
             FROM Item_Batches ib
             JOIN Items i ON ib.item_id = i.id
-            LEFT JOIN Categories c ON i.category_id = c.id
-            LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            """
+                + inventory_common_joins_sql()
+                + """
             WHERE ib.disposal_date IS NULL
             """
+            )
 
             params = ()
             if search_term:
@@ -144,9 +148,6 @@ class ItemService:
             batch_data: List of batch dictionaries
 
         Returns:
-
-            stacklevel=2,
-        )
             List of item dictionaries
         """
         try:
@@ -193,7 +194,7 @@ class ItemService:
         try:
             query = """
             SELECT ri.item_id, ri.quantity_requested, i.name, i.category_id, i.size, i.brand,
-                   c.name as category_name, s.name as supplier_name
+                c.name as category_name, s.name as supplier_name
             FROM Requisition_Items ri
             JOIN Items i ON ri.item_id = i.id
             LEFT JOIN Categories c ON i.category_id = c.id
@@ -241,21 +242,23 @@ class ItemService:
             LEFT JOIN (
                 SELECT
                     sm.item_id,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 WHERE sm.item_id = ?
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
             WHERE ib.item_id = ?
             """
-            query = query % (
+            params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
+                item_id,
+                item_id,
             )
-            rows = db.execute_query(query, (item_id, item_id))
+            rows = db.execute_query(query, params)
             return rows[0]["total_stock"] if rows else 0
         except Exception as e:
             logger.error(f"Failed to get total stock for item {item_id}: {e}")
@@ -291,9 +294,9 @@ class ItemService:
             LEFT JOIN (
                 SELECT
                     sm.batch_id,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as consumed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as disposed_qty,
-                    SUM(CASE WHEN sm.movement_type = '%s' THEN sm.quantity ELSE 0 END) as returned_qty
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
                 FROM Stock_Movements sm
                 WHERE sm.batch_id = ?
                 GROUP BY sm.batch_id
@@ -301,11 +304,12 @@ class ItemService:
             WHERE ib.id = ?
             """
 
-            params = (batch_id, batch_id)
-            query = query % (
+            params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
+                batch_id,
+                batch_id,
             )
             rows = db.execute_query(query, params)
             if not rows:
@@ -321,18 +325,24 @@ class ItemService:
             JOIN Items i ON sm.item_id = i.id
             WHERE sm.batch_id = ?
             AND (
-                (i.is_consumable = 1 AND sm.movement_type = '%s') OR
-                (i.is_consumable = 0 AND sm.movement_type = '%s')
+                (i.is_consumable = 1 AND sm.movement_type = ?) OR
+                (i.is_consumable = 0 AND sm.movement_type = ?)
             )
-            """ % (
+            """
+
+            params = (
+                batch_id,
                 MovementType.RESERVATION.value,
                 MovementType.REQUEST.value,
             )
-
-            params = (batch_id,)
             if exclude_requisition_id:
                 requested_query += " AND sm.source_id != ?"
-                params = (batch_id, exclude_requisition_id)
+                params = (
+                    batch_id,
+                    MovementType.RESERVATION.value,
+                    MovementType.REQUEST.value,
+                    exclude_requisition_id,
+                )
 
             requested_rows = db.execute_query(requested_query, params)
             requested_qty = requested_rows[0]["requested_qty"] if requested_rows else 0

@@ -7,7 +7,7 @@ from typing import List, Dict, Optional, Union
 from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.services.movement_types import MovementType, sql_values_in_clause
+from inventory_app.services.movement_types import MovementType
 
 
 class StockMovementService:
@@ -237,9 +237,9 @@ class StockMovementService:
             movement_query = """
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN movement_type = '%s' THEN -quantity
-                    WHEN movement_type = '%s' THEN -quantity
-                    WHEN movement_type = '%s' THEN quantity
+                    WHEN movement_type = ? THEN -quantity
+                    WHEN movement_type = ? THEN -quantity
+                    WHEN movement_type = ? THEN quantity
 
                     ELSE 0
                 END
@@ -247,13 +247,13 @@ class StockMovementService:
             FROM Stock_Movements
             WHERE item_id = ?
             """
-            movement_query = movement_query % (
+            params = (
                 MovementType.CONSUMPTION.value,
                 MovementType.DISPOSAL.value,
                 MovementType.RETURN.value,
+                item_id,
             )
-
-            movement_rows = db.execute_query(movement_query, (item_id,))
+            movement_rows = db.execute_query(movement_query, params)
             net_adjustment = movement_rows[0]["net_adjustment"] if movement_rows else 0
 
             return max(0, total_received + net_adjustment)
@@ -272,12 +272,19 @@ class StockMovementService:
             Total reserved quantity
         """
         try:
-            query = """
+            # Reserved stock is any temporary hold: RESERVATION or REQUEST
+            movement_vals = (
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+            )
+            placeholders = "(" + ",".join("?" for _ in movement_vals) + ")"
+            query = f"""
             SELECT COALESCE(SUM(quantity), 0) as reserved_qty
             FROM Stock_Movements
-            WHERE item_id = ? AND movement_type IN %s
-            """ % sql_values_in_clause()
-            rows = db.execute_query(query, (item_id,))
+            WHERE item_id = ? AND movement_type IN {placeholders}
+            """
+            params = (item_id,) + movement_vals
+            rows = db.execute_query(query, params)
             return rows[0]["reserved_qty"] if rows else 0
         except Exception as e:
             logger.error(f"Failed to get reserved stock for item {item_id}: {e}")

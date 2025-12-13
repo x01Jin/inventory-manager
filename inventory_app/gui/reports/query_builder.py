@@ -8,6 +8,7 @@ from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
+from inventory_app.gui.reports.columns import report_base_columns_sql
 
 
 class ReportQueryBuilder:
@@ -15,14 +16,6 @@ class ReportQueryBuilder:
 
     def __init__(self):
         """Initialize query builder."""
-        self.base_columns = [
-            "item_name AS ITEMS",
-            "category_name AS CATEGORIES",
-            "(SELECT COALESCE(SUM(quantity_received), 0) FROM Item_Batches b WHERE b.item_id = dp.item_id) AS ACTUAL_INVENTORY",
-            "size AS SIZE",
-            "brand AS BRAND",
-            'other_specifications AS "OTHER SPECIFICATIONS"',
-        ]
         # Maximum number of period columns before falling back to normalized query
         self.MAX_PERIOD_COLUMNS = 60
         # Reset after building each query; indicates if build used normalized fallback
@@ -33,8 +26,8 @@ class ReportQueryBuilder:
         start_date: date,
         end_date: date,
         granularity: str,
-        grade_filter: str = "",
-        section_filter: str = "",
+        category_filter: str = "",
+        supplier_filter: str = "",
         include_consumables: bool = True,
     ) -> Tuple[str, Tuple]:
         """
@@ -45,8 +38,8 @@ class ReportQueryBuilder:
             start_date: Report start date
             end_date: Report end date
             granularity: Time granularity ('daily', 'weekly', 'monthly', etc.)
-            grade_filter: Grade level filter
-            section_filter: Section filter
+            category_filter: Category filter
+            supplier_filter: Supplier filter
             include_consumables: Whether to include consumable items
 
         Returns:
@@ -58,8 +51,8 @@ class ReportQueryBuilder:
                 start_date,
                 end_date,
                 granularity,
-                grade_filter,
-                section_filter,
+                category_filter,
+                supplier_filter,
                 include_consumables,
             )
 
@@ -74,8 +67,8 @@ class ReportQueryBuilder:
         start_date: date,
         end_date: date,
         granularity: str,
-        grade_filter: str,
-        section_filter: str,
+        category_filter: str,
+        supplier_filter: str,
         include_consumables: bool,
     ) -> Tuple[str, list]:
         """Build optimized single query without CTEs for better performance."""
@@ -83,15 +76,14 @@ class ReportQueryBuilder:
             # Reset fallback mode for each query
             self.normalized_fallback = False
             # Base query with direct JOINs instead of CTEs
-            query = """
+            query = (
+                """
             SELECT
-                i.name AS ITEMS,
-                c.name AS CATEGORIES,
-                COALESCE(stock.total_stock, 0) AS ACTUAL_INVENTORY,
-                i.size AS SIZE,
-                i.brand AS BRAND,
-                i.other_specifications AS "OTHER SPECIFICATIONS"
+                """
+                + report_base_columns_sql()
+                + """
             """
+            )
 
             # Add dynamic period columns (now returns SQL, params, flag, and optional CTE SQL)
             period_columns_sql, period_params, is_normalized, periods_cte = (
@@ -134,9 +126,9 @@ class ReportQueryBuilder:
             WHERE r.expected_request >= ? AND r.expected_request < ?
             """
 
-            if grade_filter:
+            if category_filter:
                 query += " AND req.affiliation = ?"
-            if section_filter:
+            if supplier_filter:
                 query += " AND req.group_name = ?"
             if not include_consumables:
                 query += " AND i.is_consumable = 0"
@@ -183,10 +175,10 @@ class ReportQueryBuilder:
             else:
                 params.append(start_date.isoformat())
                 params.append((end_date + timedelta(days=1)).isoformat())
-            if grade_filter:
-                params.append(grade_filter)
-            if section_filter:
-                params.append(section_filter)
+            if category_filter:
+                params.append(category_filter)
+            if supplier_filter:
+                params.append(supplier_filter)
 
             return query, params
 
@@ -388,18 +380,18 @@ class ReportQueryBuilder:
         start_date: date,
         end_date: date,
         granularity: str,
-        grade_filter: str,
-        section_filter: str,
+        category_filter: str,
+        supplier_filter: str,
         include_consumables: bool,
     ) -> Tuple:
         """Build optimized parameter list for the report query."""
         params: List[Any] = []
 
         # This method is retained for compatibility but callers now build params
-        if grade_filter:
-            params.append(grade_filter)
-        if section_filter:
-            params.append(section_filter)
+        if category_filter:
+            params.append(category_filter)
+        if supplier_filter:
+            params.append(supplier_filter)
 
         return tuple(params)
 
@@ -419,8 +411,8 @@ class ReportStatisticsBuilder:
     def build_usage_statistics_query(
         start_date: date,
         end_date: date,
-        grade_filter: str = "",
-        section_filter: str = "",
+        category_filter: str = "",
+        supplier_filter: str = "",
     ) -> Tuple[str, Tuple]:
         """Build query to get usage statistics."""
         # Total items used
@@ -435,12 +427,12 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if grade_filter:
+        if category_filter:
             total_query += " AND req.affiliation = ?"
-            params.append(grade_filter)
-        if section_filter:
+            params.append(category_filter)
+        if supplier_filter:
             total_query += " AND req.group_name = ?"
-            params.append(section_filter)
+            params.append(supplier_filter)
 
         return total_query, tuple(params)
 
@@ -448,8 +440,8 @@ class ReportStatisticsBuilder:
     def build_category_statistics_query(
         start_date: date,
         end_date: date,
-        grade_filter: str = "",
-        section_filter: str = "",
+        category_filter: str = "",
+        supplier_filter: str = "",
     ) -> Tuple[str, Tuple]:
         """Build query to get category statistics."""
         category_query = """
@@ -465,12 +457,12 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if grade_filter:
+        if category_filter:
             category_query += " AND req.affiliation = ?"
-            params.append(grade_filter)
-        if section_filter:
+            params.append(category_filter)
+        if supplier_filter:
             category_query += " AND req.group_name = ?"
-            params.append(section_filter)
+            params.append(supplier_filter)
 
         category_query += " GROUP BY c.id, c.name ORDER BY qty DESC"
 
@@ -480,8 +472,8 @@ class ReportStatisticsBuilder:
     def build_top_items_query(
         start_date: date,
         end_date: date,
-        grade_filter: str = "",
-        section_filter: str = "",
+        category_filter: str = "",
+        supplier_filter: str = "",
         limit: int = 10,
     ) -> Tuple[str, Tuple]:
         """Build query to get top used items."""
@@ -497,12 +489,12 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if grade_filter:
+        if category_filter:
             top_items_query += " AND req.affiliation = ?"
-            params.append(grade_filter)
-        if section_filter:
+            params.append(category_filter)
+        if supplier_filter:
             top_items_query += " AND req.group_name = ?"
-            params.append(section_filter)
+            params.append(supplier_filter)
 
         top_items_query += " GROUP BY i.id, i.name ORDER BY qty DESC LIMIT ?"
         params.append(limit)
