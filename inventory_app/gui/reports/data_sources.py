@@ -101,19 +101,18 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN ('%s', '%s')
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN (?, ?)
             """
 
-        params = []
+        params = [
+            MovementType.CONSUMPTION.value,
+            MovementType.DISPOSAL.value,
+        ]
         if category_filter:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
         query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications ORDER BY c.name, i.name"
-        query = query % (
-            MovementType.CONSUMPTION.value,
-            MovementType.DISPOSAL.value,
-        )
 
         return db.execute_query(query, tuple(params)) or []
 

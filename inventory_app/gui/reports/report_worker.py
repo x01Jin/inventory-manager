@@ -6,6 +6,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from inventory_app.gui.reports.report_generator import report_generator
 from inventory_app.utils.logger import logger
+from inventory_app.gui.reports.report_config import ReportConfig
 
 
 class ReportWorker(QThread):
@@ -28,6 +29,10 @@ class ReportWorker(QThread):
         self.inventory_report_type = kwargs.get(
             "inventory_report_type", "Stock Levels Report"
         )
+        # Low stock threshold (for Low Stock Alert)
+        self.low_stock_threshold = kwargs.get(
+            "low_stock_threshold", ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD
+        )
         # Trends report params
         self.granularity = kwargs.get("granularity", "monthly")
         self.group_by = kwargs.get("group_by", "item")
@@ -48,17 +53,29 @@ class ReportWorker(QThread):
             else:
                 file_path = f"Unknown report type: {self.report_type}"
 
-            if file_path and not file_path.startswith("Failed to generate report"):
-                self.progress.emit(
-                    f"{self.report_type.title()} report generated successfully!"
-                )
-                self.finished.emit(file_path)
-            else:
-                # Handle error messages
-                if file_path:
-                    self.error.emit(file_path)
+            # Support structured dict returns as well as legacy strings
+            if isinstance(file_path, dict):
+                if file_path.get("success"):
+                    self.progress.emit(
+                        f"{self.report_type.title()} report generated successfully!"
+                    )
+                    self.finished.emit(file_path.get("path") or "")
                 else:
-                    self.error.emit("Failed to generate report")
+                    self.error.emit(
+                        file_path.get("error") or "Failed to generate report"
+                    )
+            else:
+                if file_path and not file_path.startswith("Failed to generate report"):
+                    self.progress.emit(
+                        f"{self.report_type.title()} report generated successfully!"
+                    )
+                    self.finished.emit(file_path)
+                else:
+                    # Handle error messages
+                    if file_path:
+                        self.error.emit(file_path)
+                    else:
+                        self.error.emit("Failed to generate report")
 
         except Exception as e:
             logger.error(f"Report generation failed: {e}")
@@ -81,6 +98,7 @@ class ReportWorker(QThread):
             self.start_date,
             self.end_date,
             category_filter=self.category_filter,
+            low_stock_threshold=self.low_stock_threshold,
         )
 
     def _generate_trends_report(self):

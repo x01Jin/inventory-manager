@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QListWidget,
+    QSpinBox,
     QSplitter,
     QMessageBox,
     QTabWidget,
@@ -253,6 +254,18 @@ class ReportsPage(QWidget):
         filters_layout.addLayout(category_layout)
 
         layout.addWidget(filters_group)
+
+        # Low stock threshold input (for Low Stock Alert report)
+        threshold_group = QGroupBox("⚠️ Low Stock Threshold")
+        threshold_layout = QHBoxLayout(threshold_group)
+        self.low_stock_spin = QSpinBox()
+        self.low_stock_spin.setRange(1, 10000)
+        from inventory_app.gui.reports.report_config import ReportConfig
+
+        self.low_stock_spin.setValue(ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD)
+        threshold_layout.addWidget(QLabel("Threshold (units):"))
+        threshold_layout.addWidget(self.low_stock_spin)
+        layout.addWidget(threshold_group)
 
         layout.addStretch()
         return tab
@@ -527,6 +540,7 @@ class ReportsPage(QWidget):
             end_date,
             category_filter=category_filter,
             inventory_report_type=inventory_report_type,
+            low_stock_threshold=self.low_stock_spin.value(),
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)

@@ -1,10 +1,11 @@
-from typing import List, Dict
+from typing import List, Dict, cast
 from datetime import date
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.cell import MergedCell
+from openpyxl.cell.cell import Cell
 
 from inventory_app.gui.reports.header_utils import format_excel_headers
 from inventory_app.utils.logger import logger
@@ -58,6 +59,7 @@ def create_excel_report(
 
         # Add headers
         numeric_columns = set()
+        formatted_headers: List[str] = []
         if data:
             headers = list(data[0].keys())
             formatted_headers = format_excel_headers(headers, start_date, end_date)
@@ -131,6 +133,48 @@ def create_excel_report(
                     logger.debug(
                         f"Skipping cell at row {row_num}, column {col_num}: {e}"
                     )
+
+        # Add totals row for numeric columns
+        try:
+            if data and numeric_columns:
+                totals_row = 5 + len(data)
+                total_font = Font(bold=True)
+                label_cell = cast(Cell, ws.cell(row=totals_row, column=1))
+                label_cell.value = "Total"
+                label_cell.font = total_font
+                label_cell.alignment = Alignment(horizontal="left")
+                # Compute sums per numeric column using original header keys
+                headers = list(data[0].keys())
+                for col_num in sorted(numeric_columns):
+                    header_key = headers[col_num - 1]
+                    total_value = 0
+                    for r in data:
+                        v = 0
+                        try:
+                            v = r.get(header_key, 0) or 0
+                            total_value += int(v)
+                        except Exception:
+                            try:
+                                total_value += int(float(v))
+                            except Exception:
+                                total_value += 0
+
+                    cell = ws.cell(row=totals_row, column=col_num)
+                    typed_cell = cast(Cell, cell)
+                    typed_cell.value = total_value
+                    typed_cell.font = total_font
+                    typed_cell.number_format = "#,##0"
+                    typed_cell.alignment = Alignment(horizontal="right")
+                    typed_cell.border = border
+
+                # Extend auto-filter to include totals row
+                try:
+                    last_col_letter = get_column_letter(len(formatted_headers))
+                    ws.auto_filter.ref = f"A4:{last_col_letter}{4 + len(data) + 1}"
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug(f"Failed to write totals row: {e}")
 
         # Save the workbook
         wb.save(output_path)

@@ -4,7 +4,7 @@ Handles Excel report generation for dynamic reports based on date range.
 Refactored to use QueryBuilder for SQL operations and eliminate redundancy.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 from datetime import date, datetime
 from pathlib import Path
 
@@ -62,7 +62,8 @@ class ReportGenerator:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
-    ) -> str:
+        structured: bool = False,
+    ) -> Union[str, Dict[str, Any]]:
         """
         Generate dynamic usage report in Excel format based on date range.
 
@@ -112,10 +113,14 @@ class ReportGenerator:
             )
 
             logger.info(f"{granularity.title()} report generated: {output_path}")
+            if structured:
+                return {"success": True, "path": str(output_path)}
             return str(output_path)
 
         except Exception as e:
             logger.error(f"Failed to generate {granularity} report: {e}")
+            if structured:
+                return {"success": False, "error": str(e)}
             return ""
 
     def _get_dynamic_report_data(
@@ -224,7 +229,9 @@ class ReportGenerator:
         end_date: date,
         category_filter: str = "",
         output_path: Optional[str] = None,
-    ) -> str:
+        low_stock_threshold: int = 10,
+        structured: bool = False,
+    ) -> Union[str, Dict[str, Any]]:
         """
         Generate inventory report based on type.
 
@@ -253,7 +260,9 @@ class ReportGenerator:
                 )
                 title = "Expiration Report"
             elif report_type == "Low Stock Alert":
-                report_data = self._get_low_stock_data(category_filter)
+                report_data = self._get_low_stock_data(
+                    category_filter, threshold=low_stock_threshold
+                )
                 title = "Low Stock Alert Report"
             elif report_type == "Acquisition History":
                 report_data = self._get_acquisition_history_data(
@@ -284,10 +293,14 @@ class ReportGenerator:
             )
 
             logger.info(f"{report_type} report generated: {output_path}")
+            if structured:
+                return {"success": True, "path": str(output_path)}
             return str(output_path)
 
         except Exception as e:
             logger.error(f"Failed to generate {report_type} report: {e}")
+            if structured:
+                return {"success": False, "error": str(e)}
             return ""
 
     def generate_trends_report(
@@ -298,8 +311,9 @@ class ReportGenerator:
         group_by: str = "item",
         top_n: Optional[int] = None,
         include_consumables: bool = True,
+        structured: bool = False,
         output_path: Optional[str] = None,
-    ) -> str:
+    ) -> Union[str, Dict[str, Any]]:
         """
         Generate a trends report (time-series) grouped by item or category.
 
@@ -342,10 +356,14 @@ class ReportGenerator:
             )
 
             logger.info(f"Trends report generated: {output_path}")
+            if structured:
+                return {"success": True, "path": str(output_path)}
             return str(output_path)
 
         except Exception as e:
             logger.error(f"Failed to generate trends report: {e}")
+            if structured:
+                return {"success": False, "error": str(e)}
             return ""
 
     def _get_stock_levels_data(self, category_filter: str = "") -> List[Dict]:
