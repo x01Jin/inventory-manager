@@ -107,3 +107,33 @@ def test_trends_auto_granularity(monkeypatch):
     # Generator should return an error string because there's no data
     assert "Failed to generate trends report" in result
     assert "No data found" in result
+
+
+def test_smart_granularity_thresholds():
+    from inventory_app.gui.reports.report_utils import date_formatter
+
+    start = date(2023, 1, 1)
+
+    # Up to 2 weeks -> daily
+    assert date_formatter.get_smart_granularity(start, date(2023, 1, 14)) == "daily"
+
+    # More than 2 weeks -> weekly
+    assert date_formatter.get_smart_granularity(start, date(2023, 1, 15)) == "weekly"
+
+    # Exactly 2 months from start is still weekly
+    assert date_formatter.get_smart_granularity(start, date(2023, 3, 1)) == "weekly"
+
+    # More than 2 months -> monthly
+    assert date_formatter.get_smart_granularity(start, date(2023, 3, 2)) == "monthly"
+
+    # Exactly 2 quarters (6 months) boundary -> monthly
+    assert date_formatter.get_smart_granularity(start, date(2023, 7, 1)) == "monthly"
+
+    # More than 6 months -> quarterly
+    assert date_formatter.get_smart_granularity(start, date(2023, 7, 2)) == "quarterly"
+
+    # Exactly 2 years boundary -> quarterly
+    assert date_formatter.get_smart_granularity(start, date(2025, 1, 1)) == "quarterly"
+
+    # More than 2 years -> yearly
+    assert date_formatter.get_smart_granularity(start, date(2025, 1, 2)) == "yearly"

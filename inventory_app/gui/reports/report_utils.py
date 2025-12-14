@@ -27,20 +27,44 @@ class ReportDateFormatter:
         Returns:
             Granularity level: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'multi_year'
         """
+        # Use explicit, human-friendly thresholds based on the user's
+        # requirement: granularity should switch after more than 2 units of
+        # the smaller magnitude. In plain terms:
+        # - <= 2 weeks -> daily
+        # - > 2 weeks and <= 2 months -> weekly
+        # - > 2 months and <= 2 quarters (6 months) -> monthly
+        # - > 2 quarters and <= 2 years -> quarterly
+        # - > 2 years -> yearly
         days_diff = (end_date - start_date).days + 1
 
-        if days_diff <= 7:
+        # helper to add months safely
+        def _add_months(d: date, months: int) -> date:
+            month = d.month - 1 + months
+            year = d.year + month // 12
+            month = month % 12 + 1
+            # clamp day to month's end when necessary
+            from inventory_app.utils.date_utils import get_days_in_month
+
+            day = min(d.day, get_days_in_month(year, month))
+            return date(year, month, day)
+
+        if days_diff <= 14:
             return "daily"
-        elif days_diff <= 30:
+
+        # more than 2 weeks -> weekly until (and including) 2 months from start
+        if end_date <= _add_months(start_date, 2):
             return "weekly"
-        elif days_diff <= 180:
+
+        # more than 2 months -> monthly until (and including) 2 quarters (6 months)
+        if end_date <= _add_months(start_date, 6):
             return "monthly"
-        elif days_diff <= 365:
+
+        # more than 2 quarters (6 months) -> quarterly until (and including) 2 years
+        if end_date <= _add_months(start_date, 24):
             return "quarterly"
-        elif days_diff <= 730:
-            return "yearly"
-        else:
-            return "multi_year"
+
+        # more than 2 years -> yearly
+        return "yearly"
 
     @staticmethod
     def format_period_header(date_obj: date, granularity: str) -> str:
