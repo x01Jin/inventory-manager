@@ -9,7 +9,11 @@ from PyQt6.QtGui import QColor
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.utils.date_utils import parse_datetime_iso, format_date_short, format_time_12h
+from inventory_app.utils.date_utils import (
+    parse_datetime_iso,
+    format_date_short,
+    format_time_12h,
+)
 
 
 class ScheduleChartManager:
@@ -22,8 +26,12 @@ class ScheduleChartManager:
         """Create and configure the schedule chart table widget."""
         table = QTableWidget()
         table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Status", "Requester", "Expected Request", "Expected Return"])
-        table.setSizePolicy(table.sizePolicy().Policy.Expanding, table.sizePolicy().Policy.Expanding)
+        table.setHorizontalHeaderLabels(
+            ["Status", "Requester", "Expected Request", "Expected Return"]
+        )
+        table.setSizePolicy(
+            table.sizePolicy().Policy.Expanding, table.sizePolicy().Policy.Expanding
+        )
         table.setWordWrap(True)
         table.setAlternatingRowColors(False)
         table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -39,7 +47,9 @@ class ScheduleChartManager:
         # Configure row resizing
         vertical_header = table.verticalHeader()
         if vertical_header:
-            vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+            vertical_header.setSectionResizeMode(
+                QHeaderView.ResizeMode.ResizeToContents
+            )
 
         # Apply compact styling to override default styles
         table.setStyleSheet(f"""
@@ -85,28 +95,33 @@ class ScheduleChartManager:
             requisitions = self._get_upcoming_requisitions()
 
             # Set table row count
-            schedule_table.setRowCount(min(len(requisitions), 5))  # Limit to 5 rows for compactness
+            schedule_table.setRowCount(
+                min(len(requisitions), 5)
+            )  # Limit to 5 rows for compactness
 
             for row, req in enumerate(requisitions[:5]):
                 # Status column with color coding
-                status_item = QTableWidgetItem(req['status'])
-                if req['status'] == 'active':
+                status_item = QTableWidgetItem(req["status"])
+                if req["status"] == "active":
                     status_item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
-                elif req['status'] == 'requested':
+                elif req["status"] == "requested":
                     status_item.setForeground(QColor(DarkTheme.WARNING_COLOR))
-                elif req['status'] == 'overdue':
+                elif req["status"] == "returned":
+                    # In case returned items are ever displayed here, use returned blue
+                    status_item.setForeground(QColor(DarkTheme.RETURNED_COLOR))
+                elif req["status"] == "overdue":
                     status_item.setForeground(QColor(DarkTheme.ERROR_COLOR))
                 schedule_table.setItem(row, 0, status_item)
 
                 # Requester name
-                schedule_table.setItem(row, 1, QTableWidgetItem(req['requester_name']))
+                schedule_table.setItem(row, 1, QTableWidgetItem(req["requester_name"]))
 
                 # Expected request date/time
-                expected_request = self._format_datetime(req['expected_request'])
+                expected_request = self._format_datetime(req["expected_request"])
                 schedule_table.setItem(row, 2, QTableWidgetItem(expected_request))
 
                 # Expected return date/time
-                expected_return = self._format_datetime(req['expected_return'])
+                expected_return = self._format_datetime(req["expected_return"])
                 schedule_table.setItem(row, 3, QTableWidgetItem(expected_return))
 
         except Exception as e:

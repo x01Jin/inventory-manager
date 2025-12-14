@@ -19,6 +19,7 @@ from PyQt6.QtGui import QColor, QShowEvent
 from inventory_app.gui.requisitions.requisitions_model import RequisitionRow
 from inventory_app.utils.logger import logger
 from inventory_app.utils.date_utils import format_date_short, format_time_12h
+from inventory_app.gui.styles import DarkTheme
 
 # Some PyQt6 stubs (Pylance) may not expose newer ItemDataRole attributes like SortRole.
 # Use getattr with a safe fallback to avoid static analysis errors while keeping runtime
@@ -148,15 +149,17 @@ class RequisitionsTable(QTableWidget):
                     row_data.status.capitalize() if row_data.status else "Unknown"
                 )
                 status_item = self.SortableTableItem(display_status)
-                # Set sort priority for status: active < overdue < returned (lower sorts first)
+                # Set sort priority for status: requested < active < overdue < returned (lower sorts first)
                 status_rank = 99
                 s = (row_data.status or "").lower()
-                if s == "active":
+                if s == "requested":
                     status_rank = 0
-                elif s == "overdue":
+                elif s == "active":
                     status_rank = 1
-                elif s == "returned":
+                elif s == "overdue":
                     status_rank = 2
+                elif s == "returned":
+                    status_rank = 3
                 status_item.setData(SORT_ROLE, status_rank)
                 self.setItem(row_position, 0, status_item)
                 self._color_status_item(status_item, row_data.status)
@@ -199,6 +202,7 @@ class RequisitionsTable(QTableWidget):
             if prev_sorting:
                 header = self.horizontalHeader()
                 # Default sort by status priority (active, overdue, returned)
+                # Now includes requested as the highest priority
                 if header is not None:
                     header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
                     header.setSortIndicatorShown(False)
@@ -281,16 +285,18 @@ class RequisitionsTable(QTableWidget):
             item: The table item to color
             status: The status string
         """
+        # Use centralized DarkTheme colors for consistent appearance with dashboard
         if status == "active":
-            item.setBackground(QColor("#FFF3CD"))  # Light yellow
-            item.setForeground(QColor("#856404"))  # Dark yellow
-        elif status == "returned":
-            item.setBackground(QColor("#D1ECF1"))  # Light blue
-            item.setForeground(QColor("#0C5460"))  # Dark blue
+            item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
+        elif status == "requested":
+            item.setForeground(QColor(DarkTheme.WARNING_COLOR))
         elif status == "overdue":
-            item.setBackground(QColor("#F8D7DA"))  # Light red
-            item.setForeground(QColor("#721C24"))  # Dark red
+            item.setForeground(QColor(DarkTheme.ERROR_COLOR))
+        elif status == "returned":
+            item.setForeground(QColor(DarkTheme.RETURNED_COLOR))
         else:
+            # Fallback to normal text color
+            item.setForeground(QColor(DarkTheme.TEXT_PRIMARY))
             # Default colors
             item.setBackground(QColor("#FFFFFF"))  # White
             item.setForeground(QColor("#000000"))  # Black
@@ -329,7 +335,7 @@ class RequisitionsTable(QTableWidget):
         header = self.horizontalHeader()
         current = header.sortIndicatorSection() if header is not None else -1
 
-        # Status: default ascending => active, overdue, returned
+        # Status: default ascending => requested, active, overdue, returned
         if section == 0 and current != 0:
             self.sortItems(0, Qt.SortOrder.AscendingOrder)
             return

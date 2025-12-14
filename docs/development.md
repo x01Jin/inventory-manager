@@ -19,10 +19,8 @@ Packaging
 Notes on Schema Changes
 
 - For schema updates, update `inventory_app/database/schema.sql` and add migrations to populate or alter fields if required.
-- New constraints and indices were added to improve integrity and performance: `CHECK` constraint on `Stock_Movements(movement_type)` driven by the `MovementType` enum, `ON DELETE CASCADE` for several foreign keys, and `idx_movements_source` to speed up lookup and deletes by `source_id`.
+- Constraints and indices improve integrity and performance: a `CHECK` constraint on `Stock_Movements(movement_type)` (driven by the `MovementType` enum), `ON DELETE CASCADE` for several foreign keys, and `idx_movements_source` to speed up lookup and deletes by `source_id`.
 
-Other Notes
-
-- Use `DatabaseConnection.transaction()` for multi-step flows to ensure atomic behavior and rollback on error. Unit tests were added to validate commit/rollback semantics.
+- Use `DatabaseConnection.transaction()` for multi-step flows to ensure atomic behavior and rollback on error; unit tests validate commit/rollback semantics.
 - Use `execute_update(..., return_last_id=True)` to reliably obtain last insert ids for new records and avoid cross-connection `last_insert_rowid()` usage.
-- Unit tests added related to concurrency, transaction handling, and the new movement type enum.
+- Unit tests cover concurrency, transaction handling, and the movement type enum.

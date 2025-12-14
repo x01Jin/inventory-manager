@@ -110,6 +110,52 @@ CREATE TABLE Stock_Movements (
 -- Indexes
 CREATE INDEX idx_movements_item_date ON Stock_Movements(item_id, movement_date);
 
+-- Trigger: Prevent movements that would oversubscribe a batch's received quantity
+CREATE TRIGGER IF NOT EXISTS trg_stock_movement_batch_before_insert
+BEFORE INSERT ON Stock_Movements
+WHEN NEW.batch_id IS NOT NULL AND NEW.movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')
+BEGIN
+    SELECT CASE
+        WHEN (COALESCE((SELECT SUM(quantity) FROM Stock_Movements WHERE batch_id = NEW.batch_id AND movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')),0) + NEW.quantity)
+             > (SELECT quantity_received FROM Item_Batches WHERE id = NEW.batch_id)
+        THEN RAISE(ABORT, 'Insufficient batch stock for this movement')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_stock_movement_batch_before_update
+BEFORE UPDATE OF quantity, batch_id, movement_type ON Stock_Movements
+WHEN NEW.batch_id IS NOT NULL AND NEW.movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')
+BEGIN
+    SELECT CASE
+        WHEN (COALESCE((SELECT SUM(quantity) FROM Stock_Movements WHERE batch_id = NEW.batch_id AND movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL') AND id != OLD.id),0) + NEW.quantity)
+             > (SELECT quantity_received FROM Item_Batches WHERE id = NEW.batch_id)
+        THEN RAISE(ABORT, 'Insufficient batch stock for this movement (update)')
+    END;
+END;
+
+-- Trigger: Prevent movements without a batch_id that would oversubscribe the item's total received quantity
+CREATE TRIGGER IF NOT EXISTS trg_stock_movement_item_before_insert
+BEFORE INSERT ON Stock_Movements
+WHEN NEW.batch_id IS NULL AND NEW.movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')
+BEGIN
+    SELECT CASE
+        WHEN (COALESCE((SELECT SUM(quantity) FROM Stock_Movements WHERE item_id = NEW.item_id AND movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')),0) + NEW.quantity)
+             > (COALESCE((SELECT SUM(quantity_received) FROM Item_Batches WHERE item_id = NEW.item_id),0))
+        THEN RAISE(ABORT, 'Insufficient item stock for this movement')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_stock_movement_item_before_update
+BEFORE UPDATE OF quantity, batch_id, movement_type ON Stock_Movements
+WHEN NEW.batch_id IS NULL AND NEW.movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL')
+BEGIN
+    SELECT CASE
+        WHEN (COALESCE((SELECT SUM(quantity) FROM Stock_Movements WHERE item_id = NEW.item_id AND movement_type IN ('CONSUMPTION','RESERVATION','DISPOSAL') AND id != OLD.id),0) + NEW.quantity)
+             > (COALESCE((SELECT SUM(quantity_received) FROM Item_Batches WHERE item_id = NEW.item_id),0))
+        THEN RAISE(ABORT, 'Insufficient item stock for this movement (update)')
+    END;
+END;
+
 -- 8. Requesters: Requester information
 CREATE TABLE Requesters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -5,9 +5,15 @@ Uses composition pattern with RequisitionsModel.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QComboBox, QPushButton, QGroupBox,
-    QDateEdit
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QPushButton,
+    QGroupBox,
+    QDateEdit,
 )
 from PyQt6.QtCore import pyqtSignal, QDate
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -24,7 +30,9 @@ class RequisitionsFilters(QWidget):
     search_changed = pyqtSignal(str)  # Search term changed
     requester_filter_changed = pyqtSignal(str)  # Requester filter changed
     status_filter_changed = pyqtSignal(str)  # Status filter changed
-    date_range_changed = pyqtSignal(object, object)  # Date range changed (from_date, to_date)
+    date_range_changed = pyqtSignal(
+        object, object
+    )  # Date range changed (from_date, to_date)
     clear_filters_requested = pyqtSignal()  # Clear all filters
 
     def __init__(self, parent=None):
@@ -48,7 +56,9 @@ class RequisitionsFilters(QWidget):
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("Search:"))
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by requester name, activity, or items...")
+        self.search_input.setPlaceholderText(
+            "Search by requester name, activity, or items..."
+        )
         self.search_input.textChanged.connect(self._on_search_changed)
         search_row.addWidget(self.search_input)
         search_layout.addLayout(search_row)
@@ -65,6 +75,7 @@ class RequisitionsFilters(QWidget):
         filter_row1.addWidget(QLabel("Status:"))
         self.status_combo = QComboBox()
         self.status_combo.addItem("All Statuses", "")
+        self.status_combo.addItem("Requested", "requested")
         self.status_combo.addItem("Active", "active")
         self.status_combo.addItem("Returned", "returned")
         self.status_combo.addItem("Overdue", "overdue")
@@ -78,7 +89,9 @@ class RequisitionsFilters(QWidget):
 
         filter_row2.addWidget(QLabel("From:"))
         self.date_from = QDateEdit()
-        self.date_from.setDate(QDate.currentDate().addDays(-30))  # Default to 30 days ago
+        self.date_from.setDate(
+            QDate.currentDate().addDays(-30)
+        )  # Default to 30 days ago
         self.date_from.setCalendarPopup(True)
         self.date_from.dateChanged.connect(self._on_date_range_changed)
         filter_row2.addWidget(self.date_from)
@@ -102,7 +115,9 @@ class RequisitionsFilters(QWidget):
 
         # Filter summary
         self.summary_label = QLabel("Showing all requisitions")
-        self.summary_label.setStyleSheet("font-size: 11pt; color: #666; font-style: italic;")
+        self.summary_label.setStyleSheet(
+            "font-size: 11pt; color: #666; font-style: italic;"
+        )
         layout.addWidget(self.summary_label)
 
     def set_model(self, model: RequisitionsModel):
@@ -135,7 +150,9 @@ class RequisitionsFilters(QWidget):
             if filtered_count == total_count:
                 self.summary_label.setText(f"Showing all {total_count} requisitions")
             else:
-                percentage = (filtered_count / total_count * 100) if total_count > 0 else 0
+                percentage = (
+                    (filtered_count / total_count * 100) if total_count > 0 else 0
+                )
                 self.summary_label.setText(
                     f"Showing {filtered_count} of {total_count} requisitions ({percentage:.1f}%)"
                 )
@@ -146,11 +163,15 @@ class RequisitionsFilters(QWidget):
         """Get current filter settings as a dictionary."""
         try:
             return {
-                'search_term': self.search_input.text().strip(),
-                'requester_filter': self.requester_combo.currentData() or "",
-                'status_filter': self.status_combo.currentData() or "",
-                'date_from': self.date_from.date().toPyDate() if self.date_from.date().isValid() else None,
-                'date_to': self.date_to.date().toPyDate() if self.date_to.date().isValid() else None
+                "search_term": self.search_input.text().strip(),
+                "requester_filter": self.requester_combo.currentData() or "",
+                "status_filter": self.status_combo.currentData() or "",
+                "date_from": self.date_from.date().toPyDate()
+                if self.date_from.date().isValid()
+                else None,
+                "date_to": self.date_to.date().toPyDate()
+                if self.date_to.date().isValid()
+                else None,
             }
         except Exception as e:
             logger.error(f"Failed to get current filters: {e}")
@@ -160,28 +181,36 @@ class RequisitionsFilters(QWidget):
         """Set filter values from a dictionary."""
         try:
             # Search term
-            if 'search_term' in filters:
-                self.search_input.setText(filters['search_term'])
+            if "search_term" in filters:
+                self.search_input.setText(filters["search_term"])
 
             # Requester filter
-            if 'requester_filter' in filters:
-                index = self.requester_combo.findData(filters['requester_filter'])
+            if "requester_filter" in filters:
+                index = self.requester_combo.findData(filters["requester_filter"])
                 if index >= 0:
                     self.requester_combo.setCurrentIndex(index)
 
             # Status filter
-            if 'status_filter' in filters:
-                index = self.status_combo.findData(filters['status_filter'])
+            if "status_filter" in filters:
+                index = self.status_combo.findData(filters["status_filter"])
                 if index >= 0:
                     self.status_combo.setCurrentIndex(index)
 
             # Date range
-            if 'date_from' in filters and filters['date_from']:
-                qdate = QDate(filters['date_from'].year, filters['date_from'].month, filters['date_from'].day)
+            if "date_from" in filters and filters["date_from"]:
+                qdate = QDate(
+                    filters["date_from"].year,
+                    filters["date_from"].month,
+                    filters["date_from"].day,
+                )
                 self.date_from.setDate(qdate)
 
-            if 'date_to' in filters and filters['date_to']:
-                qdate = QDate(filters['date_to'].year, filters['date_to'].month, filters['date_to'].day)
+            if "date_to" in filters and filters["date_to"]:
+                qdate = QDate(
+                    filters["date_to"].year,
+                    filters["date_to"].month,
+                    filters["date_to"].day,
+                )
                 self.date_to.setDate(qdate)
 
             logger.debug("Filter values set from dictionary")

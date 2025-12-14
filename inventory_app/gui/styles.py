@@ -23,6 +23,7 @@ class DarkTheme:
     WARNING_COLOR = "#f59e0b"
     ERROR_COLOR = "#ef4444"
     INFO_COLOR = "#06b6d4"
+    RETURNED_COLOR = "#3B82F6"
 
     # Fonts
     FONT_FAMILY = "Segoe UI"

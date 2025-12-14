@@ -8,8 +8,16 @@ Once processed, the requisition is locked and cannot be edited.
 
 from typing import List, Optional
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QMessageBox, QInputDialog, QSpinBox, QWidget
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QGroupBox,
+    QMessageBox,
+    QInputDialog,
+    QSpinBox,
+    QWidget,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -17,7 +25,12 @@ from .return_processor import ReturnProcessor, ReturnItem
 from inventory_app.database.models import Requisition, Requester
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
-from inventory_app.utils.date_utils import parse_datetime_iso, parse_date_iso, format_date_short
+from inventory_app.utils.date_utils import (
+    parse_datetime_iso,
+    parse_date_iso,
+    format_date_short,
+)
+from inventory_app.gui.styles import DarkTheme
 
 
 class ReturnItemWidget(QWidget):
@@ -48,7 +61,9 @@ class ReturnItemWidget(QWidget):
         info_layout.addWidget(self.item_label)
 
         # Requested quantity
-        self.requested_label = QLabel(f"Requested: {self.return_item.quantity_requested}")
+        self.requested_label = QLabel(
+            f"Requested: {self.return_item.quantity_requested}"
+        )
         self.requested_label.setStyleSheet("font-size: 9pt; color: #666;")
         info_layout.addWidget(self.requested_label)
 
@@ -92,7 +107,9 @@ class ReturnItemWidget(QWidget):
         summary_layout.setSpacing(2)
 
         self.summary_label = QLabel(self._get_summary_text())
-        self.summary_label.setStyleSheet("font-weight: bold; font-size: 10pt; text-align: center;")
+        self.summary_label.setStyleSheet(
+            "font-weight: bold; font-size: 10pt; text-align: center;"
+        )
         self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(self.summary_label)
 
@@ -124,13 +141,13 @@ class ReturnItemWidget(QWidget):
 
         # Update background color based on completion
         if self.return_item.is_fully_processed():
-            self.setStyleSheet("""
-                ReturnItemWidget {
-                    border: 2px solid #10b981;
+            self.setStyleSheet(f"""
+                ReturnItemWidget {{
+                    border: 2px solid {DarkTheme.SUCCESS_COLOR};
                     border-radius: 8px;
                     background-color: #f0fdf4;
                     margin: 2px;
-                }
+                }}
             """)
         else:
             self.setStyleSheet("""
@@ -178,7 +195,11 @@ class ItemReturnDialog(QDialog):
 
         # Get requisition and requester info
         self.requisition = self._get_requisition(requisition_id)
-        self.requester = self._get_requester(self.requisition.requester_id) if self.requisition else None
+        self.requester = (
+            self._get_requester(self.requisition.requester_id)
+            if self.requisition
+            else None
+        )
 
         if not self.requisition or not self.requester:
             QMessageBox.critical(self, "Error", "Could not load requisition data.")
@@ -188,19 +209,24 @@ class ItemReturnDialog(QDialog):
         # Check if already processed
         if self.return_processor.is_requisition_processed(requisition_id):
             QMessageBox.information(
-                self, "Already Processed",
-                "This requisition has already been processed and is locked."
+                self,
+                "Already Processed",
+                "This requisition has already been processed and is locked.",
             )
             self.reject()
             return
 
         self.setup_ui()
         self.load_return_data()
-        logger.info(f"One-time return dialog initialized for requisition {requisition_id}")
+        logger.info(
+            f"One-time return dialog initialized for requisition {requisition_id}"
+        )
 
     def setup_ui(self):
         """Setup the simplified dialog UI."""
-        self.setWindowTitle(f"Final Return Processing - Requisition #{self.requisition_id}")
+        self.setWindowTitle(
+            f"Final Return Processing - Requisition #{self.requisition_id}"
+        )
         self.setModal(True)
         self.setMinimumSize(700, 500)
         self.resize(800, 600)
@@ -210,14 +236,18 @@ class ItemReturnDialog(QDialog):
 
         # Header with warning about one-time processing
         header_label = QLabel("🔒 Final Return Processing")
-        header_label.setStyleSheet("font-size: 18pt; font-weight: bold; margin-bottom: 10px;")
+        header_label.setStyleSheet(
+            "font-size: 18pt; font-weight: bold; margin-bottom: 10px;"
+        )
         layout.addWidget(header_label)
 
         warning_label = QLabel(
             "⚠️ This is a ONE-TIME process. Once you click 'Process Returns', "
             "the requisition will be locked and cannot be edited."
         )
-        warning_label.setStyleSheet("font-size: 10pt; color: #ef4444; font-weight: bold; padding: 8px; background-color: #fef2f2; border-radius: 4px;")
+        warning_label.setStyleSheet(
+            f"font-size: 10pt; color: {DarkTheme.ERROR_COLOR}; font-weight: bold; padding: 8px; background-color: #fef2f2; border-radius: 4px;"
+        )
         warning_label.setWordWrap(True)
         layout.addWidget(warning_label)
 
@@ -225,12 +255,20 @@ class ItemReturnDialog(QDialog):
         info_group = QGroupBox("Requisition Information")
         info_layout = QVBoxLayout(info_group)
 
-        requester_text = f"👤 Requester: {self.requester.name} ({self.requester.affiliation})" if self.requester else "Requester: Unknown"
+        requester_text = (
+            f"👤 Requester: {self.requester.name} ({self.requester.affiliation})"
+            if self.requester
+            else "Requester: Unknown"
+        )
         requester_label = QLabel(requester_text)
         requester_label.setStyleSheet("font-weight: bold;")
         info_layout.addWidget(requester_label)
 
-        activity_text = f"📝 Activity: {self.requisition.lab_activity_name}" if self.requisition else "Activity: Unknown"
+        activity_text = (
+            f"📝 Activity: {self.requisition.lab_activity_name}"
+            if self.requisition
+            else "Activity: Unknown"
+        )
         activity_label = QLabel(activity_text)
         info_layout.addWidget(activity_label)
 
@@ -270,7 +308,9 @@ class ItemReturnDialog(QDialog):
         summary_layout = QVBoxLayout(summary_group)
 
         self.summary_label = QLabel("Ready to process")
-        self.summary_label.setStyleSheet("font-weight: bold; padding: 10px; font-size: 11pt;")
+        self.summary_label.setStyleSheet(
+            "font-weight: bold; padding: 10px; font-size: 11pt;"
+        )
         summary_layout.addWidget(self.summary_label)
 
         layout.addWidget(summary_group)
@@ -281,7 +321,9 @@ class ItemReturnDialog(QDialog):
 
         self.process_button = QPushButton("🔒 Process Returns (Final)")
         self.process_button.clicked.connect(self.process_returns)
-        self.process_button.setEnabled(True)  # Always enabled - user gets warnings and confirmation
+        self.process_button.setEnabled(
+            True
+        )  # Always enabled - user gets warnings and confirmation
         button_layout.addWidget(self.process_button)
 
         cancel_button = QPushButton("❌ Cancel")
@@ -294,7 +336,9 @@ class ItemReturnDialog(QDialog):
         """Load return data and create simplified item widgets."""
         try:
             # Get return items from processor
-            self.return_items = self.return_processor.get_requisition_items_for_return(self.requisition_id)
+            self.return_items = self.return_processor.get_requisition_items_for_return(
+                self.requisition_id
+            )
 
             # Get item names
             item_names = self._get_item_names()
@@ -304,7 +348,9 @@ class ItemReturnDialog(QDialog):
 
             # Create widgets for each item
             for return_item in self.return_items:
-                item_name = item_names.get(return_item.item_id, f"Item #{return_item.item_id}")
+                item_name = item_names.get(
+                    return_item.item_id, f"Item #{return_item.item_id}"
+                )
                 widget = ReturnItemWidget(return_item, item_name, self)
                 # Connect widget value changes to dialog summary updates
                 widget.valueChanged.connect(self._update_summary)
@@ -342,9 +388,7 @@ class ItemReturnDialog(QDialog):
         consumables = [item for item in self.return_items if item.is_consumable]
         non_consumables = [item for item in self.return_items if not item.is_consumable]
 
-        summary_parts = [
-            f"Items: {total_items} total     "
-        ]
+        summary_parts = [f"Items: {total_items} total     "]
 
         # Add appropriate labels
         if consumables:
@@ -364,13 +408,14 @@ class ItemReturnDialog(QDialog):
         try:
             # Confirm one-time processing
             reply = QMessageBox.question(
-                self, "Confirm Final Processing",
+                self,
+                "Confirm Final Processing",
                 "⚠️ This will process all returns and LOCK the requisition permanently.\n\n"
                 "• Edit and Return buttons will be disabled\n"
                 "• Only deletion will be allowed\n\n"
                 "Are you sure you want to proceed?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.No,
             )
 
             if reply != QMessageBox.StandardButton.Yes:
@@ -378,8 +423,7 @@ class ItemReturnDialog(QDialog):
 
             # Get editor name
             editor_name, ok = QInputDialog.getText(
-                self, "Editor Information",
-                "Enter your name/initials (required):"
+                self, "Editor Information", "Enter your name/initials (required):"
             )
 
             if not ok or not editor_name.strip():
@@ -388,18 +432,17 @@ class ItemReturnDialog(QDialog):
 
             # Process final returns
             success = self.return_processor.process_returns(
-                self.requisition_id,
-                self.return_items,
-                editor_name.strip()
+                self.requisition_id, self.return_items, editor_name.strip()
             )
 
             if success:
                 QMessageBox.information(
-                    self, "Success",
+                    self,
+                    "Success",
                     "✅ Returns processed successfully!\n\n"
                     "• Stock movements have been recorded\n"
                     "• Requisition is now LOCKED\n"
-                    "• Edit and Return buttons are disabled"
+                    "• Edit and Return buttons are disabled",
                 )
                 self.accept()
             else:
@@ -419,12 +462,18 @@ class ItemReturnDialog(QDialog):
 
             req_dict = dict(rows[0])
             # Convert dates using date_utils
-            if req_dict.get('expected_request'):
-                req_dict['expected_request'] = parse_datetime_iso(req_dict['expected_request'])
-            if req_dict.get('expected_return'):
-                req_dict['expected_return'] = parse_datetime_iso(req_dict['expected_return'])
-            if req_dict.get('lab_activity_date'):
-                req_dict['lab_activity_date'] = parse_date_iso(req_dict['lab_activity_date'])
+            if req_dict.get("expected_request"):
+                req_dict["expected_request"] = parse_datetime_iso(
+                    req_dict["expected_request"]
+                )
+            if req_dict.get("expected_return"):
+                req_dict["expected_return"] = parse_datetime_iso(
+                    req_dict["expected_return"]
+                )
+            if req_dict.get("lab_activity_date"):
+                req_dict["lab_activity_date"] = parse_date_iso(
+                    req_dict["lab_activity_date"]
+                )
 
             return Requisition(**req_dict)
         except Exception as e:
@@ -447,12 +496,12 @@ class ItemReturnDialog(QDialog):
                 return {}
 
             # Create placeholders for the IN clause
-            placeholders = ','.join('?' * len(item_ids))
+            placeholders = ",".join("?" * len(item_ids))
 
             query = f"SELECT id, name FROM Items WHERE id IN ({placeholders})"
             rows = db.execute_query(query, tuple(item_ids))
 
-            return {row['id']: row['name'] for row in rows}
+            return {row["id"]: row["name"] for row in rows}
         except Exception as e:
             logger.error(f"Failed to get item names: {e}")
             return {}

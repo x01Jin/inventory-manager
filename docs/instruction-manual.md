@@ -55,6 +55,7 @@ The UI main sections (accessible via sidebar navigation) are:
 - **Processing Requisition**:
   - When approved/processed, items are reserved or issued depending on internal workflow.
   - Use the Requisition preview to mark items as returned or consumed and to register partial returns.
+  - The requisitions UI supports filtering by `Requested` status and the preview provides clearer return summaries and confirmations to help avoid mistakes during return processing. Returned requisitions are displayed using a consistent color to make them easy to identify.
 
 - **Returns**:
   - To process a return, open the Requisition preview and select the items being returned, choose the return reason, and set the returned quantities. The app records an activity entry for audit.
@@ -98,6 +99,8 @@ The UI main sections (accessible via sidebar navigation) are:
 - **DB fails to initialize**: Ensure the folder is writable. If the app cannot create `inventory.db`, you may see errors in logs.
 - **Concurrent access issues**: Avoid running multiple copies of the EXE working against the same DB concurrently. For multi-user setups consider converting to a central server DB.
 
+- **Database constraint / insufficient stock errors**: Some operations that would cause the available quantity to become negative are prevented by database triggers; in that case the database will abort the statement and the app will surface an error. Check `logs/logs.txt` for a detailed message if an operation fails due to constrained stock or integrity checks.
+
 ## Common Errors & Fixes
 
 - "Database file not found" — Run EXE in the same folder as the DB or place `inventory.db` in that folder.
@@ -108,6 +111,6 @@ The UI main sections (accessible via sidebar navigation) are:
 - Q: Where is the data stored?
   - A: In `inventory.db` inside the application working directory.
 - Q: How do I create user accounts?
-  - A: This release doesn't implement multi-user authentication; requesters are simply persons who can request items. Use Requesters page to manage them.
+  - A: The application does not implement multi-user authentication; requesters are simply persons who can request items. Use Requesters page to manage them.
 - Q: Can I export an item list?
   - A: Use Reports to generate and export item lists and stock reports.

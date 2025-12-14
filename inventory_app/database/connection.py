@@ -28,6 +28,21 @@ class DatabaseConnection:
         # If a transaction is active, this holds the sqlite3.Connection
         self._transaction_conn: Optional[sqlite3.Connection] = None
 
+    def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
+        """
+        Apply PRAGMA settings to improve durability and concurrency.
+
+        - `journal_mode = WAL` for write-ahead logging
+        - `synchronous = FULL` for stronger durability
+        """
+        try:
+            # Set WAL for better concurrent write behavior
+            conn.execute("PRAGMA journal_mode = WAL")
+            # Prioritize durability; change to NORMAL if performance tuning is desired
+            conn.execute("PRAGMA synchronous = FULL")
+        except Exception as e:
+            logger.warning(f"Failed to apply PRAGMA settings: {e}")
+
     class _ConnectionContext:
         """
         Context manager for database connections.
@@ -40,8 +55,19 @@ class DatabaseConnection:
 
         def __enter__(self) -> sqlite3.Connection:
             self.conn = sqlite3.connect(self.db_path)
-            self.conn.execute("PRAGMA foreign_keys = ON")
+            # Apply recommended pragmas for durability / concurrency
             self.conn.row_factory = sqlite3.Row  # Enable column access by name
+            # Apply PRAGMAs and enable FK enforcement
+            # Use the same method for consistent behavior
+            # (calling the instance method directly isn't possible from nested class),
+            # so set key PRAGMAs here.
+            try:
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA synchronous = FULL")
+            except Exception as e:
+                logger.warning(f"Failed to set PRAGMAs on connection: {e}")
+            self.conn.execute("PRAGMA foreign_keys = ON")
+
             return self.conn
 
         def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -68,6 +94,12 @@ class DatabaseConnection:
             if self.parent._transaction_conn is not None:
                 raise RuntimeError("Nested transactions are not supported")
             self.conn = sqlite3.connect(self.parent.db_path)
+            # Apply PRAGMAs and enable FK enforcement
+            try:
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA synchronous = FULL")
+            except Exception as e:
+                logger.warning(f"Failed to set PRAGMAs on transaction connection: {e}")
             self.conn.execute("PRAGMA foreign_keys = ON")
             self.conn.row_factory = sqlite3.Row
             # If the caller requested an immediate transaction, begin one

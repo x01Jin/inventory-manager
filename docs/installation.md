@@ -33,6 +33,8 @@ Notes
 
 - The database schema is in `inventory_app/database/schema.sql`. The initial run will auto-create the SQLite DB at `inventory.db` if it does not exist.
 
+- The application configures SQLite connections for stronger durability and integrity by enabling Write-Ahead Logging (`PRAGMA journal_mode = WAL`), setting `PRAGMA synchronous = FULL` and enforcing `PRAGMA foreign_keys = ON`. Because WAL uses additional files, place the database on a local disk (not a network share) for reliable operation.
+
 Scheduling maintenance
 
 - **Cron (Linux/macOS):** Add a cron job to run daily (example at 2am) using the installed Python environment:

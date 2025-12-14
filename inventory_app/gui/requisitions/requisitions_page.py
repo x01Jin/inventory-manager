@@ -224,9 +224,10 @@ class RequisitionsPage(QWidget):
             stats = self.model.get_statistics()
             self.status_label.setText(
                 f"Total: {stats['total_requisitions']} | "
+                f"Requested: {stats['requested_requisitions']} | "
                 f"Active: {stats['active_requisitions']} | "
-                f"Returned: {stats['returned_requisitions']} | "
-                f"Overdue: {stats['overdue_requisitions']}"
+                f"Overdue: {stats['overdue_requisitions']} | "
+                f"Returned: {stats['returned_requisitions']}"
             )
 
         except Exception as e:
