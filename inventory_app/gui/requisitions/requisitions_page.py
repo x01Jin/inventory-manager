@@ -6,6 +6,7 @@ Provides full CRUD operations for requisitions with requester management.
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QShowEvent
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -111,11 +112,15 @@ class RequisitionsPage(QWidget):
 
         # Create main horizontal splitter for (filters + table) + preview
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_splitter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        main_splitter.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
 
         # Left panel: Filters + Table (vertical layout)
         left_panel = QWidget()
-        left_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        left_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(15)
@@ -126,7 +131,9 @@ class RequisitionsPage(QWidget):
 
         # Table section
         table_group = QGroupBox("Laboratory Requisitions")
-        table_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        table_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         table_layout = QVBoxLayout(table_group)
         table_layout.addWidget(self.table)
         left_layout.addWidget(table_group)
@@ -135,7 +142,9 @@ class RequisitionsPage(QWidget):
 
         # Right panel: Preview
         preview_group = QGroupBox("Requisition Details")
-        preview_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        preview_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.addWidget(self.preview)
         main_splitter.addWidget(preview_group)
@@ -180,12 +189,16 @@ class RequisitionsPage(QWidget):
             # Update all requisition statuses using the status watcher
             updated_count = self._update_all_requisition_statuses()
             if updated_count > 0:
-                logger.info(f"✅ Updated {updated_count} requisition statuses during refresh")
+                logger.info(
+                    f"✅ Updated {updated_count} requisition statuses during refresh"
+                )
 
                 # Reload data to get updated statuses
                 success = self.model.load_data()
                 if not success:
-                    logger.error("❌ STEP 2 FAILED: Failed to reload data after status updates")
+                    logger.error(
+                        "❌ STEP 2 FAILED: Failed to reload data after status updates"
+                    )
                     QMessageBox.warning(
                         self,
                         "Data Reload Error",
@@ -259,6 +272,20 @@ class RequisitionsPage(QWidget):
                 f"Failed to refresh data after creating requisition: {str(e)}",
             )
 
+    def showEvent(self, a0: Optional[QShowEvent]) -> None:
+        """Ensure child table layouts are refreshed when the page becomes visible."""
+        super().showEvent(a0)
+        try:
+            # Force table to recompute sizes and repaint to avoid visual glitches
+            self.table.resize_columns_to_contents()
+            _vp = self.table.viewport()
+            if _vp is not None:
+                _vp.update()
+            self.table.repaint()
+        except Exception:
+            # Don't let repaint issues break the page
+            pass
+
     def edit_requisition(self):
         """Open dialog to edit the currently selected requisition."""
         try:
@@ -302,7 +329,9 @@ class RequisitionsPage(QWidget):
             requisition_id = self.table.get_selected_requisition_id()
             if not requisition_id:
                 QMessageBox.warning(
-                    self, "No Selection", "Please select a requisition to return items for."
+                    self,
+                    "No Selection",
+                    "Please select a requisition to return items for.",
                 )
                 return
 
@@ -315,9 +344,10 @@ class RequisitionsPage(QWidget):
             # Check if requisition has already been processed
             if requisition_summary.status == "returned":
                 QMessageBox.information(
-                    self, "Already Processed",
+                    self,
+                    "Already Processed",
                     "This requisition has already been processed and is locked.\n"
-                    "Edit and Return buttons are disabled. Only deletion is allowed."
+                    "Edit and Return buttons are disabled. Only deletion is allowed.",
                 )
                 return
 
@@ -332,7 +362,9 @@ class RequisitionsPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to open return dialog: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to open return dialog: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to open return dialog: {str(e)}"
+            )
 
     def delete_requisition(self):
         """Delete the currently selected requisition."""
@@ -373,7 +405,10 @@ class RequisitionsPage(QWidget):
                 logger.info(f"Requisition {requisition_id} deleted by {editor_name}")
 
                 # Log the deletion activity
-                from inventory_app.services.requisition_activity import requisition_activity_manager
+                from inventory_app.services.requisition_activity import (
+                    requisition_activity_manager,
+                )
+
                 requisition_activity_manager.log_requisition_deleted(
                     requisition_id=requisition_id,
                     requester_name=requester_name,
@@ -466,18 +501,25 @@ class RequisitionsPage(QWidget):
             if has_selection:
                 # Get requisition status to determine button states
                 requisition_summary = self.model.get_requisition_by_id(requisition_id)
-                is_processed = (requisition_summary and
-                              requisition_summary.status == "returned")
+                is_processed = (
+                    requisition_summary and requisition_summary.status == "returned"
+                )
 
                 # Edit and Return buttons disabled for processed requisitions
                 self.edit_button.setEnabled(not is_processed)
                 self.return_button.setEnabled(not is_processed)
-                self.delete_button.setEnabled(True)  # Delete always enabled for selected items
+                self.delete_button.setEnabled(
+                    True
+                )  # Delete always enabled for selected items
 
                 # Update button tooltips to explain disabled state
                 if is_processed:
-                    self.edit_button.setToolTip("Cannot edit: Requisition has been processed and locked")
-                    self.return_button.setToolTip("Cannot return: Requisition has been processed and locked")
+                    self.edit_button.setToolTip(
+                        "Cannot edit: Requisition has been processed and locked"
+                    )
+                    self.return_button.setToolTip(
+                        "Cannot return: Requisition has been processed and locked"
+                    )
                 else:
                     self.edit_button.setToolTip("")
                     self.return_button.setToolTip("")
@@ -557,13 +599,15 @@ class RequisitionsPage(QWidget):
 
             # Update status for each requisition using the status watcher
             for row in rows:
-                req_id = row['id']
+                req_id = row["id"]
                 try:
                     new_status = status_watcher.update_status_for_requisition(req_id)
                     if new_status:
                         updated_count += 1
                 except Exception as e:
-                    logger.error(f"Failed to update status for requisition {req_id}: {e}")
+                    logger.error(
+                        f"Failed to update status for requisition {req_id}: {e}"
+                    )
 
             return updated_count
 
@@ -591,7 +635,9 @@ class RequisitionsPage(QWidget):
             WHERE req.id = ?
             """
             rows = db.execute_query(query, (requisition_id,))
-            return rows[0]['name'] if rows else "Unknown"
+            return rows[0]["name"] if rows else "Unknown"
         except Exception as e:
-            logger.error(f"Failed to get requester name for deletion of requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to get requester name for deletion of requisition {requisition_id}: {e}"
+            )
             return "Unknown"
