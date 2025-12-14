@@ -54,7 +54,7 @@ class InventoryStats(QWidget):
         self.calibration_warning_label = QLabel("🔧 Cal. Warning: 0")
         stats_layout.addWidget(self.calibration_warning_label)
 
-        self.calibration_due_label = QLabel("🔧 Cal. Due: 0")
+        self.calibration_due_label = QLabel("🔧 Cal. Overdue: 0")
         stats_layout.addWidget(self.calibration_due_label)
 
         stats_layout.addStretch()
@@ -63,16 +63,26 @@ class InventoryStats(QWidget):
     def update_statistics(self, stats: Dict[str, Any]):
         """Update the statistics display."""
         try:
-            self.total_label.setText(f"📦 Total Batches: {stats.get('total_batches', 0)}")
-            self.total_stock_label.setText(f"🔄 Total Stock: {stats.get('total_stock', 0)}")
-            self.available_stock_label.setText(f"✅ Available Stock: {stats.get('available_stock', 0)}")
+            self.total_label.setText(
+                f"📦 Total Batches: {stats.get('total_batches', 0)}"
+            )
+            self.total_stock_label.setText(
+                f"🔄 Total Stock: {stats.get('total_stock', 0)}"
+            )
+            self.available_stock_label.setText(
+                f"✅ Available Stock: {stats.get('available_stock', 0)}"
+            )
             self.low_stock_label.setText(f"⚠️ Low Stock: {stats.get('low_stock', 0)}")
 
             # Update alert statistics
             self.expiring_label.setText(f"⏰ Expiring: {stats.get('expiring', 0)}")
             self.expired_label.setText(f"❌ Expired: {stats.get('expired', 0)}")
-            self.calibration_warning_label.setText(f"🔧 Cal. Warning: {stats.get('calibration_warning', 0)}")
-            self.calibration_due_label.setText(f"🔧 Cal. Due: {stats.get('calibration_due', 0)}")
+            self.calibration_warning_label.setText(
+                f"🔧 Cal. Warning: {stats.get('calibration_warning', 0)}"
+            )
+            self.calibration_due_label.setText(
+                f"🔧 Cal. Overdue: {stats.get('calibration_due', 0)}"
+            )
 
             logger.debug(f"Updated statistics: {stats}")
 
@@ -89,7 +99,7 @@ class InventoryStats(QWidget):
             "expiring": 0,
             "expired": 0,
             "calibration_warning": 0,
-            "calibration_due": 0
+            "calibration_due": 0,
         }
         self.update_statistics(default_stats)
         logger.debug("Statistics cleared")
