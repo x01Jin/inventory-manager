@@ -76,13 +76,13 @@ class InventoryTable(QTableWidget):
         # Configure header
         header = self.horizontalHeader()
         if header:
-            header.setSortIndicatorShown(True)
+            header.setSortIndicatorShown(False)
             header.setSectionsMovable(False)
             header.setStretchLastSection(True)
             header.sectionClicked.connect(self._on_header_clicked)
 
             # Set column widths
-            self.setColumnWidth(0, 100)  # Stock/Available
+            self.setColumnWidth(0, 140)  # Stock/Available (wider for label)
             self.setColumnWidth(1, 200)  # Name
             self.setColumnWidth(2, 80)  # Size
             self.setColumnWidth(3, 100)  # Brand
@@ -170,6 +170,7 @@ class InventoryTable(QTableWidget):
                 if hdr is not None:
                     # We use negative available stock as SortRole so ascending order shows highest stock first
                     hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+                    hdr.setSortIndicatorShown(False)
                     self.sortItems(0, Qt.SortOrder.AscendingOrder)
 
         except Exception as e:
@@ -314,6 +315,7 @@ class InventoryTable(QTableWidget):
             so = header.sortIndicatorOrder()
             if sc >= 0:
                 self.sortItems(sc, so)
+                header.setSortIndicatorShown(False)
 
     def format_date(self, date_str: Optional[str]) -> str:
         """Format date string for display."""

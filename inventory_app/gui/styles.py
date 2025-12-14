@@ -178,10 +178,16 @@ class DarkTheme:
             QHeaderView::section {{
                 background-color: {DarkTheme.SECONDARY_DARK};
                 color: {DarkTheme.TEXT_PRIMARY};
-                padding: 8px;
+                padding: 4px;
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 font-weight: bold;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
+            }}
+
+            QHeaderView::down-arrow, QHeaderView::up-arrow {{
+                image: none;
+                width: 0px;
+                height: 0px;
             }}
 
             QHeaderView::section:vertical {{

@@ -80,7 +80,7 @@ class RequisitionsTable(QTableWidget):
         header = self.horizontalHeader()
         if header:
             header.setStretchLastSection(False)  # Don't stretch last section
-            header.setSortIndicatorShown(True)
+            header.setSortIndicatorShown(False)
             header.sectionClicked.connect(self._on_header_clicked)
             # Set column sizing modes
             header.setSectionResizeMode(
@@ -201,6 +201,7 @@ class RequisitionsTable(QTableWidget):
                 # Default sort by status priority (active, overdue, returned)
                 if header is not None:
                     header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+                    header.setSortIndicatorShown(False)
                     # Ensure the rows are actually sorted according to this indicator
                     self.sortItems(0, Qt.SortOrder.AscendingOrder)
 
@@ -354,6 +355,7 @@ class RequisitionsTable(QTableWidget):
             sort_col = header.sortIndicatorSection()
             sort_order = header.sortIndicatorOrder()
             header.setSortIndicator(sort_col, sort_order)
+            header.setSortIndicatorShown(False)
             if sort_col >= 0:
                 # Reapply actual sort to ensure rows match the indicator
                 self.sortItems(sort_col, sort_order)
