@@ -18,7 +18,9 @@ class NavigationPanel(QWidget):
     def __init__(self):
         super().__init__()
         self.setFixedWidth(220)
-        self.setStyleSheet(f"background-color: {DarkTheme.SECONDARY_DARK}; border-right: 1px solid {DarkTheme.BORDER_COLOR};")
+        self.setStyleSheet(
+            f"background-color: {DarkTheme.SECONDARY_DARK}; border-right: 1px solid {DarkTheme.BORDER_COLOR};"
+        )
 
         # Layout
         layout = QVBoxLayout(self)
@@ -27,7 +29,9 @@ class NavigationPanel(QWidget):
 
         # App title
         title = QLabel("📊 L.I.M.")
-        title.setStyleSheet(f"color: {DarkTheme.ACCENT_COLOR}; font-size: {DarkTheme.FONT_SIZE_HEADER}pt; font-weight: bold; padding: 20px; background-color: {DarkTheme.PRIMARY_DARK};")
+        title.setStyleSheet(
+            f"color: {DarkTheme.ACCENT_COLOR}; font-size: {DarkTheme.FONT_SIZE_HEADER}pt; font-weight: bold; padding: 20px; background-color: {DarkTheme.PRIMARY_DARK};"
+        )
         layout.addWidget(title)
 
         # Navigation buttons
@@ -37,7 +41,8 @@ class NavigationPanel(QWidget):
             ("📋", "Requisitions", 2),
             ("👥", "Requesters", 3),
             ("📊", "Reports", 4),
-            ("⚙️", "Settings", 5)
+            ("⚙️", "Settings", 5),
+            ("❓", "Help", 6),
         ]
 
         self.nav_buttons = []
@@ -50,12 +55,16 @@ class NavigationPanel(QWidget):
 
         # User info
         user_info = QLabel("👤 Hello User!")
-        user_info.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; padding: 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {DarkTheme.BORDER_COLOR};")
+        user_info.setStyleSheet(
+            f"color: {DarkTheme.TEXT_SECONDARY}; padding: 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {DarkTheme.BORDER_COLOR};"
+        )
         layout.addWidget(user_info)
 
         # Live clock display
         self.clock_label = QLabel()
-        self.clock_label.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; padding: 10px 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-family: 'Courier New'; border-top: 1px solid {DarkTheme.BORDER_COLOR};")
+        self.clock_label.setStyleSheet(
+            f"color: {DarkTheme.TEXT_SECONDARY}; padding: 10px 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-family: 'Courier New'; border-top: 1px solid {DarkTheme.BORDER_COLOR};"
+        )
         layout.addWidget(self.clock_label)
 
         # Setup live clock timer

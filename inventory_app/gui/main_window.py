@@ -4,7 +4,15 @@ Simple and clean composition using navigation and dashboard.
 """
 
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QHBoxLayout,
+    QStackedWidget,
+    QLabel,
+    QVBoxLayout,
+)
 
 from inventory_app.gui.styles import DarkTheme
 from inventory_app.gui.navigation import NavigationPanel
@@ -14,6 +22,7 @@ from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
 from inventory_app.gui.requesters.requesters_page import RequestersPage
 from inventory_app.gui.reports.reports_page import ReportsPage
 from inventory_app.gui.settings.settings_page import SettingsPage
+from inventory_app.gui.help.help_page import HelpPage
 from inventory_app.utils.logger import logger
 
 
@@ -22,7 +31,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Laboratory Inventory Monitor")
+        self.setWindowTitle("Laboratory Inventory Manager (L.I.M.)")
         self.setMinimumSize(1280, 720)
 
         # Apply dark theme
@@ -57,14 +66,16 @@ class MainWindow(QMainWindow):
         self.requesters_page = RequestersPage()
         self.reports_page = ReportsPage()
         self.settings_page = SettingsPage()
+        self.help_page = HelpPage()
 
         # Add pages to stack
-        self.content_stack.addWidget(self.dashboard_page)    # Index 0
-        self.content_stack.addWidget(self.inventory_page)    # Index 1
-        self.content_stack.addWidget(self.requisitions_page) # Index 2
-        self.content_stack.addWidget(self.requesters_page)    # Index 3
-        self.content_stack.addWidget(self.reports_page)      # Index 4
-        self.content_stack.addWidget(self.settings_page)     # Index 5
+        self.content_stack.addWidget(self.dashboard_page)  # Index 0
+        self.content_stack.addWidget(self.inventory_page)  # Index 1
+        self.content_stack.addWidget(self.requisitions_page)  # Index 2
+        self.content_stack.addWidget(self.requesters_page)  # Index 3
+        self.content_stack.addWidget(self.reports_page)  # Index 4
+        self.content_stack.addWidget(self.settings_page)  # Index 5
+        self.content_stack.addWidget(self.help_page)  # Index 6
 
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
@@ -72,6 +83,7 @@ class MainWindow(QMainWindow):
     def center_window(self):
         """Center the window on the screen."""
         from PyQt6.QtGui import QGuiApplication
+
         screen = QGuiApplication.primaryScreen()
         if screen:
             screen_geometry = screen.availableGeometry()
@@ -87,21 +99,40 @@ class MainWindow(QMainWindow):
             self.content_stack.setCurrentIndex(page_index)
 
             # Refresh the page data when switching
-            if page_index == 0 and hasattr(self.dashboard_page, 'refresh_data'):  # Dashboard
+            if page_index == 0 and hasattr(
+                self.dashboard_page, "refresh_data"
+            ):  # Dashboard
                 self.dashboard_page.refresh_data()
                 logger.info("Refreshed dashboard data")
-            elif page_index == 1 and hasattr(self.inventory_page, 'refresh_data'):  # Inventory
+            elif page_index == 1 and hasattr(
+                self.inventory_page, "refresh_data"
+            ):  # Inventory
                 self.inventory_page.refresh_data()
                 logger.info("Refreshed inventory data")
-            elif page_index == 2 and hasattr(self.requisitions_page, 'refresh_data'):  # Requisitions
+            elif page_index == 2 and hasattr(
+                self.requisitions_page, "refresh_data"
+            ):  # Requisitions
                 self.requisitions_page.refresh_data()
                 logger.info("Refreshed requisitions data")
-            elif page_index == 3 and hasattr(self.requesters_page, 'refresh_data'):  # Requesters
+            elif page_index == 3 and hasattr(
+                self.requesters_page, "refresh_data"
+            ):  # Requesters
                 self.requesters_page.refresh_data()
                 logger.info("Refreshed requesters data")
-            elif page_index == 4 and hasattr(self.reports_page, 'refresh_data'):  # Reports
+            elif page_index == 4 and hasattr(
+                self.reports_page, "refresh_data"
+            ):  # Reports
                 self.reports_page.refresh_data()
                 logger.info("Refreshed reports data")
+            elif page_index == 6 and hasattr(
+                self.help_page, "load_current_tab"
+            ):  # Help
+                # Refresh help tab content when requested
+                try:
+                    self.help_page.load_current_tab()
+                    logger.info("Refreshed help tab content")
+                except Exception:
+                    logger.exception("Failed to refresh help tab content")
 
         except Exception as e:
             logger.error(f"Failed to change page to {page_index}: {e}")
@@ -113,15 +144,21 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
 
         header = QLabel(title)
-        header.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {DarkTheme.TEXT_PRIMARY};")
+        header.setStyleSheet(
+            f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {DarkTheme.TEXT_PRIMARY};"
+        )
         layout.addWidget(header)
 
         desc = QLabel(description)
-        desc.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY}; font-size: {DarkTheme.FONT_SIZE_LARGE}pt;")
+        desc.setStyleSheet(
+            f"color: {DarkTheme.TEXT_SECONDARY}; font-size: {DarkTheme.FONT_SIZE_LARGE}pt;"
+        )
         layout.addWidget(desc)
 
         placeholder = QLabel("🚧 Under development")
-        placeholder.setStyleSheet(f"color: {DarkTheme.TEXT_MUTED}; font-style: italic; padding: 50px; text-align: center;")
+        placeholder.setStyleSheet(
+            f"color: {DarkTheme.TEXT_MUTED}; font-style: italic; padding: 50px; text-align: center;"
+        )
         layout.addWidget(placeholder)
 
         layout.addStretch()
