@@ -24,7 +24,7 @@ class StockMovementService:
         self,
         item_id: int,
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:
@@ -46,7 +46,7 @@ class StockMovementService:
         self,
         item_id: int,
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:
@@ -68,7 +68,7 @@ class StockMovementService:
         self,
         item_id: int,
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:
@@ -90,7 +90,7 @@ class StockMovementService:
         self,
         item_id: int,
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:
@@ -112,7 +112,7 @@ class StockMovementService:
         self,
         item_id: int,
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:
@@ -173,7 +173,7 @@ class StockMovementService:
         item_id: int,
         movement_type: Union[MovementType, str],
         quantity: int,
-        source_id: int,
+        source_id: Optional[int],
         note: str,
         batch_id: Optional[int] = None,
     ) -> None:

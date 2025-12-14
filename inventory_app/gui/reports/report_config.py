@@ -121,8 +121,9 @@ class ReportConfig:
         "section": "All Sections",
         "include_consumables": True,
     }
-    # Low stock threshold (units) visible to the UI
-    DEFAULT_LOW_STOCK_THRESHOLD = 10
+    # Low stock threshold (units) visible to the UI. If `None`, use percentage-based defaults
+    # (20% for consumables, 10% for non-consumables).
+    DEFAULT_LOW_STOCK_THRESHOLD: Optional[int] = None
 
     @classmethod
     def get_granularity_description(
@@ -216,6 +217,10 @@ class ReportFilters:
         return "All Sections" if not value else value
 
     @classmethod
-    def get_low_stock_threshold(cls) -> int:
-        """Return the default low stock threshold as configured."""
+    def get_low_stock_threshold(cls) -> Optional[int]:
+        """Return the default low stock threshold as configured.
+
+        Returns:
+            Optional[int]: If `None`, percentage-based thresholds are used.
+        """
         return ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD

@@ -236,7 +236,7 @@ class ReportGenerator:
         end_date: date,
         category_filter: str = "",
         output_path: Optional[str] = None,
-        low_stock_threshold: int = 10,
+        low_stock_threshold: Optional[int] = None,
         structured: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
@@ -433,9 +433,15 @@ class ReportGenerator:
             return []
 
     def _get_low_stock_data(
-        self, category_filter: str = "", threshold: int = 10
+        self, category_filter: str = "", threshold: Optional[int] = None
     ) -> List[Dict]:
-        """Get items with low stock (< threshold). Re-uses stock levels query to avoid duplication."""
+        """Get items with low stock.
+
+        Args:
+            category_filter: Optional category filter
+            threshold: Optional absolute unit threshold. If `None`, percentage-based
+                defaults are used (20% consumable, 10% non-consumable).
+        """
         try:
             return get_low_stock_data(
                 category_filter=category_filter, threshold=threshold

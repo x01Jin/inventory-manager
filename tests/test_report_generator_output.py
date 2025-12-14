@@ -4,6 +4,7 @@ from pathlib import Path
 from inventory_app.database.connection import db
 from inventory_app.database.models import Item, Requester, Requisition, RequisitionItem
 from inventory_app.gui.reports.report_generator import ReportGenerator
+from inventory_app.services.stock_movement_service import StockMovementService
 
 from openpyxl import load_workbook
 from inventory_app.gui.reports.report_utils import date_formatter
@@ -126,15 +127,22 @@ def test_low_stock_inventory_report(tmp_path):
     setup_temp_db(tmp_path)
 
     # Create two items: one low (5), one sufficient (20)
+    # create items with larger original stock and then record consumption
     low = Item()
     low.name = "LowItem"
     low.category_id = 1
-    assert low.save(editor_name="tester", batch_quantity=5) is True
+    assert low.save(editor_name="tester", batch_quantity=100) is True
+    assert low.id is not None
 
     high = Item()
     high.name = "HighItem"
     high.category_id = 1
     assert high.save(editor_name="tester", batch_quantity=20) is True
+    assert high.id is not None
+
+    # Consume enough from LowItem to drop it below 20% (100 -> 15 left)
+    svc = StockMovementService()
+    svc.record_consumption(low.id, 85, None, "consumed for test")
 
     gen = ReportGenerator()
     out = tmp_path / "inventory_lowstock.xlsx"

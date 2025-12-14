@@ -266,9 +266,27 @@ class ReportsPage(QWidget):
         self.low_stock_spin.setRange(1, 10000)
         from inventory_app.gui.reports.report_config import ReportConfig
 
-        self.low_stock_spin.setValue(ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD)
+        # If configured to use percentage defaults (None), show spin disabled
+        if ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD is None:
+            # Show a sensible default but keep disabled to indicate percentage mode
+            self.low_stock_spin.setValue(10)
+            self.low_stock_spin.setEnabled(False)
+        else:
+            self.low_stock_spin.setValue(ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD)
+
+        # Checkbox to choose percentage-based thresholds vs absolute units
+        self.use_percentage_thresholds = QCheckBox(
+            "Use percentage thresholds (Consumables 20% / Non-consumables 10%)"
+        )
+        self.use_percentage_thresholds.setChecked(
+            ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD is None
+        )
+        self.use_percentage_thresholds.toggled.connect(
+            lambda checked: self.low_stock_spin.setEnabled(not checked)
+        )
         threshold_layout.addWidget(QLabel(ReportConfig.LABELS["threshold"]))
         threshold_layout.addWidget(self.low_stock_spin)
+        threshold_layout.addWidget(self.use_percentage_thresholds)
         layout.addWidget(threshold_group)
 
         layout.addStretch()
@@ -543,13 +561,20 @@ class ReportsPage(QWidget):
         inventory_report_type = self.inventory_report_type.currentText()
 
         # Start background worker
+        low_stock_threshold = (
+            None
+            if getattr(self, "use_percentage_thresholds", False)
+            and self.use_percentage_thresholds.isChecked()
+            else self.low_stock_spin.value()
+        )
+
         self.worker = ReportWorker(
             "inventory",
             start_date,
             end_date,
             category_filter=category_filter,
             inventory_report_type=inventory_report_type,
-            low_stock_threshold=self.low_stock_spin.value(),
+            low_stock_threshold=low_stock_threshold,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)

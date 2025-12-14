@@ -7,7 +7,6 @@ from inventory_app.gui.reports.query_builder import (
     ReportQueryBuilder,
     ReportStatisticsBuilder,
 )
-from inventory_app.gui.reports.columns import inventory_base_columns_sql
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
 from inventory_app.services.movement_types import MovementType
@@ -91,24 +90,36 @@ def get_dynamic_report_data(
 
 def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
     try:
-        query = f"""
+        # Compute both original (received) and current stock (consumption/disposal/returns)
+        query = """
             SELECT
-                {inventory_base_columns_sql()}
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                COALESCE(SUM(ib.quantity_received), 0) AS "Original Stock",
+                COALESCE(SUM(ib.quantity_received), 0) -
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS "Current Stock",
+                i.other_specifications AS "Specifications",
+                i.is_consumable AS "Is Consumable"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id AND sm.movement_type IN (?, ?)
+            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id
             """
 
         params = [
             MovementType.CONSUMPTION.value,
             MovementType.DISPOSAL.value,
+            MovementType.RETURN.value,
         ]
         if category_filter:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications ORDER BY c.name, i.name"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable ORDER BY c.name, i.name"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -225,13 +236,48 @@ def get_expiration_data(
         return []
 
 
-def get_low_stock_data(category_filter: str = "", threshold: int = 10) -> List[Dict]:
+def get_low_stock_data(
+    category_filter: str = "", threshold: Optional[int] = None
+) -> List[Dict]:
     try:
         rows = get_stock_levels_data(category_filter=category_filter)
         if not rows:
             return []
 
-        filtered = [r for r in rows if (r.get("Current Stock") or 0) < threshold]
+        # If a numeric threshold is explicitly provided, treat it as absolute
+        if threshold is not None:
+            try:
+                abs_thresh = int(threshold)
+            except Exception:
+                abs_thresh = None
+        else:
+            abs_thresh = None
+
+        filtered = []
+        for r in rows:
+            current = r.get("Current Stock") or 0
+            original = r.get("Original Stock") or 0
+            is_consumable = r.get("Is Consumable")
+
+            if abs_thresh is not None:
+                # Absolute threshold override
+                if current < abs_thresh:
+                    filtered.append(r)
+                continue
+
+            # Default behaviour: percentage-based thresholds
+            # Skip items with no original stock (cannot evaluate percentage)
+            if original <= 0:
+                continue
+
+            if is_consumable == 1:
+                pct_thresh = 0.20
+            else:
+                pct_thresh = 0.10
+
+            if current <= int(original * pct_thresh):
+                filtered.append(r)
+
         filtered = sorted(filtered, key=lambda r: (r.get("Current Stock") or 0))
         return filtered
 
