@@ -108,6 +108,24 @@ class StockMovementService:
             item_id, MovementType.DISPOSAL, quantity, source_id, note, batch_id
         )
 
+    def record_request(
+        self,
+        item_id: int,
+        quantity: int,
+        source_id: int,
+        note: str,
+        batch_id: Optional[int] = None,
+    ) -> None:
+        """
+        Record an item request (non-consumable request).
+
+        This is used to mark a one-time request for non-consumables that will
+        later be turned into actual consumption or disposal when finalized.
+        """
+        self._record_movement(
+            item_id, MovementType.REQUEST, quantity, source_id, note, batch_id
+        )
+
     def process_return(
         self, requisition_id: int, return_data: List[Dict], editor_name: str
     ) -> bool:
