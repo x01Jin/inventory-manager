@@ -3,7 +3,9 @@
 .venv/
 logs/
 __pycache__/
-plan/
+.pytest_cache/
+changelogs/
+information/
 build/
 dist/
 scripts/
@@ -11,4 +13,3 @@ scripts/
 .vscode/
 *.spec
 inventory.db
-populate_sample_data.py
