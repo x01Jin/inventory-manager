@@ -8,8 +8,6 @@ Handles requester selection and requisition creation workflow.
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
     QPushButton,
     QMessageBox,
 )
@@ -43,17 +41,11 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         super().__init__(mode="create", parent=parent)
         logger.info("New requisition dialog initialized")
 
-    def _setup_header(self, layout):
-        """Setup create-specific header."""
-        header = QLabel("➕ Create New Laboratory Requisition")
-        header.setStyleSheet("font-size: 18pt; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(header)
-
     def _create_requisition_details_panel(self):
         """Create requisition details panel with requester selection for create mode."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setSpacing(15)
+        layout.setSpacing(5)
 
         # Requester selection widget
         self.requester_widget = RequesterSelectorWidget(parent=self)
@@ -72,22 +64,26 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         return panel
 
     def _setup_buttons(self, layout):
-        """Setup create-specific buttons."""
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
+        """Setup create-specific buttons (placed in right panel action area)."""
+        # If the action area wasn't created for some reason, fall back to bottom layout
+        target_layout = getattr(self, "action_buttons_layout", None)
+        if target_layout is None:
+            from PyQt6.QtWidgets import QHBoxLayout
+
+            target_layout = QHBoxLayout()
+            target_layout.addStretch()
+            layout.addLayout(target_layout)
 
         # Create button
         self.create_button = QPushButton("✅ Create Requisition")
         self.create_button.clicked.connect(self.create_requisition)
         self.create_button.setEnabled(False)  # Initially disabled
-        button_layout.addWidget(self.create_button)
+        target_layout.addWidget(self.create_button)
 
         # Cancel button
         cancel_button = QPushButton("❌ Cancel")
         cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_button)
-
-        layout.addLayout(button_layout)
+        target_layout.addWidget(cancel_button)
 
     def _on_requester_selected(self, requester):
         """Handle requester selection from widget."""

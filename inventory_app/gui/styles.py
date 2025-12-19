@@ -506,7 +506,7 @@ class DarkTheme:
                 color: {DarkTheme.TEXT_PRIMARY};
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 8px 12px;
+                padding: 3px 3px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
                 selection-background-color: {DarkTheme.ACCENT_COLOR};
                 selection-color: {DarkTheme.TEXT_PRIMARY};

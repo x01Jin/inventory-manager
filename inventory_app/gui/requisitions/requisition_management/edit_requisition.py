@@ -8,8 +8,6 @@ Allows free editing of all fields like reverting to creation state.
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
     QPushButton,
     QMessageBox,
 )
@@ -56,17 +54,11 @@ class EditRequisitionDialog(BaseRequisitionDialog):
             f"Edit requisition dialog initialized for ID: {self.requisition_id}"
         )
 
-    def _setup_header(self, layout):
-        """Setup edit-specific header."""
-        header = QLabel("✏️ Edit Laboratory Requisition")
-        header.setStyleSheet("font-size: 18pt; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(header)
-
     def _create_requisition_details_panel(self):
         """Create requisition details panel with editable requester selection."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setSpacing(15)
+        layout.setSpacing(5)
 
         # Requester selection widget
         self.requester_widget = RequesterSelectorWidget(parent=self)
@@ -85,22 +77,26 @@ class EditRequisitionDialog(BaseRequisitionDialog):
         return panel
 
     def _setup_buttons(self, layout):
-        """Setup edit-specific buttons."""
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
+        """Setup edit-specific buttons (placed in right panel action area)."""
+        # If the action area wasn't created for some reason, fall back to bottom layout
+        target_layout = getattr(self, "action_buttons_layout", None)
+        if target_layout is None:
+            from PyQt6.QtWidgets import QHBoxLayout
+
+            target_layout = QHBoxLayout()
+            target_layout.addStretch()
+            layout.addLayout(target_layout)
 
         # Update button
         self.update_button = QPushButton("✅ Update Requisition")
         self.update_button.clicked.connect(self.update_requisition)
         self.update_button.setEnabled(False)  # Initially disabled
-        button_layout.addWidget(self.update_button)
+        target_layout.addWidget(self.update_button)
 
         # Cancel button
         cancel_button = QPushButton("❌ Cancel")
         cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_button)
-
-        layout.addLayout(button_layout)
+        target_layout.addWidget(cancel_button)
 
     def _on_requester_selected(self, requester):
         """Handle requester selection from widget."""
@@ -297,8 +293,18 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                 {"item_id": item["item_id"], "quantity_requested": item["quantity"]}
                 for item in self.selected_items
             ]
+            # Ensure requester id is present and an int
+            requester_id = None
+            if self.selected_requester and self.selected_requester.id is not None:
+                requester_id = self.selected_requester.id
+            else:
+                QMessageBox.warning(
+                    self, "Validation Error", "Please select a valid requester."
+                )
+                return
+
             if not svc.validate_requisition_creation(
-                self.selected_requester.id if self.selected_requester else None,
+                requester_id,
                 requisition_data,
                 items_payload,
             ):

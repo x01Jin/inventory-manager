@@ -192,6 +192,15 @@ class ReturnProcessor:
         """Process consumable item return - replace RESERVATION with final movements."""
         # Phase 2: Replace the initial RESERVATION movement with final movements
 
+        # Remove the original RESERVATION movement first to avoid trigger conflicts
+        # (the DB trigger prevents adding a CONSUMPTION if a RESERVATION is still present
+        # and would cause the sum to exceed the batch's quantity). Deleting first is
+        # safe because the entire operation is performed inside a single transaction
+        # so failures will rollback both operations.
+        self._remove_reservation_movement(
+            requisition_id, return_item.item_id, return_item.batch_id
+        )
+
         # Record CONSUMPTION movement for consumed quantity (requested - returned)
         consumed_quantity = (
             return_item.quantity_requested - return_item.quantity_returned
@@ -205,11 +214,6 @@ class ReturnProcessor:
                 consumption_note,
                 return_item.batch_id,
             )
-
-        # Remove the original RESERVATION movement to prevent double-counting
-        self._remove_reservation_movement(
-            requisition_id, return_item.item_id, return_item.batch_id
-        )
 
     def _remove_reservation_movement(
         self, requisition_id: int, item_id: int, batch_id: Optional[int]
@@ -259,6 +263,13 @@ class ReturnProcessor:
         self, requisition_id: int, return_item: ReturnItem, editor_name: str
     ) -> None:
         """Process non-consumable item loss - record disposed quantities."""
+        # Remove the original REQUEST movement first to avoid trigger conflicts and
+        # then record the DISPOSAL. As above, this is safe inside the surrounding
+        # transaction which will rollback on failure.
+        self._remove_request_movement(
+            requisition_id, return_item.item_id, return_item.batch_id
+        )
+
         # Record DISPOSAL movement for lost quantity
         if return_item.quantity_lost > 0:
             disposal_note = f"Non-consumable marked as lost by {editor_name}"
@@ -269,11 +280,6 @@ class ReturnProcessor:
                 disposal_note,
                 return_item.batch_id,
             )
-
-        # Remove the original REQUEST movement to prevent double-counting
-        self._remove_request_movement(
-            requisition_id, return_item.item_id, return_item.batch_id
-        )
 
     def _update_requisition_status_final(self, requisition_id: int) -> None:
         """Update requisition status to final 'returned' state."""

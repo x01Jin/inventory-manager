@@ -1,0 +1,117 @@
+"""
+Stock parsing utilities.
+
+Single-purpose functions for parsing free-form 'stocks' cells from imported Excel rows.
+
+Behavior summary:
+- Numeric-only values -> treated as integer quantity (floats coerced to int).
+- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a single container: quantity=1 and size=<matched substring>.
+- Leading counts with words ("2 sets", "10 boxes (100pcs)") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
+- Empty / None -> quantity 0.
+- If no numeric information is present, a ValueError is raised (same behavior as previous importer: invalid stock value skips the row).
+
+All parsing is case-insensitive for unit matching; returned size preserves the original substring (trimmed) to keep spacing behavior predictable.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Dict, Any
+
+# Units considered to be size indicators (volume/mass). Case-insensitive.
+_SIZE_UNITS = {
+    "ml",
+    "l",
+    "g",
+    "kg",
+    "mg",
+    "gal",
+    "liter",
+    "litre",
+    "ltr",
+}
+
+# A broader set that includes "pcs" / "pieces" for notes detection
+_PIECE_UNITS = {"pcs", "pieces", "pc"}
+
+# Regex to find a number optionally with attached unit (e.g. '900ml' or '1.1 ml')
+_RE_NUMBER_WITH_UNIT = re.compile(r"(?i)(\d+(?:\.\d+)?)(?:\s*)?([a-z]+)\b")
+
+# Regex to find a leading integer
+_RE_LEADING_INT = re.compile(r"^\s*(\d+)\b")
+
+# Regex to capture parenthetical trailing info like '(100pcs)'
+_RE_PAREN_INFO = re.compile(r"\(([^)]+)\)")
+
+
+def parse_stock_value(raw: Any) -> Dict[str, Any]:
+    """Parse a raw 'stocks' cell and return structured info.
+
+    Returns a dict with keys:
+      - quantity: int
+      - size: Optional[str] (e.g., '900ml' or '1 L') if a size unit was found
+      - notes: Optional[str] for additional details (e.g., '(100pcs)', 'set of 8 pieces')
+
+    Raises ValueError if the raw value contains no parseable numeric information and is
+    not empty/None.
+    """
+    if raw is None:
+        return {"quantity": 0, "size": None, "notes": None}
+
+    # If already numeric (int/float), coerce to int
+    if isinstance(raw, (int,)):
+        return {"quantity": int(raw), "size": None, "notes": None}
+    if isinstance(raw, float):
+        return {"quantity": int(raw), "size": None, "notes": None}
+
+    s = str(raw).strip()
+    if s == "":
+        return {"quantity": 0, "size": None, "notes": None}
+
+    lowered = s.lower()
+
+    # First try to find a number with a recognized size unit anywhere in the string
+    # Prefer the earliest match that has a known size unit (volume/mass)
+    for m in _RE_NUMBER_WITH_UNIT.finditer(s):
+        unit = m.group(2)
+        if unit.lower() in _SIZE_UNITS:
+            # size found — treat this as a single container (quantity=1) and
+            # use the exact substring matched from the original string (preserving spaces/case close to input)
+            start, end = m.span()
+            size_substr = s[start:end]
+            return {"quantity": 1, "size": size_substr.strip(), "notes": None}
+
+    # If no size units found, try for a leading integer quantity
+    m_lead = _RE_LEADING_INT.search(s)
+    if m_lead:
+        quantity = int(m_lead.group(1))
+        notes = None
+        # If there's parenthetical info capture it to notes
+        par = _RE_PAREN_INFO.search(s)
+        if par:
+            notes = par.group(0)  # include parentheses
+        else:
+            # capture 'of N pieces' style descriptions as notes (e.g., '1 set of 8 pieces')
+            # look for 'of' followed by digits/pcs/pieces
+            of_match = re.search(r"of\s+\d+\s*(?:pcs|pieces|pc)?", lowered)
+            if of_match:
+                notes = of_match.group(0)
+        return {"quantity": quantity, "size": None, "notes": notes}
+
+    # As a last resort, try to parse any float present in the string
+    m_any_num = re.search(r"(\d+(?:\.\d+)?)", s)
+    if m_any_num:
+        # if a number exists but no unit and not leading integer (e.g., 'approx 0.5 bottle'), coerce to int
+        try:
+            quantity = int(float(m_any_num.group(1)))
+            return {"quantity": quantity, "size": None, "notes": None}
+        except Exception:
+            pass
+
+    raise ValueError(f"Invalid stock value: {raw}")
+
+
+# For convenience, small helper that behaves like the old _parse_int but uses new parser
+def parse_stock_quantity(raw: Any) -> int:
+    info = parse_stock_value(raw)
+    return int(info.get("quantity", 0))

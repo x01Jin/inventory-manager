@@ -5,9 +5,20 @@ Provides form for manual encoding of items (Spec #6).
 
 from typing import Optional, List
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QLineEdit, QComboBox, QTextEdit,
-    QPushButton, QDateEdit, QGroupBox, QMessageBox
+    QApplication,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QTextEdit,
+    QPushButton,
+    QDateEdit,
+    QGroupBox,
+    QMessageBox,
+    QSizePolicy,
 )
 from PyQt6.QtCore import QDate
 from datetime import date
@@ -39,11 +50,15 @@ class ItemEditor(QDialog):
         self.on_item_type_changed()  # Initialize the date field based on default selection
 
     def setup_ui(self):
-        """Setup the dialog UI."""
+        """Setup the dialog UI with a responsive two-column layout."""
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # Basic Information Group
+        # Left column will contain Basic Information and Dates & Status stacked vertically.
+        # Right column will contain Specifications and Editor Information.
+        main_h_layout = QHBoxLayout()
+
+        # Basic Information Group (left column)
         basic_group = QGroupBox("Basic Information")
         basic_layout = QVBoxLayout(basic_group)
 
@@ -55,7 +70,7 @@ class ItemEditor(QDialog):
         name_layout.addWidget(self.name_input)
         basic_layout.addLayout(name_layout)
 
-        # Category, Supplier, Size, Brand Grid
+        # Category, Supplier, Size, Brand Grid (2x4 arrangement: labels and inputs in two columns)
         grid_layout = QGridLayout()
 
         # Row 0: Category and Supplier
@@ -80,15 +95,69 @@ class ItemEditor(QDialog):
         self.brand_combo.addItem("Select Brand", "")
         grid_layout.addWidget(self.brand_combo, 1, 3)
 
-        # Set column stretches for better alignment
+        # Set column stretches so input columns expand
         grid_layout.setColumnStretch(1, 1)
         grid_layout.setColumnStretch(3, 1)
 
         basic_layout.addLayout(grid_layout)
 
-        layout.addWidget(basic_group)
+        # Dates and Status Group (left column, below basic info)
+        dates_group = QGroupBox("Dates and Status")
+        dates_layout = QVBoxLayout(dates_group)
 
-        # Specifications Group
+        # Dates Grid (4x2: labels on the left, inputs on the right)
+        dates_grid_layout = QGridLayout()
+
+        # Row 0: Item Type
+        dates_grid_layout.addWidget(QLabel("Item Type:"), 0, 0)
+        self.item_type_combo = QComboBox()
+        self.item_type_combo.addItem("Consumable", "consumable")
+        self.item_type_combo.addItem("Non-Consumable", "non_consumable")
+        self.item_type_combo.setCurrentIndex(0)  # Default to consumable
+        self.item_type_combo.currentIndexChanged.connect(self.on_item_type_changed)
+        dates_grid_layout.addWidget(self.item_type_combo, 0, 1)
+
+        # Row 1: Acquisition Date
+        dates_grid_layout.addWidget(QLabel("Acquisition Date:"), 1, 0)
+        self.acquisition_date = QDateEdit()
+        self.acquisition_date.setDate(QDate.currentDate())
+        self.acquisition_date.setCalendarPopup(True)
+        dates_grid_layout.addWidget(self.acquisition_date, 1, 1)
+
+        # Row 2: Expiration / Calibration (variable)
+        self.variable_label = QLabel("Expiration Date:")
+        dates_grid_layout.addWidget(self.variable_label, 2, 0)
+        self.variable_input = QDateEdit()
+        self.variable_input.setDate(QDate.currentDate())
+        self.variable_input.setCalendarPopup(True)
+        self.variable_input.setSpecialValueText("No Expiration")
+        dates_grid_layout.addWidget(self.variable_input, 2, 1)
+
+        # Row 3: Disposal Date
+        self.disposal_label = QLabel("Disposal Date:")
+        dates_grid_layout.addWidget(self.disposal_label, 3, 0)
+        self.disposal_date = QDateEdit()
+        self.disposal_date.setDate(QDate.currentDate())
+        self.disposal_date.setCalendarPopup(True)
+        self.disposal_date.setSpecialValueText("No Disposal Date")
+        dates_grid_layout.addWidget(self.disposal_date, 3, 1)
+
+        # Initially hide disposal controls for consumables
+        self.disposal_label.hide()
+        self.disposal_date.hide()
+
+        # Make the input column expand vertically and horizontally as needed
+        dates_grid_layout.setColumnStretch(1, 1)
+        dates_layout.addLayout(dates_grid_layout)
+
+        # Add left column layouts
+        left_v = QVBoxLayout()
+        left_v.addWidget(basic_group)
+        left_v.addWidget(dates_group)
+        left_v.addStretch()
+        main_h_layout.addLayout(left_v, 1)
+
+        # Specifications Group (right column)
         spec_group = QGroupBox("Specifications")
         spec_layout = QVBoxLayout(spec_group)
 
@@ -114,72 +183,32 @@ class ItemEditor(QDialog):
         spec_layout.addWidget(QLabel("Other Specifications:"))
         self.spec_input = QTextEdit()
         self.spec_input.setPlaceholderText("Additional specifications, materials, etc.")
-        self.spec_input.setMaximumHeight(60)
+        # Make the specifications field responsive: it expands with available space
+        # No fixed minimum height so it can shrink on narrow/small displays
+        self.spec_input.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         spec_layout.addWidget(self.spec_input)
 
-        layout.addWidget(spec_group)
-
-        # Dates and Status Group
-        dates_group = QGroupBox("Dates and Status")
-        dates_layout = QVBoxLayout(dates_group)
-
-        # Dates Grid (2x4 layout)
-        dates_grid_layout = QGridLayout()
-
-        # Row 0: Acquisition Date and Disposal Date
-        dates_grid_layout.addWidget(QLabel("Acquisition Date:"), 0, 0)
-        self.acquisition_date = QDateEdit()
-        self.acquisition_date.setDate(QDate.currentDate())
-        self.acquisition_date.setCalendarPopup(True)
-        dates_grid_layout.addWidget(self.acquisition_date, 0, 1)
-
-        self.disposal_label = QLabel("Disposal Date:")
-        dates_grid_layout.addWidget(self.disposal_label, 0, 2)
-        self.disposal_date = QDateEdit()
-        self.disposal_date.setDate(QDate.currentDate())
-        self.disposal_date.setCalendarPopup(True)
-        self.disposal_date.setSpecialValueText("No Disposal Date")
-        dates_grid_layout.addWidget(self.disposal_date, 0, 3)
-
-        # Row 1: Item Type and Expiration/Calibration Date
-        dates_grid_layout.addWidget(QLabel("Item Type:"), 1, 0)
-        self.item_type_combo = QComboBox()
-        self.item_type_combo.addItem("Consumable", "consumable")
-        self.item_type_combo.addItem("Non-Consumable", "non_consumable")
-        self.item_type_combo.setCurrentIndex(0)  # Default to consumable
-        self.item_type_combo.currentIndexChanged.connect(self.on_item_type_changed)
-        dates_grid_layout.addWidget(self.item_type_combo, 1, 1)
-
-        self.variable_label = QLabel("Expiration Date:")
-        dates_grid_layout.addWidget(self.variable_label, 1, 2)
-        self.variable_input = QDateEdit()
-        self.variable_input.setDate(QDate.currentDate())
-        self.variable_input.setCalendarPopup(True)
-        self.variable_input.setSpecialValueText("No Expiration")
-        dates_grid_layout.addWidget(self.variable_input, 1, 3)
-
-        # Initially hide disposal controls
-        self.disposal_label.hide()
-        self.disposal_date.hide()
-
-        # Set column stretches for better alignment
-        dates_grid_layout.setColumnStretch(1, 1)
-        dates_grid_layout.setColumnStretch(3, 1)
-
-        dates_layout.addLayout(dates_grid_layout)
-
-        layout.addWidget(dates_group)
-
-        # Editor Information (Spec #14)
+        # Editor Information (required) sits under specifications in right column
         editor_group = QGroupBox("Editor Information (Required)")
         editor_layout = QVBoxLayout(editor_group)
         editor_layout.addWidget(QLabel("Editor Name/Initials:"))
         self.editor_input = QLineEdit()
         self.editor_input.setPlaceholderText("Enter your name or initials...")
         editor_layout.addWidget(self.editor_input)
-        layout.addWidget(editor_group)
 
-        # Buttons
+        # Build right column
+        right_v = QVBoxLayout()
+        right_v.addWidget(spec_group, 3)
+        right_v.addWidget(editor_group, 1)
+        right_v.addStretch()
+        main_h_layout.addLayout(right_v, 2)
+
+        # Add the two-column layout to the main dialog layout
+        layout.addLayout(main_h_layout)
+
+        # Buttons (bottom-right)
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
@@ -193,8 +222,26 @@ class ItemEditor(QDialog):
 
         layout.addLayout(button_layout)
 
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(700)
+        # Make window size responsive:
+        # prefer 90% of available screen width and 60% of available screen height
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            try:
+                geom = screen.availableGeometry()
+                desired_height = int(geom.height() * 0.6)
+                desired_width = int(geom.width() * 0.9)
+            except Exception:
+                desired_height = 700
+                desired_width = 900
+        else:
+            desired_height = 700
+            desired_width = 900
+
+        # Set initial size and reasonable minimums so the dialog remains usable on small displays
+        self.resize(desired_width, desired_height)
+        # Allow shrinking down to 50% of desired size before layout collapses
+        self.setMinimumWidth(int(desired_width * 0.5))
+        self.setMinimumHeight(int(desired_height * 0.5))
 
     def on_item_type_changed(self):
         """Update the date field visibility and labels based on item type selection."""
@@ -213,9 +260,11 @@ class ItemEditor(QDialog):
 
             # Populate with existing expiration date if available
             if self.existing_item and self.existing_item.expiration_date:
-                qdate = QDate(self.existing_item.expiration_date.year,
-                             self.existing_item.expiration_date.month,
-                             self.existing_item.expiration_date.day)
+                qdate = QDate(
+                    self.existing_item.expiration_date.year,
+                    self.existing_item.expiration_date.month,
+                    self.existing_item.expiration_date.day,
+                )
                 self.variable_input.setDate(qdate)
             else:
                 self.variable_input.setDate(QDate.currentDate())
@@ -233,17 +282,21 @@ class ItemEditor(QDialog):
             # Populate with existing dates if available
             if self.existing_item:
                 if self.existing_item.calibration_date:
-                    qdate = QDate(self.existing_item.calibration_date.year,
-                                 self.existing_item.calibration_date.month,
-                                 self.existing_item.calibration_date.day)
+                    qdate = QDate(
+                        self.existing_item.calibration_date.year,
+                        self.existing_item.calibration_date.month,
+                        self.existing_item.calibration_date.day,
+                    )
                     self.variable_input.setDate(qdate)
                 else:
                     self.variable_input.setDate(QDate.currentDate())
 
                 if self.existing_item.expiration_date:
-                    qdate = QDate(self.existing_item.expiration_date.year,
-                                 self.existing_item.expiration_date.month,
-                                 self.existing_item.expiration_date.day)
+                    qdate = QDate(
+                        self.existing_item.expiration_date.year,
+                        self.existing_item.expiration_date.month,
+                        self.existing_item.expiration_date.day,
+                    )
                     self.disposal_date.setDate(qdate)
                 else:
                     self.disposal_date.setDate(QDate.currentDate())
@@ -292,14 +345,20 @@ class ItemEditor(QDialog):
             # Find and set category
             if self.existing_item.category_id:
                 for i in range(self.category_combo.count()):
-                    if self.category_combo.itemData(i) == self.existing_item.category_id:
+                    if (
+                        self.category_combo.itemData(i)
+                        == self.existing_item.category_id
+                    ):
                         self.category_combo.setCurrentIndex(i)
                         break
 
             # Find and set supplier
             if self.existing_item.supplier_id:
                 for i in range(self.supplier_combo.count()):
-                    if self.supplier_combo.itemData(i) == self.existing_item.supplier_id:
+                    if (
+                        self.supplier_combo.itemData(i)
+                        == self.existing_item.supplier_id
+                    ):
                         self.supplier_combo.setCurrentIndex(i)
                         break
 
@@ -320,9 +379,11 @@ class ItemEditor(QDialog):
 
             # Dates
             if self.existing_item.acquisition_date:
-                qdate = QDate(self.existing_item.acquisition_date.year,
-                             self.existing_item.acquisition_date.month,
-                             self.existing_item.acquisition_date.day)
+                qdate = QDate(
+                    self.existing_item.acquisition_date.year,
+                    self.existing_item.acquisition_date.month,
+                    self.existing_item.acquisition_date.day,
+                )
                 self.acquisition_date.setDate(qdate)
 
             # Set item type based on is_consumable
@@ -348,7 +409,9 @@ class ItemEditor(QDialog):
                 return
 
             if not self.editor_input.text().strip():
-                QMessageBox.warning(self, "Validation Error", "Editor name is required (Spec #14).")
+                QMessageBox.warning(
+                    self, "Validation Error", "Editor name is required (Spec #14)."
+                )
                 return
 
             # Create or update item
@@ -370,7 +433,9 @@ class ItemEditor(QDialog):
 
             # Dates
             acq_date = self.acquisition_date.date()
-            item.acquisition_date = date(acq_date.year(), acq_date.month(), acq_date.day())
+            item.acquisition_date = date(
+                acq_date.year(), acq_date.month(), acq_date.day()
+            )
 
             # Set dates based on item type
             item_type = self.item_type_combo.currentData()
@@ -379,37 +444,60 @@ class ItemEditor(QDialog):
                 item.is_consumable = 1
                 # Set expiration date from the variable_input field
                 exp_date = self.variable_input.date()
-                if self.variable_input.specialValueText() and exp_date == self.variable_input.minimumDate():
+                if (
+                    self.variable_input.specialValueText()
+                    and exp_date == self.variable_input.minimumDate()
+                ):
                     item.expiration_date = None
                 else:
-                    item.expiration_date = date(exp_date.year(), exp_date.month(), exp_date.day())
+                    item.expiration_date = date(
+                        exp_date.year(), exp_date.month(), exp_date.day()
+                    )
                 item.calibration_date = None  # Clear calibration date for consumables
             else:  # non_consumable
                 item.is_consumable = 0
                 # Set calibration date from the variable_input field
                 cal_date = self.variable_input.date()
-                if self.variable_input.specialValueText() and cal_date == self.variable_input.minimumDate():
+                if (
+                    self.variable_input.specialValueText()
+                    and cal_date == self.variable_input.minimumDate()
+                ):
                     item.calibration_date = None
                 else:
-                    item.calibration_date = date(cal_date.year(), cal_date.month(), cal_date.day())
+                    item.calibration_date = date(
+                        cal_date.year(), cal_date.month(), cal_date.day()
+                    )
 
                 # Set disposal date (stored in expiration_date) from the disposal_date field
                 disp_date = self.disposal_date.date()
-                if self.disposal_date.specialValueText() and disp_date == self.disposal_date.minimumDate():
+                if (
+                    self.disposal_date.specialValueText()
+                    and disp_date == self.disposal_date.minimumDate()
+                ):
                     item.expiration_date = None
                 else:
-                    item.expiration_date = date(disp_date.year(), disp_date.month(), disp_date.day())
+                    item.expiration_date = date(
+                        disp_date.year(), disp_date.month(), disp_date.day()
+                    )
 
             # Get batch quantity for new items
             batch_quantity = 0
-            if not self.item_id and hasattr(self, 'batch_quantity_input'):
+            if not self.item_id and hasattr(self, "batch_quantity_input"):
                 try:
                     batch_quantity = int(self.batch_quantity_input.text().strip())
                     if batch_quantity <= 0:
-                        QMessageBox.warning(self, "Validation Error", "Batch quantity must be a positive number.")
+                        QMessageBox.warning(
+                            self,
+                            "Validation Error",
+                            "Batch quantity must be a positive number.",
+                        )
                         return
                 except ValueError:
-                    QMessageBox.warning(self, "Validation Error", "Batch quantity must be a valid number.")
+                    QMessageBox.warning(
+                        self,
+                        "Validation Error",
+                        "Batch quantity must be a valid number.",
+                    )
                     return
 
             # Save
@@ -417,12 +505,18 @@ class ItemEditor(QDialog):
             success = item.save(editor_name, batch_quantity)
 
             if success:
-                batch_msg = f" with {batch_quantity} batches" if batch_quantity > 0 else ""
+                batch_msg = (
+                    f" with {batch_quantity} batches" if batch_quantity > 0 else ""
+                )
                 logger.info(f"Successfully saved item: {item.name}{batch_msg}")
-                QMessageBox.information(self, "Success", f"Item saved successfully{batch_msg}!")
+                QMessageBox.information(
+                    self, "Success", f"Item saved successfully{batch_msg}!"
+                )
                 self.accept()
             else:
-                QMessageBox.critical(self, "Error", "Failed to save item. Please try again.")
+                QMessageBox.critical(
+                    self, "Error", "Failed to save item. Please try again."
+                )
 
         except Exception as e:
             logger.error(f"Error saving item: {e}")

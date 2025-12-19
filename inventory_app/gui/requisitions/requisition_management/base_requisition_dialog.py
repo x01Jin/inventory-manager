@@ -28,10 +28,17 @@ from .item_selection_manager import ItemSelectionManager
 from .requisition_validator import RequisitionValidator
 from inventory_app.utils.logger import logger
 from inventory_app.utils.date_utils import (
-    MONTH_NAMES, get_valid_days_for_month, get_year_range,
-    format_date_iso, get_current_date, get_current_datetime,
-    convert_12h_to_24h, convert_24h_to_12h, get_minutes_options,
-    get_hour_options_12h, get_ampm_options
+    MONTH_NAMES,
+    get_valid_days_for_month,
+    get_year_range,
+    format_date_iso,
+    get_current_date,
+    get_current_datetime,
+    convert_12h_to_24h,
+    convert_24h_to_12h,
+    get_minutes_options,
+    get_hour_options_12h,
+    get_ampm_options,
 )
 
 
@@ -55,7 +62,9 @@ class CompactDateTimeSelector(QWidget):
         # Month selector - responsive sizing
         self.month_combo = QComboBox()
         self.month_combo.setMinimumWidth(45)
-        self.month_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.month_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout.addWidget(self.month_combo)
 
         # Separator
@@ -64,7 +73,9 @@ class CompactDateTimeSelector(QWidget):
         # Day selector - responsive sizing
         self.day_combo = QComboBox()
         self.day_combo.setMinimumWidth(35)
-        self.day_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.day_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout.addWidget(self.day_combo)
 
         # Separator
@@ -73,7 +84,9 @@ class CompactDateTimeSelector(QWidget):
         # Year selector - responsive sizing
         self.year_combo = QComboBox()
         self.year_combo.setMinimumWidth(55)
-        self.year_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.year_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout.addWidget(self.year_combo)
 
     def _connect_signals(self):
@@ -173,6 +186,7 @@ class CompactDateTimeSelector(QWidget):
     def get_selected_datetime_iso(self):
         """Get the selected datetime as ISO string."""
         from inventory_app.utils.date_utils import format_datetime_iso
+
         dt_obj = self.get_selected_datetime()
         return format_datetime_iso(dt_obj) if dt_obj else ""
 
@@ -192,12 +206,14 @@ class DateTimeSelectionManager:
         """Set selector to current date/time defaults."""
         if self.selector:
             from inventory_app.utils.date_utils import get_current_datetime
+
             self.selector.set_datetime(get_current_datetime())
 
     def load_from_date(self, date_obj):
         """Load date from database into selector."""
         if self.selector and date_obj:
             from datetime import date
+
             if isinstance(date_obj, date):
                 self.selector.set_date(date_obj)
 
@@ -261,14 +277,10 @@ class BaseRequisitionDialog(QDialog):
             f"{'Create' if self.mode == 'create' else 'Edit'} Laboratory Requisition"
         )
         self.setModal(True)
-        self.setMinimumSize(900, 600)  # Set minimum size for usability
-        self.resize(1280, 700)  # Default window size
+        self.setMinimumSize(1000, 540)  # Set minimum size for usability
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-
-        # Header (abstract - implemented by subclasses)
-        self._setup_header(layout)
+        layout.setSpacing(5)
 
         # Main horizontal splitter for the entire layout
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -280,7 +292,6 @@ class BaseRequisitionDialog(QDialog):
         left_section.setMinimumWidth(500)  # Ensure minimum width for left section
         left_layout = QVBoxLayout(left_section)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
 
         # Top horizontal splitter for left and middle panels
         top_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -289,16 +300,14 @@ class BaseRequisitionDialog(QDialog):
 
         # Left panel
         left_panel = self._create_requisition_details_panel()
-        left_panel.setMinimumWidth(200)  # Minimum width for details panel
         top_splitter.addWidget(left_panel)
 
         # Middle panel
         middle_panel = self._create_item_selection_panel()
-        middle_panel.setMinimumWidth(400)  # Minimum width for item selection panel
         top_splitter.addWidget(middle_panel)
 
-        # Set top splitter proportions (25% left, 35% middle)
-        top_splitter.setStretchFactor(0, 25)
+        # Set top splitter proportions (35% left, 35% middle)
+        top_splitter.setStretchFactor(0, 35)
         top_splitter.setStretchFactor(1, 35)
 
         # Schedule panel below left and middle panels
@@ -314,19 +323,14 @@ class BaseRequisitionDialog(QDialog):
 
         # Right section: Right panel spanning full height
         right_panel = self._create_selected_items_summary()
-        right_panel.setMinimumWidth(400)  # Minimum width for summary panel
         main_splitter.addWidget(right_panel)
 
-        # Set main splitter proportions (65% left, 35% right)
-        main_splitter.setStretchFactor(0, 65)
-        main_splitter.setStretchFactor(1, 35)
+        # Set main splitter proportions (70% left, 30% right)
+        main_splitter.setStretchFactor(0, 70)
+        main_splitter.setStretchFactor(1, 30)
 
         # Buttons (abstract - implemented by subclasses)
         self._setup_buttons(layout)
-
-    def _setup_header(self, layout: QVBoxLayout):
-        """Setup mode-specific header."""
-        raise NotImplementedError("Subclasses must implement _setup_header")
 
     def _create_requisition_details_panel(self) -> QWidget:
         """Create mode-specific requisition details panel."""
@@ -345,7 +349,9 @@ class BaseRequisitionDialog(QDialog):
 
         # Search and filter
         search_group = QGroupBox("🔍 Search Items")
-        search_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        search_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         search_layout = QVBoxLayout(search_group)
 
         self.item_search = QLineEdit()
@@ -357,19 +363,27 @@ class BaseRequisitionDialog(QDialog):
 
         # Available items list
         items_group = QGroupBox("📦 Available Items")
-        items_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        items_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         items_layout = QVBoxLayout(items_group)
 
         self.available_items_list = QListWidget()
         self.available_items_list.setMinimumHeight(100)  # Minimum height for list
-        self.available_items_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.available_items_list.setWordWrap(True)  # Enable text wrapping for long item names
+        self.available_items_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.available_items_list.setWordWrap(
+            True
+        )  # Enable text wrapping for long item names
         self.available_items_list.itemDoubleClicked.connect(self.add_item_to_selection)
         items_layout.addWidget(self.available_items_list)
 
         # Add item button
         add_item_btn = QPushButton("➕ Add Selected Item")
-        add_item_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        add_item_btn.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         add_item_btn.clicked.connect(self.add_item_to_selection)
         items_layout.addWidget(add_item_btn)
 
@@ -391,8 +405,12 @@ class BaseRequisitionDialog(QDialog):
 
         self.selected_items_list = QListWidget()
         self.selected_items_list.setMinimumHeight(100)  # Minimum height for list
-        self.selected_items_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.selected_items_list.setWordWrap(True)  # Enable text wrapping for long item names
+        self.selected_items_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.selected_items_list.setWordWrap(
+            True
+        )  # Enable text wrapping for long item names
         self.selected_items_list.itemDoubleClicked.connect(
             self.edit_selected_item_amount
         )
@@ -401,13 +419,17 @@ class BaseRequisitionDialog(QDialog):
         # Summary info
         self.items_summary = QLabel("No items selected")
         self.items_summary.setStyleSheet("font-weight: bold; padding: 5px;")
-        self.items_summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.items_summary.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self.items_summary.setWordWrap(True)  # Enable text wrapping for long summaries
         layout.addWidget(self.items_summary)
 
         # Edit amount button
         edit_amount_btn = QPushButton("📝 Edit Amount")
-        edit_amount_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        edit_amount_btn.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         edit_amount_btn.clicked.connect(self.edit_selected_item_amount)
         layout.addWidget(edit_amount_btn)
 
@@ -416,6 +438,17 @@ class BaseRequisitionDialog(QDialog):
         remove_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         remove_btn.clicked.connect(self.remove_selected_item)
         layout.addWidget(remove_btn)
+
+        # Action buttons container (Create/Update and Cancel will be placed here)
+        # Use a horizontal layout so primary action is right-aligned
+        from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+        action_widget = QWidget()
+        action_layout = QHBoxLayout(action_widget)
+        action_layout.addStretch()
+        layout.addWidget(action_widget)
+        # Keep a reference so subclasses can place their action buttons here
+        self.action_buttons_layout = action_layout
 
         return group
 
@@ -439,7 +472,7 @@ class BaseRequisitionDialog(QDialog):
         """Load available items for selection with real-time stock calculation."""
         try:
             # For editing mode, exclude current requisition's stock movements
-            exclude_requisition_id = getattr(self, 'temp_requisition_id', None)
+            exclude_requisition_id = getattr(self, "temp_requisition_id", None)
             items = self.item_service.get_inventory_batches_for_selection(
                 exclude_requisition_id=exclude_requisition_id
             )
@@ -624,14 +657,13 @@ class BaseRequisitionDialog(QDialog):
         from PyQt6.QtWidgets import QInputDialog
 
         editor_name, ok = QInputDialog.getText(
-            self,
-            "Editor Information",
-            "Enter your name/initials (required):"
+            self, "Editor Information", "Enter your name/initials (required):"
         )
 
         if ok and editor_name.strip():
             return editor_name.strip()
         return ""
+
 
 class CompactRequisitionSchedule(QWidget):
     """Compact request and return schedule widget with horizontal layout."""
@@ -644,7 +676,13 @@ class CompactRequisitionSchedule(QWidget):
 
     def _setup_ui(self):
         """Setup the compact horizontal layout for requisition schedule."""
-        from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QComboBox, QSizePolicy
+        from PyQt6.QtWidgets import (
+            QHBoxLayout,
+            QVBoxLayout,
+            QLabel,
+            QComboBox,
+            QSizePolicy,
+        )
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(5, 5, 5, 5)
@@ -659,19 +697,25 @@ class CompactRequisitionSchedule(QWidget):
         # Request time selectors - responsive sizing
         self.request_hour = QComboBox()
         self.request_hour.setMinimumWidth(35)
-        self.request_hour.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_hour.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_hour)
 
         request_layout.addWidget(QLabel(":"))
 
         self.request_minute = QComboBox()
         self.request_minute.setMinimumWidth(35)
-        self.request_minute.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_minute.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_minute)
 
         self.request_ampm = QComboBox()
         self.request_ampm.setMinimumWidth(35)
-        self.request_ampm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_ampm.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_ampm)
 
         request_layout.addWidget(QLabel("  -  "))
@@ -679,21 +723,27 @@ class CompactRequisitionSchedule(QWidget):
         # Request date selectors - responsive sizing
         self.request_month = QComboBox()
         self.request_month.setMinimumWidth(45)
-        self.request_month.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_month.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_month)
 
         request_layout.addWidget(QLabel("/"))
 
         self.request_day = QComboBox()
         self.request_day.setMinimumWidth(35)
-        self.request_day.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_day.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_day)
 
         request_layout.addWidget(QLabel("/"))
 
         self.request_year = QComboBox()
         self.request_year.setMinimumWidth(55)
-        self.request_year.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.request_year.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         request_layout.addWidget(self.request_year)
 
         request_layout.addStretch()
@@ -708,19 +758,25 @@ class CompactRequisitionSchedule(QWidget):
         # Return time selectors - responsive sizing
         self.return_hour = QComboBox()
         self.return_hour.setMinimumWidth(35)
-        self.return_hour.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_hour.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_hour)
 
         return_layout.addWidget(QLabel(":"))
 
         self.return_minute = QComboBox()
         self.return_minute.setMinimumWidth(35)
-        self.return_minute.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_minute.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_minute)
 
         self.return_ampm = QComboBox()
         self.return_ampm.setMinimumWidth(35)
-        self.return_ampm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_ampm.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_ampm)
 
         return_layout.addWidget(QLabel("  -  "))
@@ -728,21 +784,27 @@ class CompactRequisitionSchedule(QWidget):
         # Return date selectors - responsive sizing
         self.return_month = QComboBox()
         self.return_month.setMinimumWidth(45)
-        self.return_month.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_month.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_month)
 
         return_layout.addWidget(QLabel("/"))
 
         self.return_day = QComboBox()
         self.return_day.setMinimumWidth(35)
-        self.return_day.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_day.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_day)
 
         return_layout.addWidget(QLabel("/"))
 
         self.return_year = QComboBox()
         self.return_year.setMinimumWidth(55)
-        self.return_year.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.return_year.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         return_layout.addWidget(self.return_year)
 
         return_layout.addStretch()
@@ -800,7 +862,9 @@ class CompactRequisitionSchedule(QWidget):
 
     def _on_request_date_changed(self):
         """Update request day dropdown when month or year changes."""
-        self._update_days_dropdown(self.request_day, self.request_year, self.request_month)
+        self._update_days_dropdown(
+            self.request_day, self.request_year, self.request_month
+        )
 
     def _on_return_date_changed(self):
         """Update return day dropdown when month or year changes."""
@@ -834,7 +898,9 @@ class CompactRequisitionSchedule(QWidget):
 
             self.request_month.setCurrentText(MONTH_NAMES.get(dt_obj.month, ""))
             self.request_year.setCurrentText(str(dt_obj.year))
-            self._update_days_dropdown(self.request_day, self.request_year, self.request_month)
+            self._update_days_dropdown(
+                self.request_day, self.request_year, self.request_month
+            )
             self.request_day.setCurrentText(str(dt_obj.day))
 
             self.request_hour.setCurrentText(str(hour_12))
@@ -850,7 +916,9 @@ class CompactRequisitionSchedule(QWidget):
 
             self.return_month.setCurrentText(MONTH_NAMES.get(dt_obj.month, ""))
             self.return_year.setCurrentText(str(dt_obj.year))
-            self._update_days_dropdown(self.return_day, self.return_year, self.return_month)
+            self._update_days_dropdown(
+                self.return_day, self.return_year, self.return_month
+            )
             self.return_day.setCurrentText(str(dt_obj.day))
 
             self.return_hour.setCurrentText(str(hour_12))
@@ -895,6 +963,7 @@ class CompactRequisitionSchedule(QWidget):
                 return None
         return None
 
+
 class RequisitionScheduleManager:
     """Manager for requisition schedule selection using composition pattern."""
 
@@ -931,7 +1000,6 @@ class RequisitionScheduleManager:
     def get_widget(self):
         """Get the schedule widget for adding to layouts."""
         return self.schedule
-
 
     # Date/Time helper methods
     def create_activity_date_selector(self):

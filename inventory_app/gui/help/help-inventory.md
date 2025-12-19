@@ -8,6 +8,7 @@ The Inventory page is the primary place to view, search, and manage all items, b
 - **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item. You can also double-click a row to edit.
 - **🗑️ Delete Item:** Enabled when you select a row; prompts for confirmation and requires your name/initials and a deletion reason. Deletions are permanent.
 - **🔄 Refresh:** Reloads items, filters, and statistics from the database.
+- **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` file. The importer scans the first 40 rows to locate the header row (so top title rows are ignored), and header names are matched case- and space-insensitively. Minimum required fields are `name` (or variants like `item` / `items`), `stocks`, and `item type`. Categories are auto-resolved (or created) to avoid FK errors. If the import fails, check the import log which lists skipped rows and reasons.
 
 ## **Filters & Search**
 

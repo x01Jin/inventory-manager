@@ -5,8 +5,15 @@ Provides complete inventory management interface (Specs #1-21).
 
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QMessageBox, QSplitter, QInputDialog
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QGroupBox,
+    QMessageBox,
+    QSplitter,
+    QInputDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from inventory_app.utils.logger import logger
@@ -16,7 +23,7 @@ from .inventory_table import InventoryTable
 from .inventory_filters import InventoryFilters
 from .inventory_stats import InventoryStats
 from .item_editor import ItemEditor
-
+from .import_dialog import ImportItemsDialog
 
 
 class InventoryPage(QWidget):
@@ -24,7 +31,7 @@ class InventoryPage(QWidget):
 
     # Signals for integration with main application
     item_selected = pyqtSignal(int)  # Item ID selected
-    data_changed = pyqtSignal()      # Data was modified
+    data_changed = pyqtSignal()  # Data was modified
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -75,6 +82,11 @@ class InventoryPage(QWidget):
         self.refresh_button = QPushButton("🔄 Refresh")
         self.refresh_button.clicked.connect(self.refresh_data)
 
+        # Import button (opens dialog explaining required headers and allows importing from excel)
+        self.import_button = QPushButton("⬇️ Import Items")
+        self.import_button.clicked.connect(self.open_import_dialog)
+
+        header_layout.addWidget(self.import_button)
         header_layout.addWidget(self.add_button)
         header_layout.addWidget(self.edit_button)
         header_layout.addWidget(self.delete_button)
@@ -129,21 +141,21 @@ class InventoryPage(QWidget):
             items = []
             for row in raw_data:
                 item = ItemRow(
-                    id=row.get('id'),
-                    name=row.get('name', ''),
-                    category_name=row.get('category_name', 'Uncategorized'),
-                    size=row.get('size'),
-                    brand=row.get('brand'),
-                    supplier_name=row.get('supplier_name'),
-                    other_specifications=row.get('other_specifications'),
-                    po_number=row.get('po_number'),
-                    expiration_date=self._parse_date(row.get('expiration_date')),
-                    calibration_date=self._parse_date(row.get('calibration_date')),
-                    acquisition_date=self._parse_date(row.get('acquisition_date')),
-                    last_modified=self._parse_datetime(row.get('last_modified')),
-                    is_consumable=bool(row.get('is_consumable', 1)),
-                    total_stock=row.get('total_stock', 0),
-                    available_stock=row.get('available_stock', 0),
+                    id=row.get("id"),
+                    name=row.get("name", ""),
+                    category_name=row.get("category_name", "Uncategorized"),
+                    size=row.get("size"),
+                    brand=row.get("brand"),
+                    supplier_name=row.get("supplier_name"),
+                    other_specifications=row.get("other_specifications"),
+                    po_number=row.get("po_number"),
+                    expiration_date=self._parse_date(row.get("expiration_date")),
+                    calibration_date=self._parse_date(row.get("calibration_date")),
+                    acquisition_date=self._parse_date(row.get("acquisition_date")),
+                    last_modified=self._parse_datetime(row.get("last_modified")),
+                    is_consumable=bool(row.get("is_consumable", 1)),
+                    total_stock=row.get("total_stock", 0),
+                    available_stock=row.get("available_stock", 0),
                 )
                 items.append(item)
 
@@ -167,7 +179,9 @@ class InventoryPage(QWidget):
 
         except Exception as e:
             logger.error(f"Failed to refresh data: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load inventory data: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to load inventory data: {str(e)}"
+            )
 
     def add_item(self):
         """Add a new item."""
@@ -202,12 +216,16 @@ class InventoryPage(QWidget):
         """Delete the currently selected item."""
         item_id = self.table.get_selected_item_id()
         if not item_id:
-            QMessageBox.warning(self, "No Selection", "Please select an item to delete.")
+            QMessageBox.warning(
+                self, "No Selection", "Please select an item to delete."
+            )
             return
 
         # Get item details for confirmation
         selected_items = self.model.get_filtered_items()
-        selected_item = next((item for item in selected_items if item.id == item_id), None)
+        selected_item = next(
+            (item for item in selected_items if item.id == item_id), None
+        )
 
         if not selected_item:
             QMessageBox.warning(self, "Error", "Could not find selected item.")
@@ -215,11 +233,12 @@ class InventoryPage(QWidget):
 
         # Confirm deletion
         reply = QMessageBox.question(
-            self, "Confirm Deletion",
+            self,
+            "Confirm Deletion",
             f"Are you sure you want to delete '{selected_item.name}'?\n\n"
             "This action cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.No,
         )
 
         if reply != QMessageBox.StandardButton.Yes:
@@ -227,21 +246,26 @@ class InventoryPage(QWidget):
 
         try:
             # Ask for editor name and reason (Spec #14, #16)
-            editor_name, ok = QInputDialog.getText(self, "Editor Information",
-                                                  "Enter your name/initials (required):")
+            editor_name, ok = QInputDialog.getText(
+                self, "Editor Information", "Enter your name/initials (required):"
+            )
             if not ok or not editor_name.strip():
                 QMessageBox.warning(self, "Required", "Editor name is required.")
                 return
 
-            reason, ok = QInputDialog.getText(self, "Deletion Reason",
-                                             "Reason for deletion:")
+            reason, ok = QInputDialog.getText(
+                self, "Deletion Reason", "Reason for deletion:"
+            )
             if not ok:
                 return
 
             # Delete the item
             from inventory_app.database.models import Item
+
             item = Item.get_by_id(item_id)
-            if item and item.delete(editor_name.strip(), reason.strip() or "No reason provided"):
+            if item and item.delete(
+                editor_name.strip(), reason.strip() or "No reason provided"
+            ):
                 logger.info(f"Item {item_id} deleted by {editor_name}")
                 QMessageBox.information(self, "Success", "Item deleted successfully!")
                 self.refresh_data()
@@ -253,6 +277,20 @@ class InventoryPage(QWidget):
             logger.error(f"Failed to delete item {item_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to delete item: {str(e)}")
 
+    def open_import_dialog(self):
+        """Open the import dialog to import items from an Excel file."""
+        try:
+            dialog = ImportItemsDialog(self)
+            if dialog.exec() == ImportItemsDialog.DialogCode.Accepted:
+                # Import succeeded (dialog returns Accepted after import)
+                QMessageBox.information(
+                    self, "Import", "Import completed. Inventory will refresh."
+                )
+                self.refresh_data()
+                self.data_changed.emit()
+        except Exception as e:
+            logger.error(f"Import dialog failed: {e}")
+            QMessageBox.critical(self, "Import Error", f"Import failed: {str(e)}")
 
     def _on_table_selection_changed(self):
         """Handle table selection changes."""
@@ -294,21 +332,29 @@ class InventoryPage(QWidget):
         table_data = []
         for item in filtered_items:
             row = {
-                'id': item.id,
-                'name': item.name,
-                'category_name': item.category_name,
-                'size': item.size,
-                'brand': item.brand,
-                'supplier_name': item.supplier_name,
-                'other_specifications': item.other_specifications,
-                'po_number': item.po_number,
-                'expiration_date': item.expiration_date.isoformat() if item.expiration_date else None,
-                'calibration_date': item.calibration_date.isoformat() if item.calibration_date else None,
-                'acquisition_date': item.acquisition_date.isoformat() if item.acquisition_date else None,
-                'last_modified': item.last_modified.isoformat() if item.last_modified else None,
-                'is_consumable': item.is_consumable,
-                'total_stock': item.total_stock,
-                'available_stock': item.available_stock,
+                "id": item.id,
+                "name": item.name,
+                "category_name": item.category_name,
+                "size": item.size,
+                "brand": item.brand,
+                "supplier_name": item.supplier_name,
+                "other_specifications": item.other_specifications,
+                "po_number": item.po_number,
+                "expiration_date": item.expiration_date.isoformat()
+                if item.expiration_date
+                else None,
+                "calibration_date": item.calibration_date.isoformat()
+                if item.calibration_date
+                else None,
+                "acquisition_date": item.acquisition_date.isoformat()
+                if item.acquisition_date
+                else None,
+                "last_modified": item.last_modified.isoformat()
+                if item.last_modified
+                else None,
+                "is_consumable": item.is_consumable,
+                "total_stock": item.total_stock,
+                "available_stock": item.available_stock,
             }
             table_data.append(row)
 
@@ -320,6 +366,7 @@ class InventoryPage(QWidget):
             return None
         try:
             from datetime import datetime
+
             dt = datetime.fromisoformat(date_str)
             return dt.date()
         except (ValueError, TypeError):
@@ -331,6 +378,7 @@ class InventoryPage(QWidget):
             return None
         try:
             from datetime import datetime
+
             return datetime.fromisoformat(datetime_str)
         except (ValueError, TypeError):
             return None

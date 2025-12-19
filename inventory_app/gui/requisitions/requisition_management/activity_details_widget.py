@@ -45,13 +45,13 @@ class ActivityDetailsWidget(QGroupBox):
     def _setup_ui(self):
         """Setup the widget UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
 
         # Activity name
         activity_name_layout = QHBoxLayout()
         activity_name_layout.addWidget(QLabel("Activity Name:"))
         self.activity_name = QLineEdit()
-        self.activity_name.setPlaceholderText("Enter activity name (required)")
+        self.activity_name.setPlaceholderText("(REQUIRED)")
+        self.activity_name.setFixedHeight(25)
         self.activity_name.textChanged.connect(self._on_activity_name_changed)
         activity_name_layout.addWidget(self.activity_name)
         layout.addLayout(activity_name_layout)
@@ -59,8 +59,7 @@ class ActivityDetailsWidget(QGroupBox):
         # Activity description
         layout.addWidget(QLabel("Description:"))
         self.activity_description = QTextEdit()
-        self.activity_description.setPlaceholderText("Optional activity description")
-        self.activity_description.setMaximumHeight(80)
+        self.activity_description.setPlaceholderText("Activity description")
         self.activity_description.textChanged.connect(self._on_field_changed)
         layout.addWidget(self.activity_description)
 
@@ -76,14 +75,14 @@ class ActivityDetailsWidget(QGroupBox):
         students_layout = QVBoxLayout()
         students_layout.addWidget(QLabel("Number of Students:"))
         self.num_students = QLineEdit()
-        self.num_students.setPlaceholderText("Optional")
+        self.num_students.setPlaceholderText("---")
         self.num_students.textChanged.connect(self._on_field_changed)
         students_layout.addWidget(self.num_students)
 
         groups_layout = QVBoxLayout()
         groups_layout.addWidget(QLabel("Number of Groups:"))
         self.num_groups = QLineEdit()
-        self.num_groups.setPlaceholderText("Optional")
+        self.num_groups.setPlaceholderText("---")
         self.num_groups.textChanged.connect(self._on_field_changed)
         groups_layout.addWidget(self.num_groups)
 
