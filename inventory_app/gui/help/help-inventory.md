@@ -46,8 +46,8 @@ The table shows one row per item/batch grouping. Column list and descriptions:
 - **Name:** Item display name. Click to select a row; double-click to edit.
 - **Size / Brand / Other Specifications:** Free-form values entered when adding/editing the item.
 - **Supplier:** Supplier name (if provided).
-- **Calibration Date:** For non-consumables, shows last calibration date; color-coded if approaching or overdue.
-- **Expiry/Disposal Date:** For consumables this is expiration; for non-consumables this is disposal date. Color-coded for warnings and expiries.
+- **Calibration Date:** For non-consumables, shows last calibration date.
+- **Expiry/Disposal Date:** For consumables this is expiration; for non-consumables this is disposal date.
 - **Item Type:** `Consumable` or `Non-Consumable` — affects which date is shown (expiration vs calibration/disposal).
 - **Acquisition Date:** When the item or batch was acquired.
 - **Last Modified:** Timestamp of the most recent change (format `MM/DD/YYYY HH:MM`).
@@ -59,15 +59,18 @@ Notes about sorting and selection:
 
 ## **Color coding & alerts (what the colors mean)**
 
-- **Expired / Overdue (red):** Item is past its expiration or disposal date, or calibration is overdue.
-- **Expiring / Disposal approaching (yellow):** Disposal/expiration is approaching (short warning window).
-- **Calibration Warning (orange):** Next calibration is approaching.
-- **Default / OK (standard text color):** No immediate alert.
+The inventory table uses row background colors to indicate items requiring attention based on their expiration, disposal, or calibration status:
+
+- **Overdue (reddish pink background):** Item is past its expiration or disposal date, or calibration is overdue.
+- **Warning (pale yellow background):** Disposal/expiration or calibration is approaching.
+- **Default (no special color):** No immediate alert.
+
+For non-consumable items with both disposal and calibration dates, the most critical status determines the row color (e.g., if an item has both calibration warning and expired disposal date, the row will show the overdue color).
 
 Alert thresholds (how statuses are derived):
 
-- **Consumables:** Items with an expiration date <= 180 days (6 months) are flagged `Expiring`; dates already past are `Expired`.
-- **Non-Consumables:** Calibration next-date within 90 days is `Cal. Warning`; overdue is `Cal. Overdue`. Disposal within 90 days is `Expiring`; already past disposal is `Expired`. When multiple alerts apply they are shown together (for example, `CAL_WARNING and EXPIRING`).
+- **Consumables:** Items with an expiration date <= 180 days (6 months) are flagged as warnings; dates already past are marked as overdue.
+- **Non-Consumables:** Calibration next-date within 90 days is a warning; overdue is marked as overdue. Disposal within 90 days is a warning; already past disposal is marked as overdue. When multiple alerts apply, the most critical determines the row color.
 
 ## **Item Editor (Add / Edit)**
 

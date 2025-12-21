@@ -26,6 +26,8 @@ Item Management
 
 Stock & Alerts
 
-- Stock computations use Stock_Movements to produce on-hand counts. Movement types are standardized using the `MovementType` enum and enforced by a `CHECK` constraint in the database schema. Visual alerts indicate expiration and calibration due.
+- Stock computations use Stock_Movements to produce on-hand counts. Movement types are standardized using the `MovementType` enum and enforced by a `CHECK` constraint in the database schema. Visual alerts indicate expiration and calibration due through row background coloring.
+
+- The inventory table uses row background colors to indicate items requiring attention. Overdue items (expired, disposal overdue, or calibration overdue) display a reddish pink background. Items with approaching deadlines (warnings) display a pale yellow background. For non-consumable items with multiple dates, the most critical status determines the row color.
 
 - Data integrity: database-level triggers prevent stock movements that would make the available quantity for a batch or an item negative. The application performs validation and uses transactions to avoid oversubscription, but these triggers provide a defensive constraint at the database level.

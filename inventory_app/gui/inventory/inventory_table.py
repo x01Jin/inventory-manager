@@ -10,15 +10,52 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QShowEvent
+from PyQt6.QtCore import Qt, QTimer, QModelIndex
+from PyQt6.QtGui import QShowEvent, QPainter, QBrush
 from PyQt6.QtGui import QColor
 from inventory_app.services.item_status_service import item_status_service
+from inventory_app.gui.inventory.row_styling_service import row_styling_service
+from inventory_app.gui.styles import ThemeManager
 from inventory_app.utils.logger import logger
 
 # Pylance may not expose Qt.ItemDataRole.SortRole in type stubs; use fallback.
 SORT_ROLE = getattr(Qt.ItemDataRole, "SortRole", int(Qt.ItemDataRole.UserRole) + 1)
+
+
+class RowColorDelegate(QStyledItemDelegate):
+    """
+    Custom delegate that ensures row background colors are painted
+    even when stylesheets would otherwise override them.
+    """
+
+    def paint(
+        self,
+        painter: Optional[QPainter],
+        option: QStyleOptionViewItem,
+        index: QModelIndex,
+    ) -> None:
+        """Paint the cell with custom background color if set."""
+        if painter is None:
+            return
+
+        # Check if this item has a custom background color
+        bg_color = index.data(Qt.ItemDataRole.BackgroundRole)
+
+        if bg_color is not None and isinstance(bg_color, QColor) and bg_color.isValid():
+            # Save painter state
+            painter.save()
+            # Fill the background with our custom color
+            painter.fillRect(option.rect, QBrush(bg_color))
+            painter.restore()
+
+            # Modify option to not draw the default background
+            option.backgroundBrush = QBrush(bg_color)
+
+        # Call the parent paint method to draw everything else
+        super().paint(painter, option, index)
 
 
 class AlertIndicator(QWidget):
@@ -60,6 +97,10 @@ class InventoryTable(QTableWidget):
         super().__init__(parent)
         self.setup_table()
 
+        # Set custom delegate to ensure row colors are painted over stylesheets
+        self._row_color_delegate = RowColorDelegate(self)
+        self.setItemDelegate(self._row_color_delegate)
+
     def setup_table(self):
         """Setup the table structure and styling."""
         # Set column count and headers
@@ -69,6 +110,9 @@ class InventoryTable(QTableWidget):
         # Configure table properties
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSortingEnabled(True)
+
+        # Disable alternating row colors to allow custom row coloring
+        self.setAlternatingRowColors(False)
 
         # Disable cell editing on double-click
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -241,10 +285,9 @@ class InventoryTable(QTableWidget):
                     cal_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 cal_date_item.setData(SORT_ROLE, float("inf"))
-            self._color_date_item(cal_date_item, item_status, "calibration")
             self.setItem(row, 6, cal_date_item)  # Calibration Date
 
-            # Expiry/Disposal Date with status-based coloring
+            # Expiry/Disposal Date
             exp_date_item = self.SortableTableItem(expiration_date or "N/A")
             try:
                 from datetime import datetime
@@ -257,7 +300,6 @@ class InventoryTable(QTableWidget):
                     exp_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 exp_date_item.setData(SORT_ROLE, float("inf"))
-            self._color_date_item(exp_date_item, item_status, "expiration")
             self.setItem(row, 7, exp_date_item)  # Expiry/Disposal Date
 
             self.setItem(row, 8, QTableWidgetItem(item_type))  # Item Type
@@ -294,6 +336,9 @@ class InventoryTable(QTableWidget):
             # Store item ID in row for later retrieval
             if item_id is not None:
                 name_item.setData(Qt.ItemDataRole.UserRole, item_id)
+
+            # Apply row-level styling based on item status
+            self._apply_row_styling(row, item_status)
 
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")
@@ -372,39 +417,44 @@ class InventoryTable(QTableWidget):
         """Get the number of rows in the table."""
         return self.rowCount()
 
-    def _color_date_item(
-        self, item: QTableWidgetItem, item_status, date_type: str
-    ) -> None:
+    def _apply_row_styling(self, row: int, item_status) -> None:
         """
-        Color-code the date item based on item status and date type.
+        Apply background color styling to an entire row based on item status.
+
+        For items with multiple status parts (e.g., non-consumables with both
+        calibration and disposal warnings), the most critical status determines
+        the row color.
 
         Args:
-            item: The table item to color
+            row: Row number to style
             item_status: ItemStatus object or None
-            date_type: "calibration" or "expiration"
         """
-        if not item_status:
-            # Default color for OK status
-            item.setForeground(QColor("#FFFFFF"))  # Black
+        # Get the appropriate style class based on status
+        style_class = row_styling_service.get_row_style_class(item_status)
+
+        if not style_class:
+            # No special styling needed
             return
 
-        status = item_status.status
+        # Get current theme
+        theme_manager = ThemeManager.instance()
+        current_theme = theme_manager.current_theme
 
-        # Handle combined statuses by checking for specific components
-        if date_type == "calibration":
-            if "CAL_DUE" in status:
-                item.setForeground(QColor("#DC3545"))  # Red
-            elif "CAL_WARNING" in status:
-                item.setForeground(QColor("#FD7E14"))  # Orange
-            else:
-                item.setForeground(QColor("#FFFFFF"))  # Black
-        elif date_type == "expiration":
-            if "EXPIRED" in status:
-                item.setForeground(QColor("#DC3545"))  # Red
-            elif "EXPIRING" in status:
-                item.setForeground(QColor("#FFC107"))  # Yellow
-            else:
-                item.setForeground(QColor("#FFFFFF"))  # Black
-        else:
-            # Default for other date types
-            item.setForeground(QColor("#000000"))  # Black
+        # Get colors for this style and theme
+        bg_color, text_color = row_styling_service.get_row_colors(
+            style_class, current_theme
+        )
+
+        if bg_color:
+            bg_qcolor = QColor(bg_color)
+            text_qcolor = QColor(text_color) if text_color else None
+
+            # Apply background color to all cells in the row using both methods
+            # to ensure it overrides any default styling
+            for col in range(self.columnCount()):
+                cell_item = self.item(row, col)
+                if cell_item:
+                    # Set background using BackgroundRole for higher priority
+                    cell_item.setData(Qt.ItemDataRole.BackgroundRole, bg_qcolor)
+                    if text_qcolor:
+                        cell_item.setData(Qt.ItemDataRole.ForegroundRole, text_qcolor)
