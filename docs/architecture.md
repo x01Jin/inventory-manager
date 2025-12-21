@@ -6,6 +6,7 @@ Project Layout
   - `main.py`: Entry script for the GUI and initialization
   - `database/`: Schema, connection logic, and models
   - `gui/`: GUI components and pages by feature
+    - `utils/`: Background processing utilities (workers, async table models)
   - `services/`: Business logic including stock movements, alerts, and validation
   - `utils/`: Logging, time utilities, and helpers
 
@@ -17,11 +18,35 @@ Key Modules
 
 - `inventory_app.database.connection`: Database connection, query execution, and schema initialization
 - `inventory_app.gui.main_window`: The main GUI startup
+- `inventory_app.gui.utils.worker`: Background threading utilities using QThreadPool
 - `inventory_app.services.*`: Business logic for items, requisitions, requests, and movement
 
 Initialization
 
 - `main.py` calls `DatabaseConnection.create_database()` when the DB does not exist. It then verifies services and launches the GUI using PyQt6.
+
+Background Processing
+
+The application uses Qt's QThreadPool and QRunnable for background data loading to prevent UI freezes on slower hardware. Key components:
+
+- `Worker`: General-purpose QRunnable for executing functions in background threads
+- `DataLoadWorker`: Specialized worker for loading large datasets with batch emissions
+- `WorkerPool`: Singleton manager for the global thread pool with configurable thread limits
+
+Background processing is used in:
+
+- Inventory table data loading
+- Requisition table data loading  
+- Requester table data loading
+- Excel import operations
+- Available items loading in requisition dialogs
+
+The threading model follows Qt best practices:
+
+- Workers emit signals with data to update the UI
+- Main thread handles all GUI updates
+- No blocking calls or `time.sleep()` in the main thread
+- Thread count is capped (default: 4) to support older/weaker CPUs
 
 Database features
 

@@ -5,9 +5,19 @@ Provides searchable interface for selecting existing requesters.
 
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
-    QGroupBox, QMessageBox, QHeaderView, QAbstractItemView, QCheckBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QTableWidget,
+    QTableWidgetItem,
+    QGroupBox,
+    QMessageBox,
+    QHeaderView,
+    QAbstractItemView,
+    QCheckBox,
 )
 from PyQt6.QtCore import Qt
 
@@ -63,17 +73,21 @@ class RequesterSelector(QDialog):
 
         self.requesters_table = QTableWidget()
         self.requesters_table.setColumnCount(4)
-        self.requesters_table.setHorizontalHeaderLabels([
-            "Requisitions", "Name", "Affiliation", "Group"
-        ])
+        self.requesters_table.setHorizontalHeaderLabels(
+            ["Requisitions", "Name", "Affiliation", "Group"]
+        )
 
         # Configure table
         header = self.requesters_table.horizontalHeader()
         if header:
             header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.requesters_table.setAlternatingRowColors(True)
-        self.requesters_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.requesters_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.requesters_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.requesters_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
         self.requesters_table.itemSelectionChanged.connect(self.on_row_selected)
         # Disable cell editing on double-click
         self.requesters_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -89,7 +103,9 @@ class RequesterSelector(QDialog):
 
         # Selected requester info
         self.selection_info = QLabel("No requester selected")
-        self.selection_info.setStyleSheet("font-weight: bold; padding: 10px; background-color: #2a2a3c; border: 1px solid #3f3f46; border-radius: 5px;")
+        self.selection_info.setStyleSheet(
+            "font-weight: bold; padding: 10px; background-color: #2a2a3c; border: 1px solid #3f3f46; border-radius: 5px;"
+        )
         layout.addWidget(self.selection_info)
 
         # Buttons
@@ -120,23 +136,107 @@ class RequesterSelector(QDialog):
                 self.filter_requesters()  # This will populate the table
                 logger.info("Loaded requesters for selection")
             else:
-                QMessageBox.warning(self, "Load Error", "Failed to load requesters from database.")
+                QMessageBox.warning(
+                    self, "Load Error", "Failed to load requesters from database."
+                )
         except Exception as e:
             logger.error(f"Failed to load requesters: {e}")
             QMessageBox.critical(self, "Error", "Failed to load requesters.")
 
     def filter_requesters(self):
-        """Filter requesters based on search term."""
+        """Filter requesters based on search term with batched processing."""
         try:
             # Update the model's search term and apply filters
             self.model.filter_by_search(self.search_input.text())
             filtered_requesters = self.model.get_filtered_rows()
-            self.populate_table(filtered_requesters)
+
+            # Use batched population for large datasets
+            if len(filtered_requesters) > 50:
+                self._populate_table_batched(filtered_requesters)
+            else:
+                self.populate_table(filtered_requesters)
         except Exception as e:
             logger.error(f"Failed to filter requesters: {e}")
 
+    def _populate_table_batched(self, requesters: list):
+        """Populate table in batches to prevent UI freeze."""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QTimer
+
+        # Apply filter for zero requisitions if checkbox is checked
+        if self.hide_zero_requisitions.isChecked():
+            requesters = [b for b in requesters if b.requisitions_count > 0]
+
+        # Clear table
+        self.requesters_table.setRowCount(0)
+
+        # Store for batched processing
+        self._pending_requesters = requesters
+        self._selector_batch_index = 0
+        self._selector_batch_size = 25
+
+        # Start batch processing
+        self._process_selector_batch()
+
+    def _process_selector_batch(self):
+        """Process one batch of requester rows."""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QTimer
+
+        # Safety check - ensure we have data to process
+        if not hasattr(self, "_pending_requesters") or self._pending_requesters is None:
+            return
+
+        total_rows = len(self._pending_requesters)
+        start = self._selector_batch_index
+        end = min(start + self._selector_batch_size, total_rows)
+
+        if start >= total_rows:
+            logger.debug(f"Populated table with {total_rows} requesters")
+            self._pending_requesters = None
+            return
+
+        batch = self._pending_requesters[start:end]
+
+        # Add batch rows to table
+        for requester in batch:
+            row_position = self.requesters_table.rowCount()
+            self.requesters_table.insertRow(row_position)
+
+            # Requisitions count
+            requisitions_item = QTableWidgetItem(str(requester.requisitions_count))
+            self.requesters_table.setItem(row_position, 0, requisitions_item)
+
+            # Name
+            name_item = QTableWidgetItem(requester.name)
+            name_item.setData(Qt.ItemDataRole.UserRole, requester.id)
+            self.requesters_table.setItem(row_position, 1, name_item)
+
+            # Affiliation
+            self.requesters_table.setItem(
+                row_position, 2, QTableWidgetItem(requester.affiliation)
+            )
+
+            # Group
+            self.requesters_table.setItem(
+                row_position, 3, QTableWidgetItem(requester.group_name)
+            )
+
+        # Process events to keep UI responsive
+        QApplication.processEvents()
+
+        # Schedule next batch if more data and _pending_requesters still valid
+        self._selector_batch_index = end
+        if self._pending_requesters is not None and end < total_rows:
+            QTimer.singleShot(0, self._process_selector_batch)
+        else:
+            logger.debug(
+                f"Populated table with {len(self._pending_requesters)} requesters"
+            )
+            self._pending_requesters = None
+
     def populate_table(self, requesters: list[RequesterRow]):
-        """Populate the requesters table."""
+        """Populate the requesters table (for small datasets)."""
         try:
             self.requesters_table.setRowCount(0)
 
@@ -158,10 +258,14 @@ class RequesterSelector(QDialog):
                 self.requesters_table.setItem(row_position, 1, name_item)
 
                 # Affiliation
-                self.requesters_table.setItem(row_position, 2, QTableWidgetItem(requester.affiliation))
+                self.requesters_table.setItem(
+                    row_position, 2, QTableWidgetItem(requester.affiliation)
+                )
 
                 # Group
-                self.requesters_table.setItem(row_position, 3, QTableWidgetItem(requester.group_name))
+                self.requesters_table.setItem(
+                    row_position, 3, QTableWidgetItem(requester.group_name)
+                )
 
             logger.debug(f"Populated table with {len(requesters)} requesters")
 
@@ -187,7 +291,9 @@ class RequesterSelector(QDialog):
                         self.requesters_table.selectRow(row)
                         break
 
-                logger.info(f"Selected requester: {requester.name} (ID: {requester_id})")
+                logger.info(
+                    f"Selected requester: {requester.name} (ID: {requester_id})"
+                )
 
         except Exception as e:
             logger.error(f"Failed to select requester {requester_id}: {e}")
@@ -197,7 +303,9 @@ class RequesterSelector(QDialog):
         try:
             current_row = self.requesters_table.currentRow()
             if current_row >= 0:
-                name_item = self.requesters_table.item(current_row, 1)  # Column 1 = Name
+                name_item = self.requesters_table.item(
+                    current_row, 1
+                )  # Column 1 = Name
                 if name_item is not None:
                     requester_id = name_item.data(Qt.ItemDataRole.UserRole)
                     if requester_id is not None:
@@ -210,7 +318,9 @@ class RequesterSelector(QDialog):
         if self.selected_requester_id is not None:
             self.accept()
         else:
-            QMessageBox.warning(self, "No Selection", "Please select a requester first.")
+            QMessageBox.warning(
+                self, "No Selection", "Please select a requester first."
+            )
 
     def get_selected_requester_id(self) -> Optional[int]:
         """Get the selected requester ID."""

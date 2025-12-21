@@ -3,6 +3,8 @@ Base Requisition Dialog - Base class for requisition dialogs.
 
 Provides common UI structure and functionality for creating and editing requisitions.
 Uses composition pattern with services and managers for maintainable architecture.
+
+Uses background threading via QThreadPool for item loading to prevent UI freezes.
 """
 
 from typing import Dict, List, Optional
@@ -18,12 +20,14 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QSplitter,
     QWidget,
+    QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from inventory_app.database.models import Requester
 from inventory_app.services.item_service import ItemService
 from inventory_app.services.stock_movement_service import StockMovementService
+from inventory_app.gui.utils.worker import run_in_background, Worker
 from .item_selection_manager import ItemSelectionManager
 from .requisition_validator import RequisitionValidator
 from inventory_app.utils.logger import logger
@@ -240,6 +244,7 @@ class BaseRequisitionDialog(QDialog):
 
     Provides common UI structure, signals, and standardized data structures.
     Subclasses implement mode-specific behavior.
+    Uses async loading for available items to prevent UI freezes.
     """
 
     # Signal emitted when requisition is successfully saved
@@ -267,6 +272,10 @@ class BaseRequisitionDialog(QDialog):
         # Standardized data structures
         self.selected_requester: Optional[Requester] = None
         self.selected_items: List[Dict] = []  # Standardized item format
+
+        # Async loading state
+        self._items_worker: Optional[Worker] = None
+        self._is_loading_items = False
 
         self._setup_ui()
         logger.info(f"Base requisition dialog initialized in {mode} mode")
@@ -339,7 +348,7 @@ class BaseRequisitionDialog(QDialog):
         )
 
     def _create_item_selection_panel(self) -> QWidget:
-        """Create the common item selection panel with responsive height."""
+        """Create the common item selection panel with responsive height and async loading."""
         from PyQt6.QtWidgets import QSizePolicy
 
         panel = QWidget()
@@ -361,6 +370,14 @@ class BaseRequisitionDialog(QDialog):
 
         layout.addWidget(search_group)
 
+        # Progress bar for loading items
+        self.items_progress_bar = QProgressBar()
+        self.items_progress_bar.setTextVisible(True)
+        self.items_progress_bar.setFormat("Loading items...")
+        self.items_progress_bar.setMaximumHeight(18)
+        self.items_progress_bar.setVisible(False)
+        layout.addWidget(self.items_progress_bar)
+
         # Available items list
         items_group = QGroupBox("📦 Available Items")
         items_group.setSizePolicy(
@@ -380,16 +397,16 @@ class BaseRequisitionDialog(QDialog):
         items_layout.addWidget(self.available_items_list)
 
         # Add item button
-        add_item_btn = QPushButton("➕ Add Selected Item")
-        add_item_btn.setSizePolicy(
+        self.add_item_btn = QPushButton("➕ Add Selected Item")
+        self.add_item_btn.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        add_item_btn.clicked.connect(self.add_item_to_selection)
-        items_layout.addWidget(add_item_btn)
+        self.add_item_btn.clicked.connect(self.add_item_to_selection)
+        items_layout.addWidget(self.add_item_btn)
 
         layout.addWidget(items_group)
 
-        # Load initial items
+        # Load initial items asynchronously
         self.load_available_items()
 
         return panel
@@ -469,51 +486,198 @@ class BaseRequisitionDialog(QDialog):
 
     # Common methods used by both dialogs
     def load_available_items(self):
-        """Load available items for selection with real-time stock calculation."""
+        """Load available items for selection asynchronously."""
+        if self._is_loading_items:
+            return
+
+        # Cancel any existing worker
+        if self._items_worker:
+            self._items_worker.cancel()
+
+        self._is_loading_items = True
+
+        # Show progress bar immediately with indeterminate state
+        self.items_progress_bar.setRange(0, 0)  # Indeterminate
+        self.items_progress_bar.setFormat("Loading items from database...")
+        self.items_progress_bar.setVisible(True)
+
+        # Disable add button during load
+        if hasattr(self, "add_item_btn"):
+            self.add_item_btn.setEnabled(False)
+
+        # Get exclusion ID for editing mode
+        exclude_requisition_id = getattr(self, "temp_requisition_id", None)
+
+        # Run data loading in background thread
+        self._items_worker = run_in_background(
+            self._load_items_background,
+            exclude_requisition_id,
+            on_result=self._on_items_loaded,
+            on_error=self._on_items_load_error,
+            on_finished=self._on_items_load_finished,
+        )
+
+    def _load_items_background(self, exclude_requisition_id: Optional[int]) -> list:
+        """
+        Load items in background thread.
+
+        This method runs off the main thread.
+        """
+        items = self.item_service.get_inventory_batches_for_selection(
+            exclude_requisition_id=exclude_requisition_id
+        )
+        return items
+
+    def _on_items_loaded(self, items: list):
+        """Handle items loaded - start batched population on main thread."""
+        from PyQt6.QtCore import QTimer
+
         try:
-            # For editing mode, exclude current requisition's stock movements
-            exclude_requisition_id = getattr(self, "temp_requisition_id", None)
-            items = self.item_service.get_inventory_batches_for_selection(
-                exclude_requisition_id=exclude_requisition_id
-            )
+            self._loaded_items = items
+
+            # Clear list and prepare for batched loading
             self.available_items_list.clear()
 
-            for item in items:
-                # Calculate real-time available stock: DB available - currently selected
-                # For editing, we also exclude the current requisition's movements
-                real_time_stock = (
-                    self.item_manager.get_real_time_available_stock_for_batch(
-                        item["batch_id"], self.selected_items, exclude_requisition_id
-                    )
-                )
+            # Pre-filter items based on currently selected items
+            # (subtract selected quantities from available stock)
+            self._items_to_display = []
 
-                # Skip items with no real-time available stock
-                if real_time_stock <= 0:
+            for item in items:
+                # Calculate real-time available: DB available - currently selected
+                db_available = item.get("available_stock", 0)
+                selected_qty = sum(
+                    sel.get("quantity", 0)
+                    for sel in self.selected_items
+                    if sel.get("batch_id") == item.get("batch_id")
+                )
+                real_time_available = max(0, db_available - selected_qty)
+
+                # Skip items with no available stock
+                if real_time_available <= 0:
                     continue
 
-                display_text = (
-                    f"{item['item_name']} "
-                    f"[{item['category_name']}] - "
-                    f"available: {real_time_stock}"
-                )
+                # Store the real-time stock for display
+                item["real_time_available_stock"] = real_time_available
+                self._items_to_display.append(item)
 
-                # Update item data with real-time stock for use in selection
-                item["real_time_available_stock"] = real_time_stock
+            # Setup batched population
+            self._items_batch_index = 0
+            self._items_batch_size = 50  # Can be larger now since no DB calls
 
-                list_item = QListWidgetItem(display_text)
-                list_item.setData(Qt.ItemDataRole.UserRole, item)
-                self.available_items_list.addItem(list_item)
+            # Show progress bar for batched loading
+            total_items = len(self._items_to_display)
+            self.items_progress_bar.setRange(0, total_items)
+            self.items_progress_bar.setValue(0)
+            self.items_progress_bar.setFormat(f"Loading items... %v/{total_items}")
+            self.items_progress_bar.setVisible(True)
 
-            logger.info(
-                f"Loaded {self.available_items_list.count()} available items with real-time stock"
-            )
+            # Start batched population using QTimer for smooth UI
+            self._batch_timer = QTimer(self)
+            self._batch_timer.timeout.connect(self._process_items_batch)
+            self._batch_timer.start(0)
 
         except Exception as e:
-            logger.error(f"Failed to load available items: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load items: {str(e)}")
+            logger.error(f"Error processing loaded items: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to process items: {str(e)}")
+
+    def _process_items_batch(self):
+        """Process one batch of items - add to list widget."""
+        from PyQt6.QtWidgets import QApplication
+
+        # Safety check - ensure we have data to process
+        if not hasattr(self, "_items_to_display") or self._items_to_display is None:
+            self._finish_items_population()
+            return
+
+        total_items = len(self._items_to_display)
+        start = self._items_batch_index
+        end = min(start + self._items_batch_size, total_items)
+
+        if start >= total_items:
+            self._finish_items_population()
+            return
+
+        # Process batch - just add to list widget (no DB calls!)
+        for idx in range(start, end):
+            item = self._items_to_display[idx]
+            real_time_stock = item.get("real_time_available_stock", 0)
+
+            # Add to list widget
+            display_text = (
+                f"{item['item_name']} "
+                f"[{item['category_name']}] - "
+                f"available: {real_time_stock}"
+            )
+            list_item = QListWidgetItem(display_text)
+            list_item.setData(Qt.ItemDataRole.UserRole, item)
+            self.available_items_list.addItem(list_item)
+
+        # Update progress
+        self._items_batch_index = end
+        self.items_progress_bar.setValue(end)
+
+        # Process events to keep UI responsive
+        QApplication.processEvents()
+
+        # Check if done
+        if self._items_to_display is None or end >= total_items:
+            self._finish_items_population()
+
+    def _finish_items_population(self):
+        """Finish item population."""
+        # Stop timer
+        if hasattr(self, "_batch_timer") and self._batch_timer:
+            self._batch_timer.stop()
+            self._batch_timer = None
+
+        # Hide progress bar
+        self.items_progress_bar.setVisible(False)
+
+        # Enable add button
+        if hasattr(self, "add_item_btn"):
+            self.add_item_btn.setEnabled(True)
+
+        # Clean up
+        self._items_to_display = None
+        self._items_batch_index = 0
+
+        logger.info(
+            f"Loaded {self.available_items_list.count()} available items with real-time stock"
+        )
+
+    def _on_items_load_error(self, error_tuple: tuple):
+        """Handle items load error (runs on main thread)."""
+        exctype, value, tb = error_tuple
+        logger.error(f"Failed to load available items: {value}\n{tb}")
+        self.items_progress_bar.setVisible(False)
+        if hasattr(self, "add_item_btn"):
+            self.add_item_btn.setEnabled(True)
+        QMessageBox.critical(self, "Error", f"Failed to load items: {str(value)}")
+
+    def _on_items_load_finished(self):
+        """Handle items load finished (runs on main thread)."""
+        self._is_loading_items = False
+        self._items_worker = None
 
     def search_items(self, search_text: str):
-        """Filter items based on search text."""
+        """Filter items based on search text with batched processing to prevent UI freeze."""
+
+        total_items = self.available_items_list.count()
+
+        # For small lists, filter directly
+        if total_items <= 100:
+            self._filter_items_direct(search_text)
+            return
+
+        # For large lists, use batched filtering
+        self._search_text = search_text
+        self._filter_batch_index = 0
+        self._filter_batch_size = 50
+        self._process_filter_batch()
+
+    def _filter_items_direct(self, search_text: str):
+        """Filter items directly for small lists."""
+        search_lower = search_text.lower().strip()
         for i in range(self.available_items_list.count()):
             item = self.available_items_list.item(i)
             if item is not None:
@@ -521,7 +685,6 @@ class BaseRequisitionDialog(QDialog):
                 if item_data:
                     item_name = item_data.get("item_name", "").lower()
                     category = item_data.get("category_name", "").lower()
-                    search_lower = search_text.lower()
 
                     visible = (
                         search_lower in item_name
@@ -529,6 +692,46 @@ class BaseRequisitionDialog(QDialog):
                         or not search_text.strip()
                     )
                     item.setHidden(not visible)
+
+    def _process_filter_batch(self):
+        """Process one batch of filter operations."""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QTimer
+
+        if not hasattr(self, "_search_text"):
+            return
+
+        search_lower = self._search_text.lower().strip()
+        total_items = self.available_items_list.count()
+        start = self._filter_batch_index
+        end = min(start + self._filter_batch_size, total_items)
+
+        if start >= total_items:
+            return
+
+        # Process batch
+        for i in range(start, end):
+            item = self.available_items_list.item(i)
+            if item is not None:
+                item_data = item.data(Qt.ItemDataRole.UserRole)
+                if item_data:
+                    item_name = item_data.get("item_name", "").lower()
+                    category = item_data.get("category_name", "").lower()
+
+                    visible = (
+                        search_lower in item_name
+                        or search_lower in category
+                        or not self._search_text.strip()
+                    )
+                    item.setHidden(not visible)
+
+        # Process events to keep UI responsive
+        QApplication.processEvents()
+
+        # Schedule next batch
+        self._filter_batch_index = end
+        if end < total_items:
+            QTimer.singleShot(0, self._process_filter_batch)
 
     def add_item_to_selection(self):
         """Add selected item to requisition using ItemSelectionManager."""

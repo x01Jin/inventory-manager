@@ -24,3 +24,38 @@ Notes on Schema Changes
 - Use `DatabaseConnection.transaction()` for multi-step flows to ensure atomic behavior and rollback on error; unit tests validate commit/rollback semantics.
 - Use `execute_update(..., return_last_id=True)` to reliably obtain last insert ids for new records and avoid cross-connection `last_insert_rowid()` usage.
 - Unit tests cover concurrency, transaction handling, and the movement type enum.
+
+Background Processing Guidelines
+
+When adding new data-intensive features, use the background processing utilities in `inventory_app/gui/utils/`:
+
+```python
+from inventory_app.gui.utils.worker import run_in_background, Worker
+
+# Simple background task
+worker = run_in_background(
+    heavy_function,
+    arg1, arg2,
+    on_result=self._on_data_loaded,
+    on_error=self._on_error,
+    on_finished=self._on_finished,
+)
+
+# For batch data loading
+from inventory_app.gui.utils.worker import load_data_in_background
+
+worker = load_data_in_background(
+    load_function,
+    batch_size=50,
+    on_batch=self._on_batch_ready,
+    on_complete=self._on_complete,
+)
+```
+
+Threading rules:
+
+- Use `QThreadPool` and `QRunnable` (via the `Worker` class), not Python's `threading` module
+- Never use `time.sleep()` or blocking calls in the main thread
+- Emit signals with data to update UI; never modify Qt widgets from worker threads
+- Use `beginInsertRows`/`endInsertRows` pattern when updating table models
+- Keep worker thread count limited for older hardware compatibility

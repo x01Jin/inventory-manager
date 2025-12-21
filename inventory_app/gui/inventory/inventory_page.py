@@ -1,9 +1,12 @@
 """
 Main inventory page that composes all inventory components.
 Provides complete inventory management interface (Specs #1-21).
+
+Uses background threading via QThreadPool for data loading to prevent
+UI freezes on slower hardware.
 """
 
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -14,9 +17,12 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QSplitter,
     QInputDialog,
+    QProgressBar,
+    QApplication,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from inventory_app.utils.logger import logger
+from inventory_app.gui.utils.worker import run_in_background, Worker
 from .inventory_controller import InventoryController
 from .inventory_model import InventoryModel, ItemRow
 from .inventory_table import InventoryTable
@@ -27,7 +33,7 @@ from .import_dialog import ImportItemsDialog
 
 
 class InventoryPage(QWidget):
-    """Main inventory page widget using composition pattern."""
+    """Main inventory page widget using composition pattern with async loading."""
 
     # Signals for integration with main application
     item_selected = pyqtSignal(int)  # Item ID selected
@@ -42,6 +48,16 @@ class InventoryPage(QWidget):
         self.table = InventoryTable()
         self.filters = InventoryFilters()
         self.stats = InventoryStats()
+
+        # Track current worker for cancellation
+        self._current_worker: Optional[Worker] = None
+        self._is_loading = False
+
+        # Batch population state
+        self._pending_rows: List[Dict[str, Any]] = []
+        self._current_batch_index = 0
+        self._batch_timer: Optional[QTimer] = None
+        self._batch_size = 30  # Rows per batch - tuned for responsiveness
 
         # Setup connections between components
         self._setup_connections()
@@ -94,6 +110,14 @@ class InventoryPage(QWidget):
 
         layout.addLayout(header_layout)
 
+        # Progress bar for loading indicator
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("Loading inventory... %p%")
+        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
         # Main content area with splitter
         splitter = QSplitter(Qt.Orientation.Vertical)
 
@@ -130,44 +154,83 @@ class InventoryPage(QWidget):
         self.table.itemDoubleClicked.connect(self._on_table_double_click)
 
     def refresh_data(self):
-        """Refresh all inventory data."""
+        """Refresh all inventory data asynchronously."""
+        if self._is_loading:
+            logger.debug("Load already in progress, skipping")
+            return
+
+        # Cancel any existing worker
+        if self._current_worker:
+            self._current_worker.cancel()
+
+        self._is_loading = True
+        self._set_loading_state(True)
+
+        logger.info("Starting async inventory data refresh...")
+
+        # Run data loading in background thread
+        self._current_worker = run_in_background(
+            self._load_data_background,
+            on_result=self._on_data_loaded,
+            on_error=self._on_load_error,
+            on_finished=self._on_load_finished,
+        )
+
+    def _load_data_background(self) -> dict:
+        """
+        Load inventory data in background thread.
+
+        Returns dict with all needed data for UI update.
+        This method runs off the main thread.
+        """
+        raw_data = self.controller.load_inventory_data()
+        categories = self.controller.get_categories()
+        suppliers = self.controller.get_suppliers()
+
+        # Convert to ItemRow objects for model
+        items = []
+        for row in raw_data:
+            item = ItemRow(
+                id=row.get("id"),
+                name=row.get("name", ""),
+                category_name=row.get("category_name", "Uncategorized"),
+                size=row.get("size"),
+                brand=row.get("brand"),
+                supplier_name=row.get("supplier_name"),
+                other_specifications=row.get("other_specifications"),
+                po_number=row.get("po_number"),
+                expiration_date=self._parse_date(row.get("expiration_date")),
+                calibration_date=self._parse_date(row.get("calibration_date")),
+                acquisition_date=self._parse_date(row.get("acquisition_date")),
+                last_modified=self._parse_datetime(row.get("last_modified")),
+                is_consumable=bool(row.get("is_consumable", 1)),
+                total_stock=row.get("total_stock", 0),
+                available_stock=row.get("available_stock", 0),
+            )
+            items.append(item)
+
+        return {
+            "raw_data": raw_data,
+            "items": items,
+            "categories": categories,
+            "suppliers": suppliers,
+        }
+
+    def _on_data_loaded(self, result: dict):
+        """Handle data loaded from background thread (runs on main thread)."""
         try:
-            logger.info("Refreshing inventory data...")
+            raw_data = result["raw_data"]
+            items = result["items"]
+            categories = result["categories"]
+            suppliers = result["suppliers"]
 
-            # Load data from database
-            raw_data = self.controller.load_inventory_data()
-
-            # Convert to ItemRow objects for model
-            items = []
-            for row in raw_data:
-                item = ItemRow(
-                    id=row.get("id"),
-                    name=row.get("name", ""),
-                    category_name=row.get("category_name", "Uncategorized"),
-                    size=row.get("size"),
-                    brand=row.get("brand"),
-                    supplier_name=row.get("supplier_name"),
-                    other_specifications=row.get("other_specifications"),
-                    po_number=row.get("po_number"),
-                    expiration_date=self._parse_date(row.get("expiration_date")),
-                    calibration_date=self._parse_date(row.get("calibration_date")),
-                    acquisition_date=self._parse_date(row.get("acquisition_date")),
-                    last_modified=self._parse_datetime(row.get("last_modified")),
-                    is_consumable=bool(row.get("is_consumable", 1)),
-                    total_stock=row.get("total_stock", 0),
-                    available_stock=row.get("available_stock", 0),
-                )
-                items.append(item)
-
-            # Update model
+            # Update model (main thread)
             self.model.set_items(items)
 
-            # Update table
-            self.table.populate_table(raw_data)
+            # Update table with batched row insertion
+            self._populate_table_async(raw_data)
 
             # Update filters
-            categories = self.controller.get_categories()
-            suppliers = self.controller.get_suppliers()
             self.filters.set_categories(categories)
             self.filters.set_suppliers(suppliers)
 
@@ -178,10 +241,125 @@ class InventoryPage(QWidget):
             logger.info(f"Refreshed inventory data: {len(items)} items loaded")
 
         except Exception as e:
-            logger.error(f"Failed to refresh data: {e}")
+            logger.error(f"Error processing loaded data: {e}")
             QMessageBox.critical(
-                self, "Error", f"Failed to load inventory data: {str(e)}"
+                self, "Error", f"Failed to process inventory data: {str(e)}"
             )
+
+    def _populate_table_async(self, raw_data: list):
+        """
+        Populate table rows in batches using QTimer to prevent UI freeze.
+
+        Uses a timer-based approach to insert rows in small batches,
+        allowing the event loop to process UI events between batches.
+        """
+        # Cancel any pending batch operation
+        if self._batch_timer:
+            self._batch_timer.stop()
+            self._batch_timer = None
+
+        # Store data for batched processing
+        self._pending_rows = raw_data
+        self._current_batch_index = 0
+
+        # Disable sorting during population
+        self.table.setSortingEnabled(False)
+
+        # Pre-allocate rows for better performance
+        self.table.setRowCount(len(raw_data))
+
+        # Update progress bar for batch loading
+        self.progress_bar.setRange(0, len(raw_data))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Populating table... %v/%m rows")
+
+        # Start batch timer
+        self._batch_timer = QTimer(self)
+        self._batch_timer.timeout.connect(self._process_row_batch)
+        self._batch_timer.start(
+            0
+        )  # Process as fast as possible while yielding to event loop
+
+    def _process_row_batch(self):
+        """Process a batch of rows and schedule next batch."""
+        if self._current_batch_index >= len(self._pending_rows):
+            # All rows processed
+            self._finish_table_population()
+            return
+
+        # Calculate batch end
+        batch_end = min(
+            self._current_batch_index + self._batch_size, len(self._pending_rows)
+        )
+
+        # Process this batch
+        for row in range(self._current_batch_index, batch_end):
+            self.table.populate_row(row, self._pending_rows[row])
+
+        # Update progress
+        self._current_batch_index = batch_end
+        self.progress_bar.setValue(batch_end)
+
+        # Process pending events to keep UI responsive
+        QApplication.processEvents()
+
+    def _finish_table_population(self):
+        """Complete table population after all batches processed."""
+        # Stop timer
+        if self._batch_timer:
+            self._batch_timer.stop()
+            self._batch_timer = None
+
+        # Clear pending data
+        self._pending_rows = []
+        self._current_batch_index = 0
+
+        # Hide progress bar
+        self.progress_bar.setVisible(False)
+
+        # Restore sorting and apply default
+        self.table.setSortingEnabled(True)
+        hdr = self.table.horizontalHeader()
+        if hdr is not None:
+            hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+            hdr.setSortIndicatorShown(False)
+            self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
+
+        # Resize columns
+        QTimer.singleShot(100, self.table.resize_columns)
+
+        logger.info("Table population complete")
+
+    def _on_load_error(self, error_tuple: tuple):
+        """Handle load error (runs on main thread)."""
+        exctype, value, tb = error_tuple
+        logger.error(f"Failed to refresh data: {value}\n{tb}")
+        QMessageBox.critical(
+            self, "Error", f"Failed to load inventory data: {str(value)}"
+        )
+
+    def _on_load_finished(self):
+        """Handle load finished (runs on main thread)."""
+        self._is_loading = False
+        self._current_worker = None
+        # Note: Don't hide progress bar here, _finish_table_population will handle it
+        # after batched population completes
+        self.refresh_button.setEnabled(True)
+        self.add_button.setEnabled(True)
+        self.import_button.setEnabled(True)
+        logger.info("Refreshed inventory data")
+
+    def _set_loading_state(self, is_loading: bool):
+        """Update UI loading state."""
+        self.progress_bar.setVisible(is_loading)
+        if is_loading:
+            self.progress_bar.setRange(0, 0)  # Indeterminate initially
+            self.progress_bar.setFormat("Loading inventory data...")
+
+        # Disable buttons during load
+        self.refresh_button.setEnabled(not is_loading)
+        self.add_button.setEnabled(not is_loading)
+        self.import_button.setEnabled(not is_loading)
 
     def add_item(self):
         """Add a new item."""
@@ -327,7 +505,7 @@ class InventoryPage(QWidget):
         self.edit_selected_item()
 
     def _update_filtered_table(self):
-        """Update table with current filtered data."""
+        """Update table with current filtered data using batched population."""
         filtered_items = self.model.get_filtered_items()
         table_data = []
         for item in filtered_items:
@@ -358,7 +536,11 @@ class InventoryPage(QWidget):
             }
             table_data.append(row)
 
-        self.table.populate_table(table_data)
+        # Use batched population for large datasets
+        if len(table_data) > 50:
+            self._populate_table_async(table_data)
+        else:
+            self.table.populate_table(table_data)
 
     def _parse_date(self, date_str: Optional[str]):
         """Parse date string to date object."""

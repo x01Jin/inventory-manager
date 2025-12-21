@@ -1,6 +1,9 @@
 """
 Requisitions management page - Complete laboratory requesting system.
 Provides full CRUD operations for requisitions with requester management.
+
+Uses background threading via QThreadPool for data loading to prevent
+UI freezes on slower hardware.
 """
 
 from typing import Optional
@@ -18,6 +21,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QSplitter,
     QSizePolicy,
+    QProgressBar,
 )
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -30,13 +34,14 @@ from inventory_app.gui.requisitions.requisition_management import (
     ItemReturnDialog,
     status_watcher,
 )
+from inventory_app.gui.utils.worker import run_in_background, Worker
 from inventory_app.utils.logger import logger
 
 
 class RequisitionsPage(QWidget):
     """
     Main requisitions management page.
-    Provides complete laboratory requesting workflow management.
+    Provides complete laboratory requesting workflow management with async loading.
     """
 
     # Signals for integration with main application
@@ -52,6 +57,10 @@ class RequisitionsPage(QWidget):
         self.filters = RequisitionsFilters()
         self.table = RequisitionsTable()
         self.preview = RequisitionPreview()
+
+        # Track current worker for cancellation
+        self._current_worker: Optional[Worker] = None
+        self._is_loading = False
 
         # Setup connections between components
         self._setup_connections()
@@ -109,6 +118,14 @@ class RequisitionsPage(QWidget):
         action_layout.addStretch()
 
         layout.addLayout(action_layout)
+
+        # Progress bar for loading indicator
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("Loading requisitions... %p%")
+        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
 
         # Create main horizontal splitter for (filters + table) + preview
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -173,12 +190,50 @@ class RequisitionsPage(QWidget):
         self.filters.clear_filters_requested.connect(self._on_filters_cleared)
 
     def refresh_data(self):
-        """Refresh all requisition data."""
+        """Refresh all requisition data asynchronously."""
+        if self._is_loading:
+            logger.debug("Load already in progress, skipping")
+            return
+
+        # Cancel any existing worker
+        if self._current_worker:
+            self._current_worker.cancel()
+
+        self._is_loading = True
+        self._set_loading_state(True)
+
+        logger.info("Starting async requisition data refresh...")
+
+        # Run data loading in background thread
+        self._current_worker = run_in_background(
+            self._load_data_background,
+            on_result=self._on_data_loaded,
+            on_error=self._on_load_error,
+            on_finished=self._on_load_finished,
+        )
+
+    def _load_data_background(self) -> dict:
+        """
+        Load requisition data in background thread.
+
+        Returns dict with all needed data for UI update.
+        This method runs off the main thread.
+        """
+        # Load initial data from model
+        success = self.model.load_data()
+        if not success:
+            raise Exception("Failed to load requisition data from database")
+
+        return {
+            "success": True,
+            "all_requisitions": self.model.all_requisitions,
+        }
+
+    def _on_data_loaded(self, result: dict):
+        """Handle data loaded from background thread (runs on main thread)."""
         try:
-            # Load initial data from model
-            success = self.model.load_data()
-            if not success:
-                logger.error("❌ STEP 1 FAILED: Failed to load initial data")
+            if not result.get("success"):
+                logger.error("Data load returned failure")
                 QMessageBox.warning(
                     self,
                     "Data Load Error",
@@ -190,21 +245,10 @@ class RequisitionsPage(QWidget):
             updated_count = self._update_all_requisition_statuses()
             if updated_count > 0:
                 logger.info(
-                    f"✅ Updated {updated_count} requisition statuses during refresh"
+                    f"Updated {updated_count} requisition statuses during refresh"
                 )
-
                 # Reload data to get updated statuses
-                success = self.model.load_data()
-                if not success:
-                    logger.error(
-                        "❌ STEP 2 FAILED: Failed to reload data after status updates"
-                    )
-                    QMessageBox.warning(
-                        self,
-                        "Data Reload Error",
-                        "Failed to reload requisition data after status updates.",
-                    )
-                    return
+                self.model.load_data()
 
             # Reload requester options (in case new requesters have requisitions)
             self.filters._load_requester_options()
@@ -212,8 +256,8 @@ class RequisitionsPage(QWidget):
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
 
-            # Update table
-            self.table.populate_table(rows)
+            # Update table with batched loading
+            self._populate_table_batched(rows)
 
             # Update filter summary
             total_count = len(self.model.all_requisitions)
@@ -230,11 +274,120 @@ class RequisitionsPage(QWidget):
                 f"Returned: {stats['returned_requisitions']}"
             )
 
-        except Exception as e:
-            logger.error(f"Failed to refresh requisition data: {e}")
-            QMessageBox.critical(
-                self, "Error", f"Failed to load requisition data: {str(e)}"
+            logger.info(
+                f"Refreshed requisition data: {total_count} requisitions loaded"
             )
+
+        except Exception as e:
+            logger.error(f"Error processing loaded data: {e}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to process requisition data: {str(e)}"
+            )
+
+    def _populate_table_batched(self, rows: list):
+        """Populate table in batches to prevent UI freeze."""
+
+        total_rows = len(rows)
+        if total_rows == 0:
+            self.table.setRowCount(0)
+            return
+
+        # Disable sorting during population
+        prev_sorting = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+
+        # Clear table
+        self.table.setRowCount(0)
+
+        # Process in batches
+        batch_size = 25
+        self._pending_rows = rows
+        self._batch_index = 0
+        self._batch_size = batch_size
+        self._prev_sorting = prev_sorting
+
+        # Update progress bar for batched loading
+        self.progress_bar.setRange(0, total_rows)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat(f"Loading requisitions... %v/{total_rows}")
+
+        # Start batch processing
+        self._process_requisition_batch()
+
+    def _process_requisition_batch(self):
+        """Process one batch of requisition rows."""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QTimer
+
+        # Safety check - ensure we have data to process
+        if not hasattr(self, "_pending_rows") or self._pending_rows is None:
+            return
+
+        total_rows = len(self._pending_rows)
+        start = self._batch_index
+        end = min(start + self._batch_size, total_rows)
+
+        if start >= total_rows:
+            # Done processing
+            self._finish_requisition_table_population()
+            return
+
+        # Add batch rows to table
+        self.table.populate_table(self._pending_rows[:end])
+
+        # Update progress
+        self.progress_bar.setValue(end)
+
+        # Process events to keep UI responsive
+        QApplication.processEvents()
+
+        # Schedule next batch if more data and _pending_rows still valid
+        self._batch_index = end
+        if self._pending_rows is not None and end < total_rows:
+            QTimer.singleShot(0, self._process_requisition_batch)
+        else:
+            self._finish_requisition_table_population()
+
+    def _finish_requisition_table_population(self):
+        """Finish table population and restore state."""
+        # Restore sorting
+        self.table.setSortingEnabled(getattr(self, "_prev_sorting", True))
+        if self.table.isSortingEnabled():
+            hdr = self.table.horizontalHeader()
+            if hdr is not None:
+                hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+                hdr.setSortIndicatorShown(False)
+                self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
+
+        # Clean up
+        self._pending_rows = None
+        self._batch_index = 0
+
+    def _on_load_error(self, error_tuple: tuple):
+        """Handle load error (runs on main thread)."""
+        exctype, value, tb = error_tuple
+        logger.error(f"Failed to refresh data: {value}\n{tb}")
+        QMessageBox.critical(
+            self, "Error", f"Failed to load requisition data: {str(value)}"
+        )
+
+    def _on_load_finished(self):
+        """Handle load finished (runs on main thread)."""
+        self._is_loading = False
+        self._current_worker = None
+        self._set_loading_state(False)
+
+    def _set_loading_state(self, is_loading: bool):
+        """Update UI loading state."""
+        self.progress_bar.setVisible(is_loading)
+        if is_loading:
+            self.progress_bar.setRange(0, 0)  # Indeterminate
+        else:
+            self.progress_bar.setRange(0, 100)
+
+        # Disable buttons during load
+        self.refresh_button.setEnabled(not is_loading)
+        self.add_button.setEnabled(not is_loading)
 
     def new_requisition(self):
         """Open dialog to create a new requisition."""
@@ -431,7 +584,7 @@ class RequisitionsPage(QWidget):
             )
 
     def _on_filter_changed(self):
-        """Handle any filter change - apply filters and refresh table."""
+        """Handle any filter change - apply filters and refresh table with batched loading."""
         try:
             # Apply all current filters from the filter widget
             current_filters = self.filters.get_current_filters()
@@ -448,9 +601,14 @@ class RequisitionsPage(QWidget):
                     current_filters.get("date_from"), current_filters.get("date_to")
                 )
 
-            # Refresh table with filtered data
+            # Refresh table with filtered data using batched loading
             rows = self.model.get_filtered_rows()
-            self.table.populate_table(rows)
+
+            # Use batched population for large datasets to prevent UI freeze
+            if len(rows) > 50:
+                self._populate_table_batched(rows)
+            else:
+                self.table.populate_table(rows)
 
             # Update filter summary
             total_count = len(self.model.all_requisitions)

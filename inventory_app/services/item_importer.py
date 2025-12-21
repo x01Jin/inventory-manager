@@ -3,9 +3,11 @@ Item importer service
 
 Single-purpose module to import items from Excel (.xlsx) files. Validates headers and
 normalizes values before creating Item records via the existing model API.
+
+Supports progress callbacks for async UI updates.
 """
 
-from typing import List, Tuple, Any, Optional
+from typing import List, Tuple, Any, Optional, Callable
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from inventory_app.database.models import Item, Category
@@ -113,13 +115,16 @@ def _parse_date(val) -> Optional[date]:
 
 
 def import_items_from_excel(
-    path: str, editor_name: str = "Import"
+    path: str,
+    editor_name: str = "Import",
+    progress_callback: Optional[Callable[[int, int, int], None]] = None,
 ) -> Tuple[int, List[str]]:
     """Import items from an Excel file.
 
     Args:
         path: Path to .xlsx file
         editor_name: Name stored in audit logs
+        progress_callback: Optional callback(current, total, skipped) for progress updates
 
     Returns:
         (count_imported, messages): number of successfully imported rows and list of messages
@@ -197,15 +202,28 @@ def import_items_from_excel(
 
     messages: List[str] = []
     imported = 0
+    skipped = 0
 
     try:
-        # No global transaction: save() handles its own transaction. This prevents
-        # nested transaction errors when the DB driver does not support them.
+        # Count total rows to process for progress reporting
         assert header_row_index is not None
         start_row = int(header_row_index) + 1
+        total_rows = (ws.max_row or start_row) - start_row + 1
+        if total_rows < 0:
+            total_rows = 0
+
+        current_row = 0
+
+        # No global transaction: save() handles its own transaction. This prevents
+        # nested transaction errors when the DB driver does not support them.
         for row_idx, row in enumerate(
             ws.iter_rows(min_row=start_row, values_only=True), start=start_row
         ):
+            current_row += 1
+
+            # Report progress
+            if progress_callback:
+                progress_callback(current_row, total_rows, skipped)
             # Build a row dict using mapping (values_only=True returns raw values)
             row_data = {}
             for col_idx, cell_value in enumerate(row, start=1):
@@ -222,6 +240,7 @@ def import_items_from_excel(
                 messages.append(
                     f"Row {row_idx}: missing required 'name' value; skipping"
                 )
+                skipped += 1
                 continue
             # Parse the free-form stocks cell. This may extract quantity, a size string
             # (e.g. '900ml', '1 L') and an optional notes string. We treat size-bearing
@@ -237,12 +256,14 @@ def import_items_from_excel(
                 stocks_notes = stock_info.get("notes")
             except ValueError as e:
                 messages.append(f"Row {row_idx}: {str(e)}; skipping")
+                skipped += 1
                 continue
 
             if item_type_raw is None or str(item_type_raw).strip() == "":
                 messages.append(
                     f"Row {row_idx}: missing required 'item type' value; skipping"
                 )
+                skipped += 1
                 continue
 
             # Normalize and clean item type text.
@@ -404,11 +425,13 @@ def import_items_from_excel(
                         f"Row {row_idx}: imported '{item.name}' ({stocks} units{msg_size})"
                     )
                 else:
+                    skipped += 1
                     messages.append(
                         f"Row {row_idx}: failed to import '{item.name}' (db error)"
                     )
             except Exception as e:
                 logger.error(f"Exception saving item on row {row_idx}: {e}")
+                skipped += 1
                 messages.append(
                     f"Row {row_idx}: exception during save: {str(e)}; skipping"
                 )

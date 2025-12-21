@@ -4,6 +4,13 @@ Overview
 
 - Requisitions manage reservations and usage with lifecycle support: requested → active → returned / overdue.
 
+Data Loading
+
+- Data loads asynchronously in a background thread to prevent UI freezes
+- A progress indicator displays during loading
+- The table populates progressively as data becomes available
+- Buttons are disabled during data load to prevent conflicts
+
 Key Components
 
 - Requisition table, detailed preview panel, and dialogs for new, edit and return processing.
@@ -11,6 +18,8 @@ Key Components
 Workflow
 
 - Create requisitions with requester selection and item selection. The system performs stock validation and reservations. Requisitions creation uses `DatabaseConnection.transaction()` with an IMMEDIATE transaction to re-check and reserve stock atomically to prevent oversubscription. Concurrent reservation attempts will be rejected when stock is insufficient.
+
+- Available items in requisition dialogs load asynchronously to keep the dialog responsive during item searches.
 
 - Returns and partial returns supported with logging of consumed or lost items.
 

@@ -10,6 +10,20 @@ This document describes the Excel import feature for adding inventory items in b
 
 ---
 
+## Import Process
+
+The import runs in a background thread to prevent UI freezing during large imports:
+
+1. Select an Excel file (.xlsx)
+2. Enter editor name for audit trail
+3. Click Import - the operation runs in the background
+4. A progress bar displays real-time status: `[current/total], skipped: X`
+5. A completion message shows total imported and skipped counts
+
+The import can be cancelled while in progress by clicking the Cancel button.
+
+---
+
 ## Header detection & normalization 🔎
 
 - The importer scans the first 40 rows of the active worksheet to *find the header row* — this lets you include a top title block (report title, notes, etc.) above the table and still import the data.

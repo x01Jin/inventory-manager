@@ -65,6 +65,9 @@ class ItemService:
         Get inventory batches formatted for selection in requisitions.
         Shows individual batches with their specific available stock.
 
+        Optimized to calculate available stock in a single query instead of
+        making individual queries per batch.
+
         Args:
             search_term: Optional search term to filter batches
             exclude_requested: Whether to exclude batches with no available stock
@@ -74,8 +77,9 @@ class ItemService:
             List of batch dictionaries with availability info
         """
         try:
-            # Build query to get batches with item details
-            base_query = (
+            # Build optimized query that calculates available stock inline
+            # This avoids N+1 query problem by calculating stock in single query
+            query = (
                 """
             SELECT
                 ib.id as batch_id,
@@ -90,7 +94,30 @@ class ItemService:
                 i.other_specifications,
                 c.name as category_name,
                 s.name as supplier_name,
-                i.is_consumable
+                i.is_consumable,
+                -- Calculate total stock: received - consumed - disposed + returned
+                (
+                    ib.quantity_received
+                    - COALESCE(
+                        (SELECT SUM(sm.quantity) FROM Stock_Movements sm 
+                         WHERE sm.batch_id = ib.id AND sm.movement_type = ?), 0
+                    )
+                    - COALESCE(
+                        (SELECT SUM(sm.quantity) FROM Stock_Movements sm 
+                         WHERE sm.batch_id = ib.id AND sm.movement_type = ?), 0
+                    )
+                    + COALESCE(
+                        (SELECT SUM(sm.quantity) FROM Stock_Movements sm 
+                         WHERE sm.batch_id = ib.id AND sm.movement_type = ?), 0
+                    )
+                ) as total_stock,
+                -- Calculate requested quantity (RESERVATION for consumables, REQUEST for non-consumables)
+                COALESCE(
+                    (SELECT SUM(sm.quantity) FROM Stock_Movements sm
+                     WHERE sm.batch_id = ib.id
+                       AND sm.movement_type IN (?, ?)
+                       AND (? = -1 OR sm.source_id != ?)), 0
+                ) as requested_qty
             FROM Item_Batches ib
             JOIN Items i ON ib.item_id = i.id
             """
@@ -100,23 +127,33 @@ class ItemService:
             """
             )
 
-            params = ()
+            # Base params for movement types and exclusion
+            params = [
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+                MovementType.RESERVATION.value,
+                MovementType.REQUEST.value,
+                exclude_requisition_id if exclude_requisition_id else -1,
+                exclude_requisition_id if exclude_requisition_id else -1,
+            ]
+
             if search_term:
-                base_query += " AND i.name LIKE ?"
-                params = (f"%{search_term}%",)
+                query += " AND i.name LIKE ?"
+                params.append(f"%{search_term}%")
 
-            base_query += " ORDER BY i.name, ib.date_received DESC"
+            query += " ORDER BY i.name, ib.date_received DESC"
 
-            rows = db.execute_query(base_query, params)
+            rows = db.execute_query(query, tuple(params))
 
             result = []
             for row in rows:
                 batch_dict = dict(row)
 
-                # Calculate available stock for this specific batch
-                available_stock = self._get_available_stock_for_batch(
-                    batch_dict["batch_id"], exclude_requisition_id
-                )
+                # Calculate available stock from the query results
+                total_stock = batch_dict.get("total_stock", 0) or 0
+                requested_qty = batch_dict.get("requested_qty", 0) or 0
+                available_stock = max(0, total_stock - requested_qty)
 
                 # Skip batches with no available stock if exclude_requested is True
                 if exclude_requested and available_stock <= 0:
@@ -126,7 +163,7 @@ class ItemService:
                 batch_dict.update(
                     {
                         "available_stock": available_stock,
-                        "total_stock": batch_dict["quantity_received"],
+                        "total_stock": total_stock,
                         "batch_display_name": f"{batch_dict['item_name']} (Batch #{batch_dict['batch_number']})",
                     }
                 )
