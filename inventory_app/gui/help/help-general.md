@@ -56,7 +56,6 @@ Welcome to the Laboratory Inventory Monitor — this page gives non-technical, p
 ## Tips & shortcuts
 
 - Double-click an inventory row to open the edit dialog quickly.
-- Use the **Refresh** button if you suspect another user or process changed the data.
 - Tooltips explain why a button may be disabled (hover over the control to read it).
 
 ## Glossary (short)

@@ -8,7 +8,28 @@ The Inventory page is the primary place to view, search, and manage all items, b
 - **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item. You can also double-click a row to edit.
 - **🗑️ Delete Item:** Enabled when you select a row; prompts for confirmation and requires your name/initials and a deletion reason. Deletions are permanent.
 - **🔄 Refresh:** Reloads items, filters, and statistics from the database.
-- **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` file. The importer scans the first 40 rows to locate the header row (so top title rows are ignored), and header names are matched case- and space-insensitively. Minimum required fields are `name` (or variants like `item` / `items`), `stocks`, and `item type`. Categories are auto-resolved (or created) to avoid FK errors. If the import fails, check the import log which lists skipped rows and reasons.
+- **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` (Excel) file. Use this to add many items at once; each imported row creates a new Item and an initial batch unless skipped.
+
+## **Importing items (Excel .xlsx) 🔧**
+
+1. **Open Import → Choose file:** Select an `.xlsx` file. Only Excel files are accepted (use the Excel Files (*.xlsx) filter).
+2. **Editor name (required):** Enter your name or initials — this is recorded in the audit trail for each created item.
+3. **Start import:** Click **Import**. The import runs in a **background thread** so the UI remains responsive.
+4. **Progress & cancel:** The dialog shows a live progress bar and status label like `[current/total], skipped: X`. You can cancel the import at any time using **Cancel Import** — already-processed rows remain.
+5. **Result:** On completion the dialog shows counts of imported and skipped rows and a short confirmation pop-up.
+
+**Important details:**
+
+- **Header detection:** The importer scans the first **40 rows** of the active worksheet to find the header row so you may include title/notes above the table. Header names are matched case- and space-insensitively (for example `Item Name`, `itemname`, or `name` are equivalent).
+- **Minimum required columns:** `name` (or `item` / `items`), `stocks`, and `item type`. If these are missing the import aborts with an error telling you which columns are missing.
+- **Stocks parsing:** The importer accepts a variety of free-form `stocks` values. Size-bearing entries like `900ml`, `1.1 L`, `2 liters`, `125 g` are treated as **single containers** (quantity=1) and the parsed size is used as the item `size` when an explicit `size` column is empty. Invalid or unparseable stock values cause the row to be **skipped** and the reason is recorded in the import log.
+- **Item type / category handling:** `Item type` is normalized (e.g., values containing `non` + `consum` are treated as Non-Consumable). If a `category` value is provided the importer will find an existing Category (case-insensitive) or create it; empty or `N/A` becomes `Uncategorized`.
+- **Row-level errors:** Rows with validation or DB errors are skipped. On unexpected DB errors the importer reports the row as failed and continues processing subsequent rows where possible.
+
+**Tips:**
+
+- Use this import for fast bulk creation of simple items and an initial batch; for per-item advanced batch data (multiple batches, batch dates), import basic rows and then edit items manually or use the programmatic APIs.
+- If an import repeatedly fails, attach the **debug log** lines that show save parameters and error messages when asking for help.
 
 ## **Filters & Search**
 

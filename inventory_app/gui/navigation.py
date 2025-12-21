@@ -7,19 +7,23 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import pyqtSignal, QTimer
 from datetime import datetime
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 
 
 class NavigationPanel(QWidget):
-    """Navigation panel with clean dark mode styling."""
+    """Navigation panel with theme-aware styling."""
 
     page_changed = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self.setFixedWidth(220)
+
+        # Get current theme
+        Theme = get_current_theme()
+
         self.setStyleSheet(
-            f"background-color: {DarkTheme.SECONDARY_DARK}; border-right: 1px solid {DarkTheme.BORDER_COLOR};"
+            f"background-color: {Theme.SECONDARY_DARK}; border-right: 1px solid {Theme.BORDER_COLOR};"
         )
 
         # Layout
@@ -30,7 +34,7 @@ class NavigationPanel(QWidget):
         # App title
         title = QLabel("📊 L.I.M.")
         title.setStyleSheet(
-            f"color: {DarkTheme.ACCENT_COLOR}; font-size: {DarkTheme.FONT_SIZE_HEADER}pt; font-weight: bold; padding: 20px; background-color: {DarkTheme.PRIMARY_DARK};"
+            f"color: {Theme.ACCENT_COLOR}; font-size: {Theme.FONT_SIZE_HEADER}pt; font-weight: bold; padding: 20px; background-color: {Theme.PRIMARY_DARK};"
         )
         layout.addWidget(title)
 
@@ -56,14 +60,14 @@ class NavigationPanel(QWidget):
         # User info
         user_info = QLabel("👤 Hello User!")
         user_info.setStyleSheet(
-            f"color: {DarkTheme.TEXT_SECONDARY}; padding: 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {DarkTheme.BORDER_COLOR};"
+            f"color: {Theme.TEXT_SECONDARY}; padding: 15px; font-size: {Theme.FONT_SIZE_NORMAL}pt; border-top: 1px solid {Theme.BORDER_COLOR};"
         )
         layout.addWidget(user_info)
 
         # Live clock display
         self.clock_label = QLabel()
         self.clock_label.setStyleSheet(
-            f"color: {DarkTheme.TEXT_SECONDARY}; padding: 10px 15px; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt; font-family: 'Courier New'; border-top: 1px solid {DarkTheme.BORDER_COLOR};"
+            f"color: {Theme.TEXT_SECONDARY}; padding: 10px 15px; font-size: {Theme.FONT_SIZE_NORMAL}pt; font-family: 'Courier New'; border-top: 1px solid {Theme.BORDER_COLOR};"
         )
         layout.addWidget(self.clock_label)
 
@@ -80,6 +84,7 @@ class NavigationPanel(QWidget):
 
     def create_nav_button(self, icon: str, text: str, page_index: int):
         """Create a navigation button."""
+        Theme = get_current_theme()
         btn = QPushButton(f"{icon} {text}")
         btn.setStyleSheet(f"""
             QPushButton {{
@@ -87,17 +92,17 @@ class NavigationPanel(QWidget):
                 border: none;
                 text-align: left;
                 padding: 12px 20px;
-                font-size: {DarkTheme.FONT_SIZE_LARGE}pt;
-                color: {DarkTheme.TEXT_SECONDARY};
+                font-size: {Theme.FONT_SIZE_LARGE}pt;
+                color: {Theme.TEXT_SECONDARY};
             }}
             QPushButton:hover {{
-                background-color: {DarkTheme.ACCENT_HOVER};
-                color: {DarkTheme.TEXT_PRIMARY};
+                background-color: {Theme.ACCENT_HOVER};
+                color: {Theme.TEXT_PRIMARY};
             }}
             QPushButton:checked {{
-                background-color: {DarkTheme.ACCENT_COLOR};
-                color: {DarkTheme.TEXT_PRIMARY};
-                border-left: 3px solid {DarkTheme.SUCCESS_COLOR};
+                background-color: {Theme.ACCENT_COLOR};
+                color: {Theme.TEXT_PRIMARY};
+                border-left: 3px solid {Theme.SUCCESS_COLOR};
             }}
         """)
 

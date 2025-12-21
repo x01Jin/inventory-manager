@@ -5,7 +5,7 @@ Focused on key metrics and quick access to main functions.
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QGroupBox
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.utils.logger import logger
 from .metrics import MetricsManager
 from .activity import ActivityManager
@@ -19,13 +19,17 @@ class DashboardPage(QWidget):
     def __init__(self):
         super().__init__()
 
+        Theme = get_current_theme()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins for compactness
         layout.setSpacing(10)  # Reduced spacing
 
         # Header
         header = QLabel("📊 Lab Inventory Dashboard")
-        header.setStyleSheet(f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {DarkTheme.TEXT_PRIMARY}; margin-bottom: 5px;")
+        header.setStyleSheet(
+            f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {Theme.TEXT_PRIMARY}; margin-bottom: 5px;"
+        )
         layout.addWidget(header)
 
         # Initialize managers FIRST
@@ -85,15 +89,15 @@ class DashboardPage(QWidget):
         try:
             # Update metrics widget
             self.metrics_manager.update_metrics_widget(self.metrics_widget)
-            
+
             # Update activity
             self.activity_manager.update_recent_activity(self.activity_text)
-            
+
             # Update alerts
             self.alerts_manager.update_alerts_table(self.alerts_table)
-            
+
             # Update schedule chart
             self.schedule_manager.update_schedule_chart(self.schedule_placeholder)
-            
+
         except Exception as e:
             logger.error(f"Failed to refresh dashboard: {e}")

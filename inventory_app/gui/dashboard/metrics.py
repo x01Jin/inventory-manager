@@ -6,7 +6,7 @@ Handles metric calculations and card creation.
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout
 from PyQt6.QtCore import Qt
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
@@ -20,9 +20,10 @@ class MetricsManager:
 
     def create_compact_metric_card(self, title: str, value: str):
         """Create a compact metric card widget."""
+        Theme = get_current_theme()
         card = QGroupBox(title)
         card.setStyleSheet(
-            f"background-color: {DarkTheme.SECONDARY_DARK}; border: 1px solid {DarkTheme.BORDER_COLOR}; border-radius: 5px; padding: 8px; font-size: 9pt;"
+            f"background-color: {Theme.SECONDARY_DARK}; border: 1px solid {Theme.BORDER_COLOR}; border-radius: 5px; padding: 8px; font-size: 9pt;"
         )
 
         layout = QVBoxLayout(card)
@@ -31,7 +32,7 @@ class MetricsManager:
 
         value_label = QLabel(value)
         value_label.setStyleSheet(f"""
-            font-size: {DarkTheme.FONT_SIZE_HEADER}pt; 
+            font-size: {Theme.FONT_SIZE_HEADER}pt; 
             font-weight: bold;
             border: none;
             background-color: transparent;

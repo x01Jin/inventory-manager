@@ -3,14 +3,12 @@ Custom date selector widget using QDateEdit for accurate date entry.
 Provides calendar popup for intuitive date selection.
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QDateEdit, QVBoxLayout
-)
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QDateEdit, QVBoxLayout
 from PyQt6.QtCore import QDate, pyqtSignal
 from datetime import date
 from typing import Tuple
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 
 
 class DateSelector(QWidget):
@@ -28,6 +26,8 @@ class DateSelector(QWidget):
 
     def setup_ui(self, label_text: str):
         """Setup the user interface with QDateEdit."""
+        Theme = get_current_theme()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
@@ -35,7 +35,9 @@ class DateSelector(QWidget):
         # Label
         if label_text:
             self.label = QLabel(label_text)
-            self.label.setStyleSheet(f"color: {DarkTheme.TEXT_PRIMARY}; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;")
+            self.label.setStyleSheet(
+                f"color: {Theme.TEXT_PRIMARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;"
+            )
             layout.addWidget(self.label)
 
         # Date selector layout
@@ -49,22 +51,22 @@ class DateSelector(QWidget):
         self.date_edit.setDisplayFormat("MMM dd, yyyy")  # User-friendly format
         self.date_edit.setFixedWidth(140)
 
-        # Apply dark theme styling
+        # Apply theme styling
         self.date_edit.setStyleSheet(f"""
             QDateEdit {{
-                background-color: {DarkTheme.SECONDARY_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                border: 1px solid {DarkTheme.BORDER_COLOR};
+                background-color: {Theme.SECONDARY_DARK};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER_COLOR};
                 border-radius: 6px;
                 padding: 6px 8px;
-                font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
+                font-size: {Theme.FONT_SIZE_NORMAL}pt;
                 min-width: 140px;
             }}
             QDateEdit:hover {{
-                border-color: {DarkTheme.ACCENT_HOVER};
+                border-color: {Theme.ACCENT_HOVER};
             }}
             QDateEdit:focus {{
-                border-color: {DarkTheme.ACCENT_COLOR};
+                border-color: {Theme.ACCENT_COLOR};
             }}
             QDateEdit::drop-down {{
                 border: none;
@@ -74,52 +76,52 @@ class DateSelector(QWidget):
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 4px solid {DarkTheme.TEXT_SECONDARY};
+                border-top: 4px solid {Theme.TEXT_SECONDARY};
                 margin-right: 8px;
             }}
             QDateEdit::up-arrow {{
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-bottom: 4px solid {DarkTheme.TEXT_SECONDARY};
+                border-bottom: 4px solid {Theme.TEXT_SECONDARY};
                 margin-left: 8px;
             }}
             QCalendarWidget {{
-                background-color: {DarkTheme.SECONDARY_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                border: 1px solid {DarkTheme.BORDER_COLOR};
+                background-color: {Theme.SECONDARY_DARK};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.BORDER_COLOR};
                 border-radius: 6px;
             }}
             QCalendarWidget QTableView {{
-                background-color: {DarkTheme.SECONDARY_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                selection-background-color: {DarkTheme.ACCENT_COLOR};
-                selection-color: {DarkTheme.TEXT_PRIMARY};
+                background-color: {Theme.SECONDARY_DARK};
+                color: {Theme.TEXT_PRIMARY};
+                selection-background-color: {Theme.ACCENT_COLOR};
+                selection-color: {Theme.TEXT_PRIMARY};
             }}
             QCalendarWidget QHeaderView::section {{
-                background-color: {DarkTheme.PRIMARY_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
+                background-color: {Theme.PRIMARY_DARK};
+                color: {Theme.TEXT_PRIMARY};
                 border: none;
                 padding: 8px;
             }}
             QCalendarWidget QAbstractItemView:enabled {{
-                color: {DarkTheme.TEXT_PRIMARY};
-                selection-background-color: {DarkTheme.ACCENT_COLOR};
+                color: {Theme.TEXT_PRIMARY};
+                selection-background-color: {Theme.ACCENT_COLOR};
                 selection-color: white;
             }}
             QCalendarWidget QWidget {{
-                background-color: {DarkTheme.SECONDARY_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
+                background-color: {Theme.SECONDARY_DARK};
+                color: {Theme.TEXT_PRIMARY};
             }}
             QCalendarWidget QToolButton {{
-                color: {DarkTheme.TEXT_PRIMARY};
+                color: {Theme.TEXT_PRIMARY};
                 background-color: transparent;
                 border: none;
                 border-radius: 4px;
                 padding: 4px;
             }}
             QCalendarWidget QToolButton:hover {{
-                background-color: {DarkTheme.ACCENT_HOVER};
+                background-color: {Theme.ACCENT_HOVER};
             }}
         """)
 

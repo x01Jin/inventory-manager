@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextBrowser, QTabWidget
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 
 
 class HelpPage(QWidget):
@@ -16,9 +16,11 @@ class HelpPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        header = QLabel("Help & Instructions")
+        Theme = get_current_theme()
+
+        header = QLabel("❓ Help & Instructions")
         header.setStyleSheet(
-            f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {DarkTheme.TEXT_PRIMARY};"
+            f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {Theme.TEXT_PRIMARY};"
         )
         layout.addWidget(header)
 
@@ -45,7 +47,7 @@ class HelpPage(QWidget):
             viewer = QTextBrowser()
             viewer.setOpenExternalLinks(True)
             viewer.setStyleSheet(
-                f"color: {DarkTheme.TEXT_SECONDARY}; background-color: {DarkTheme.PRIMARY_DARK}; padding: 10px;"
+                f"color: {Theme.TEXT_PRIMARY}; background-color: {Theme.SECONDARY_DARK}; padding: 10px;"
             )
             page_layout.addWidget(viewer)
             self.tab_widget.addTab(page, title)
@@ -131,9 +133,10 @@ class HelpPage(QWidget):
         try:
             import markdown  # type: ignore[import-not-found]
 
+            Theme = get_current_theme()
             text = path.read_text(encoding="utf-8")
             html = markdown.markdown(text, extensions=["fenced_code", "tables"])
-            wrapped = f'<div style="font-family: "Courier New", monospace; color: {DarkTheme.TEXT_SECONDARY}; padding: 16px;">{html}</div>'
+            wrapped = f'<div style="font-family: Segoe UI, sans-serif; color: {Theme.TEXT_PRIMARY}; padding: 16px;">{html}</div>'
             viewer.setHtml(wrapped)
         except Exception:
             viewer.setPlainText(path.read_text(encoding="utf-8"))

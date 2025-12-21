@@ -26,7 +26,7 @@ from inventory_app.gui.reports.ui_components import ReportUIUpdater
 from inventory_app.gui.reports.report_worker import ReportWorker
 from inventory_app.utils.logger import logger
 from inventory_app.gui.widgets.date_selector import DateRangeSelector
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import ThemeManager
 
 import os
 from datetime import datetime, date, timedelta
@@ -40,16 +40,22 @@ class ReportsPage(QWidget):
         self.worker = None
         self.ui_updater = None
         self.current_report_type = "usage"
-        self.apply_dark_theme()
+        self.apply_theme()
         self.setup_ui()
 
-    def apply_dark_theme(self):
-        """Apply dark theme to the reports page."""
+    def apply_theme(self):
+        """Apply current theme to the reports page."""
         from PyQt6.QtWidgets import QApplication
 
         app = QApplication.instance()
         if app and isinstance(app, QApplication):
-            DarkTheme.apply_dark_theme(app)
+            theme_manager = ThemeManager.instance()
+            theme_manager.apply_theme(app)
+
+    # Keep old method name for backward compatibility
+    def apply_dark_theme(self):
+        """Apply dark theme to the reports page (deprecated, use apply_theme)."""
+        self.apply_theme()
 
     def setup_ui(self):
         """Setup the modern interface."""
@@ -59,7 +65,7 @@ class ReportsPage(QWidget):
 
         # Header
         header = self.create_header()
-        layout.addWidget(header)
+        layout.addWidget(header, 0)  # Stretch factor 0: header stays compact
 
         # Main content with splitter
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -73,7 +79,9 @@ class ReportsPage(QWidget):
         main_splitter.addWidget(status_panel)
 
         main_splitter.setSizes([500, 500])
-        layout.addWidget(main_splitter)
+        layout.addWidget(
+            main_splitter, 1
+        )  # Stretch factor 1: splitter takes remaining space
 
         # Initialize UI updater
         self.ui_updater = ReportUIUpdater(
@@ -88,12 +96,7 @@ class ReportsPage(QWidget):
         title = QLabel("📊 Reports")
         title.setStyleSheet("font-size: 16pt; font-weight: bold;")
 
-        refresh_btn = QPushButton("🔄 Refresh")
-        refresh_btn.clicked.connect(self.refresh_data)
-
         header_layout.addWidget(title)
-        header_layout.addStretch()
-        header_layout.addWidget(refresh_btn)
 
         return header_widget
 
@@ -199,17 +202,6 @@ class ReportsPage(QWidget):
         filters_layout.addWidget(self.consumable_check)
 
         layout.addWidget(filters_group)
-
-        # Report Options
-        options_group = QGroupBox("⚙️ Options")
-        options_layout = QVBoxLayout(options_group)
-
-        # No options needed for usage reports now
-        options_label = QLabel("No additional options available for Usage Reports.")
-        options_label.setStyleSheet("color: #666;")
-        options_layout.addWidget(options_label)
-
-        layout.addWidget(options_group)
 
         layout.addStretch()
         return tab
@@ -668,7 +660,3 @@ class ReportsPage(QWidget):
         self.generate_btn.setText("🚀 Generate Report")
         self.progress_bar.setVisible(False)
         self.worker = None
-
-    def refresh_data(self):
-        """Refresh data on the reports page."""
-        pass

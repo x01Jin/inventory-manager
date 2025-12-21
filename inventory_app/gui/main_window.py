@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import DarkTheme, ThemeManager
 from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard.dashboard_page import DashboardPage
 from inventory_app.gui.inventory.inventory_page import InventoryPage
@@ -27,17 +27,18 @@ from inventory_app.utils.logger import logger
 
 
 class MainWindow(QMainWindow):
-    """Main application window with dark mode UI."""
+    """Main application window with theme support."""
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Laboratory Inventory Manager (L.I.M.)")
         self.setMinimumSize(1280, 720)
 
-        # Apply dark theme
+        # Apply theme based on saved preference
         app_instance = QApplication.instance()
         if app_instance and isinstance(app_instance, QApplication):
-            DarkTheme.apply_dark_theme(app_instance)
+            theme_manager = ThemeManager.instance()
+            theme_manager.apply_theme(app_instance)
 
         # Center the window
         self.center_window()
@@ -119,14 +120,7 @@ class MainWindow(QMainWindow):
             ):  # Requesters
                 self.requesters_page.refresh_data()
                 logger.info("Refreshed requesters data")
-            elif page_index == 4 and hasattr(
-                self.reports_page, "refresh_data"
-            ):  # Reports
-                self.reports_page.refresh_data()
-                logger.info("Refreshed reports data")
-            elif page_index == 6 and hasattr(
-                self.help_page, "load_current_tab"
-            ):  # Help
+            elif page_index == 4 and hasattr(self.reports_page, "refresh_data"):  # Help
                 # Refresh help tab content when requested
                 try:
                     self.help_page.load_current_tab()
