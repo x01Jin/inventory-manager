@@ -7,9 +7,9 @@ Overview
 
 Behavior
 
-- Sizes, Brands, and Suppliers provide CRUD operations with validation and dependency checks to prevent accidental deletions.
-- **Deletion is blocked** when a size, brand, or supplier is currently being used by one or more items.
-- When deletion fails due to dependencies, a clear error message explains why and what action is needed.
+- Sizes, Brands, and Suppliers provide CRUD operations with validation and dependency checks.
+- **Supplier deletion**: Suppliers can be deleted even when in use by items. When deleting a supplier that is being used, the system prompts to confirm - items will have their supplier set to 'None'.
+- **Size/Brand deletion** is blocked when currently being used by items. An error message explains why and what action is needed.
 - **Case-insensitive duplicate prevention**: The system prevents adding entries that differ only in capitalization (e.g., "10ml" vs "10mL", "50kg" vs "50KG"). When attempting to add a duplicate, an error message shows the existing matching entry.
 
 ## Fixed Categories

@@ -32,6 +32,7 @@ from inventory_app.gui.reports.data_sources import (
     get_usage_by_grade_level_data,
     get_item_usage_details,
     get_item_batch_summary,
+    get_defective_items_data,
 )
 
 # Inline header mapping moved to header_utils
@@ -319,6 +320,12 @@ class ReportGenerator:
                 # Beta test requirement #3: Batch history with B1, B2, B3 notation
                 report_data = self._get_item_batch_summary(category_filter)
                 title = "Batch Summary Report"
+            elif report_type == "Defective Items Report":
+                # Beta test requirement: Add info for defective/broken items returned
+                report_data = self._get_defective_items_data(
+                    start_date, end_date, category_filter
+                )
+                title = "Defective Items Report"
             else:
                 return f"Unknown inventory report type: {report_type}"
 
@@ -581,6 +588,27 @@ class ReportGenerator:
             return get_item_batch_summary(item_name)
         except Exception as e:
             logger.error(f"Failed to get item batch summary: {e}")
+            return []
+
+    def _get_defective_items_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
+        """Get defective/broken items report data.
+
+        Per beta test requirement: Add info for defective/broken items returned.
+
+        Args:
+            start_date: Start date for the report period
+            end_date: End date for the report period
+            category_filter: Optional category filter
+
+        Returns:
+            List of defective item records
+        """
+        try:
+            return get_defective_items_data(start_date, end_date, category_filter)
+        except Exception as e:
+            logger.error(f"Failed to get defective items data: {e}")
             return []
 
 

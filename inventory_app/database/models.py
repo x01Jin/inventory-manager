@@ -142,27 +142,50 @@ class Supplier:
             logger.error(f"Failed to get suppliers: {e}")
             return []
 
-    def delete(self) -> bool:
-        """Delete the supplier."""
+    def delete(self, force: bool = False) -> Tuple[bool, str]:
+        """Delete the supplier.
+
+        Per beta test requirement #18: Suppliers can be deleted from dropdown.
+        When force=True, nullifies the supplier_id on any items using this supplier.
+
+        Args:
+            force: If True, remove supplier references from items before deletion
+
+        Returns:
+            Tuple of (success, message)
+        """
         try:
             if not self.id:
-                return False
+                return False, "Supplier has no ID"
 
             # Check if supplier is being used by any items
             usage_check = db.execute_query(
                 "SELECT COUNT(*) as count FROM Items WHERE supplier_id = ?", (self.id,)
             )
-            if usage_check and usage_check[0]["count"] > 0:
-                logger.warning(
-                    f"Cannot delete supplier {self.id}: supplier is being used by items"
+            items_using = usage_check[0]["count"] if usage_check else 0
+
+            if items_using > 0:
+                if not force:
+                    return (
+                        False,
+                        f"Supplier is being used by {items_using} item(s). "
+                        "Would you like to remove this supplier from those items and delete it?",
+                    )
+
+                # Force deletion: nullify supplier_id on items first
+                db.execute_update(
+                    "UPDATE Items SET supplier_id = NULL WHERE supplier_id = ?",
+                    (self.id,),
                 )
-                return False
+                logger.info(
+                    f"Nullified supplier_id on {items_using} items before deleting supplier {self.id}"
+                )
 
             db.execute_update("DELETE FROM Suppliers WHERE id = ?", (self.id,))
-            return True
+            return True, "Supplier deleted successfully"
         except Exception as e:
             logger.error(f"Failed to delete supplier {self.id}: {e}")
-            return False
+            return False, str(e)
 
     @classmethod
     def get_by_id(cls, supplier_id: int) -> Optional["Supplier"]:

@@ -3,6 +3,9 @@ Return Processor - Simplified one-time return process for requisitions.
 
 Handles final return processing where all items are processed at once.
 No partial returns, no editing after processing.
+
+Per beta test requirements:
+- Add info for defective/broken items returned
 """
 
 from typing import List, Optional
@@ -15,7 +18,10 @@ from inventory_app.utils.logger import logger
 
 
 class ReturnItem:
-    """Simple data structure for one-time return processing."""
+    """Simple data structure for one-time return processing.
+
+    Per beta test: Added defective/broken quantity tracking for non-consumables.
+    """
 
     def __init__(
         self,
@@ -24,14 +30,18 @@ class ReturnItem:
         quantity_requested: int,
         quantity_returned: int = 0,
         quantity_lost: int = 0,
+        quantity_defective: int = 0,  # Beta test: track defective/broken items
         is_consumable: bool = False,
+        defective_notes: str = "",  # Beta test: notes about defective items
     ):
         self.item_id = item_id
         self.batch_id = batch_id
         self.quantity_requested = quantity_requested
         self.quantity_returned = quantity_returned  # For consumables only
         self.quantity_lost = quantity_lost  # For non-consumables only
+        self.quantity_defective = quantity_defective  # Defective/broken items
         self.is_consumable = is_consumable
+        self.defective_notes = defective_notes  # Reason/description for defective
 
     @property
     def quantity_processed(self) -> int:

@@ -529,7 +529,11 @@ class SettingsPage(QWidget):
                         QMessageBox.critical(self, "Error", message)
 
     def delete_supplier(self):
-        """Delete the selected supplier."""
+        """Delete the selected supplier.
+
+        Per beta test requirement #18: Suppliers can be deleted from dropdown.
+        If the supplier is in use, prompts user to confirm force deletion.
+        """
         current_item = self.suppliers_list.currentItem()
         if not current_item:
             QMessageBox.warning(self, "Warning", "Please select a supplier to delete")
@@ -546,18 +550,30 @@ class SettingsPage(QWidget):
             suppliers = Supplier.get_all()
             supplier_to_delete = next((s for s in suppliers if s.name == name), None)
             if supplier_to_delete:
-                if supplier_to_delete.delete():
+                # First try without force
+                success, message = supplier_to_delete.delete(force=False)
+
+                if not success and "being used by" in message:
+                    # Supplier is in use - ask if user wants to force delete
+                    force_reply = QMessageBox.question(
+                        self,
+                        "Supplier In Use",
+                        f"{message}\n\nItems will have their supplier set to 'None'.",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    )
+                    if force_reply == QMessageBox.StandardButton.Yes:
+                        success, message = supplier_to_delete.delete(force=True)
+
+                if success:
                     self.populate_suppliers_list()
                     QMessageBox.information(
                         self, "Success", "Supplier deleted successfully!"
                     )
                 else:
-                    # Provide informative error message about why deletion failed
                     QMessageBox.warning(
                         self,
                         "Cannot Delete",
-                        f"Cannot delete supplier '{name}' because it is currently being used by one or more items.\n\n"
-                        "Please remove this supplier from all items before deleting it.",
+                        f"Cannot delete supplier '{name}'.\n\n{message}",
                     )
 
 

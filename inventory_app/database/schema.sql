@@ -259,6 +259,26 @@ CREATE TABLE Activity_Log (
 CREATE INDEX idx_activity_timestamp ON Activity_Log(timestamp DESC);
 CREATE INDEX idx_activity_type ON Activity_Log(activity_type);
 
+-- 15. Defective_Items: Track defective/broken items returned
+-- Per beta test requirement: Add info for defective/broken items returned
+CREATE TABLE Defective_Items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL,
+    requisition_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    condition_type TEXT NOT NULL CHECK (condition_type IN ('BROKEN', 'DEFECTIVE', 'DAMAGED', 'OTHER')),
+    notes TEXT,
+    reported_by TEXT NOT NULL,
+    reported_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE,
+        FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
+);
+
+-- Indexes for defective items
+CREATE INDEX idx_defective_item ON Defective_Items(item_id);
+CREATE INDEX idx_defective_requisition ON Defective_Items(requisition_id);
+CREATE INDEX idx_defective_date ON Defective_Items(reported_date);
+
 -- Triggers to automatically enforce activity log retention policies
 -- 1) Remove activities older than 90 days on insert
 CREATE TRIGGER IF NOT EXISTS trg_activity_log_cleanup_after_insert
@@ -298,3 +318,21 @@ FROM Requisition_Items ri
 JOIN Requisitions r ON ri.requisition_id = r.id
 JOIN Items i ON ri.item_id = i.id
 GROUP BY ri.item_id, r.lab_activity_date;
+
+-- Defective_Items_Summary View: Defective items report
+CREATE VIEW Defective_Items_Summary AS
+SELECT
+    i.name AS item_name,
+    c.name AS category,
+    di.quantity AS defective_quantity,
+    di.condition_type,
+    di.notes,
+    di.reported_by,
+    di.reported_date,
+    r.lab_activity_name AS activity,
+    req.name AS requester_name
+FROM Defective_Items di
+JOIN Items i ON i.id = di.item_id
+JOIN Categories c ON c.id = i.category_id
+JOIN Requisitions r ON r.id = di.requisition_id
+JOIN Requesters req ON req.id = r.requester_id;

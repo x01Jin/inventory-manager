@@ -663,3 +663,55 @@ def get_item_batch_summary(item_name: str = "") -> List[Dict]:
     except Exception as e:
         logger.error(f"Failed to get item batch summary: {e}")
         return []
+
+
+def get_defective_items_data(
+    start_date: date, end_date: date, category_filter: str = ""
+) -> List[Dict]:
+    """Get defective/broken items report data.
+
+    Per beta test requirement: Add info for defective/broken items returned.
+
+    Args:
+        start_date: Start date for the report period
+        end_date: End date for the report period
+        category_filter: Optional filter by category
+
+    Returns:
+        List of defective item records
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                di.quantity AS "Defective Quantity",
+                di.condition_type AS "Condition",
+                di.notes AS "Notes",
+                di.reported_by AS "Reported By",
+                di.reported_date AS "Report Date",
+                r.lab_activity_name AS "Lab Activity",
+                req.name AS "Requester"
+            FROM Defective_Items di
+            JOIN Items i ON i.id = di.item_id
+            JOIN Categories c ON c.id = i.category_id
+            JOIN Requisitions r ON r.id = di.requisition_id
+            JOIN Requesters req ON req.id = r.requester_id
+            WHERE DATE(di.reported_date) BETWEEN ? AND ?
+        """
+
+        params = [start_date.isoformat(), end_date.isoformat()]
+
+        if category_filter:
+            query += " AND c.name = ?"
+            params.append(category_filter)
+
+        query += " ORDER BY di.reported_date DESC, i.name"
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get defective items data: {e}")
+        return []
