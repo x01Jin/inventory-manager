@@ -13,7 +13,17 @@ Data Loading
 
 Key Components
 
-- Requesters table with columns: Requisitions Count, Name, Affiliation, Group, Created.
+- Requesters table with columns: Requisitions Count, Name, Affiliation, Group, Grade Level, Section, Created.
+
+## Requester Fields
+
+- **Name**: The name of the requester (e.g., teacher or student name)
+- **Affiliation**: The requester's general affiliation (e.g., "Teacher", "Student")
+- **Group Name**: The class or group identifier
+- **Grade Level**: The grade level (e.g., "Grade 7", "Grade 8", "Grade 9", "Grade 10") - used for usage tracking by grade
+- **Section**: The section name (e.g., "Section A", "Einstein") - used for usage tracking by section
+
+Grade level and section information is used to generate reports showing usage broken down by grade and section per laboratory activity.
 
 Validation
 

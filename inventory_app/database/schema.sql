@@ -4,23 +4,24 @@
 -- Enable foreign key enforcement
 PRAGMA foreign_keys = ON;
 
--- 1. Categories: Item categories
+-- 1. Categories: Fixed item categories (not user-customizable)
+-- These are the default categories with predefined alert thresholds
 CREATE TABLE Categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
+-- Default categories (fixed, cannot be modified by users)
 INSERT INTO Categories (name) VALUES
-('Hydrochloric Acid'),
-('Sodium Hydroxide'),
-('Beaker'),
-('Volumetric Flask'),
-('Microscope'),
-('Centrifuge'),
-('Bunsen Burner'),
-('Pipette'),
-('Plastic Tubes'),
-('Filter Paper');
+('Chemicals-Solid'),
+('Chemicals-Liquid'),
+('Prepared Slides'),
+('Consumables'),
+('Equipment'),
+('Apparatus'),
+('Lab Models'),
+('Others'),
+('Uncategorized');
 
 -- 2. Suppliers: Supplier names for dropdown selection
 CREATE TABLE Suppliers (
@@ -157,11 +158,16 @@ BEGIN
 END;
 
 -- 8. Requesters: Requester information
+-- NOTE: grade_level and section are used for usage tracking per beta test requirements
+-- affiliation is the borrower's general affiliation (e.g., teacher, student)
+-- group_name is used for class/group identification
 CREATE TABLE Requesters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     affiliation TEXT NOT NULL,
     group_name TEXT NOT NULL,
+    grade_level TEXT,          -- Grade level (e.g., 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10')
+    section TEXT,              -- Section name (e.g., 'Section A', 'Einstein')
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

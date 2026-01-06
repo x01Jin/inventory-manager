@@ -121,9 +121,11 @@ class ReportQueryBuilder:
                 query += "\nCROSS JOIN periods p\n"
 
             # WHERE clause with filters. Use half-open range to avoid string
-            # comparison issues when datetimes are stored as ISO timestamps.
+            # comparison issues when dates are stored as ISO date strings.
+            # NOTE: Usage counting is based on lab_activity_date (when materials
+            # are actually used) per beta test requirements, NOT expected_request.
             query += """
-            WHERE r.expected_request >= ? AND r.expected_request < ?
+            WHERE r.lab_activity_date >= ? AND r.lab_activity_date < ?
             """
 
             if category_filter:
@@ -215,8 +217,8 @@ class ReportQueryBuilder:
                 # the normalized SELECT fragment for use in the caller.
                 normalized_select = (
                     'p.period_key AS "PERIOD", '
-                    "SUM(CASE WHEN r.expected_request >= p.start "
-                    "AND r.expected_request < p.end THEN ri.quantity_requested ELSE 0 END) "
+                    "SUM(CASE WHEN r.lab_activity_date >= p.start "
+                    "AND r.lab_activity_date < p.end THEN ri.quantity_requested ELSE 0 END) "
                     'AS "PERIOD_QUANTITY"'
                 )
 
@@ -252,9 +254,10 @@ class ReportQueryBuilder:
                     continue
 
                 # Use parameter placeholders for dates; alias is quoted and validated
+                # NOTE: Usage counting based on lab_activity_date per beta test requirements
                 safe_alias = period_key.replace('"', '""')
                 column_parts.append(
-                    "SUM(CASE WHEN r.expected_request >= ? AND r.expected_request < ? "
+                    "SUM(CASE WHEN r.lab_activity_date >= ? AND r.lab_activity_date < ? "
                     'THEN ri.quantity_requested ELSE 0 END) AS "{}"'.format(safe_alias)
                 )
                 params.extend([period_start, period_end])
@@ -414,14 +417,14 @@ class ReportStatisticsBuilder:
         category_filter: str = "",
         supplier_filter: str = "",
     ) -> Tuple[str, Tuple]:
-        """Build query to get usage statistics."""
-        # Total items used
+        """Build query to get usage statistics based on lab activity date."""
+        # Total items used - counted by lab_activity_date (when materials are used)
         total_query = """
         SELECT SUM(ri.quantity_requested) as total_used
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.expected_request BETWEEN ? AND ?
+        WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
@@ -443,7 +446,7 @@ class ReportStatisticsBuilder:
         category_filter: str = "",
         supplier_filter: str = "",
     ) -> Tuple[str, Tuple]:
-        """Build query to get category statistics."""
+        """Build query to get category statistics based on lab activity date."""
         category_query = """
         SELECT c.name as category, SUM(ri.quantity_requested) as qty
         FROM Requisition_Items ri
@@ -451,7 +454,7 @@ class ReportStatisticsBuilder:
         JOIN Items i ON i.id = ri.item_id
         JOIN Categories c ON c.id = i.category_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.expected_request BETWEEN ? AND ?
+        WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
@@ -476,14 +479,14 @@ class ReportStatisticsBuilder:
         supplier_filter: str = "",
         limit: int = 10,
     ) -> Tuple[str, Tuple]:
-        """Build query to get top used items."""
+        """Build query to get top used items based on lab activity date."""
         top_items_query = """
         SELECT i.name as item_name, SUM(ri.quantity_requested) as qty
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
         JOIN Requesters req ON req.id = r.requester_id
-        WHERE r.expected_request BETWEEN ? AND ?
+        WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]

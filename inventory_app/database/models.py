@@ -4,7 +4,7 @@ Provides classes for database entities with CRUD operations.
 Uses composition pattern with DatabaseConnection.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, date
 from dataclasses import dataclass
 
@@ -13,30 +13,50 @@ from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 
 
+def check_case_insensitive_duplicate(
+    table: str, name: str, exclude_id: Optional[int] = None
+) -> Tuple[bool, Optional[str]]:
+    """Check if a case-insensitive duplicate exists in the given table.
+
+    Per beta test requirement A.2: Prevent duplicates that differ only in
+    capitalization (e.g., '10ml' vs '10mL', '50kg' vs '50KG').
+
+    Args:
+        table: Table name to check (Categories, Suppliers, Sizes, Brands)
+        name: Name to check for duplicates
+        exclude_id: ID to exclude from check (for updates)
+
+    Returns:
+        Tuple of (has_duplicate, existing_name) where existing_name is the
+        matching name if a duplicate exists
+    """
+    try:
+        if exclude_id:
+            query = f"SELECT name FROM {table} WHERE LOWER(name) = LOWER(?) AND id != ?"
+            rows = db.execute_query(query, (name, exclude_id))
+        else:
+            query = f"SELECT name FROM {table} WHERE LOWER(name) = LOWER(?)"
+            rows = db.execute_query(query, (name,))
+
+        if rows:
+            return True, rows[0]["name"]
+        return False, None
+    except Exception as e:
+        logger.error(f"Error checking for duplicate in {table}: {e}")
+        return False, None
+
+
 @dataclass
 class Category:
-    """Represents an item category."""
+    """Represents an item category.
+
+    Categories are fixed in the system and defined in category_config.py.
+    This model is read-only - categories cannot be added, edited, or deleted
+    through the application.
+    """
 
     id: Optional[int] = None
     name: str = ""
-
-    def save(self) -> bool:
-        """Save or update the category."""
-        try:
-            if self.id:
-                query = "UPDATE Categories SET name = ? WHERE id = ?"
-                db.execute_update(query, (self.name, self.id))
-            else:
-                query = "INSERT INTO Categories (name) VALUES (?)"
-                result = db.execute_update(query, (self.name,), return_last_id=True)
-                if isinstance(result, tuple):
-                    _, self.id = result
-                else:
-                    logger.error("Failed to obtain last insert id for Category")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save category: {e}")
-            return False
 
     @classmethod
     def get_all(cls) -> List["Category"]:
@@ -47,28 +67,6 @@ class Category:
         except Exception as e:
             logger.error(f"Failed to get categories: {e}")
             return []
-
-    def delete(self) -> bool:
-        """Delete the category."""
-        try:
-            if not self.id:
-                return False
-
-            # Check if category is being used by any items
-            usage_check = db.execute_query(
-                "SELECT COUNT(*) as count FROM Items WHERE category_id = ?", (self.id,)
-            )
-            if usage_check and usage_check[0]["count"] > 0:
-                logger.warning(
-                    f"Cannot delete category {self.id}: category is being used by items"
-                )
-                return False
-
-            db.execute_update("DELETE FROM Categories WHERE id = ?", (self.id,))
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete category {self.id}: {e}")
-            return False
 
     @classmethod
     def get_by_id(cls, category_id: int) -> Optional["Category"]:
@@ -82,6 +80,18 @@ class Category:
             logger.error(f"Failed to get category {category_id}: {e}")
             return None
 
+    @classmethod
+    def get_by_name(cls, name: str) -> Optional["Category"]:
+        """Get category by name (case-insensitive)."""
+        try:
+            rows = db.execute_query(
+                "SELECT * FROM Categories WHERE LOWER(name) = LOWER(?)", (name,)
+            )
+            return cls(**dict(rows[0])) if rows else None
+        except Exception as e:
+            logger.error(f"Failed to get category by name {name}: {e}")
+            return None
+
 
 @dataclass
 class Supplier:
@@ -90,9 +100,23 @@ class Supplier:
     id: Optional[int] = None
     name: str = ""
 
-    def save(self) -> bool:
-        """Save or update the supplier."""
+    def save(self) -> Tuple[bool, str]:
+        """Save or update the supplier.
+
+        Returns:
+            Tuple of (success, message) where message contains error info if failed
+        """
         try:
+            # Check for case-insensitive duplicate (beta test requirement A.2)
+            has_dup, existing = check_case_insensitive_duplicate(
+                "Suppliers", self.name, self.id
+            )
+            if has_dup:
+                return (
+                    False,
+                    f"A supplier with similar name already exists: '{existing}'",
+                )
+
             if self.id:
                 query = "UPDATE Suppliers SET name = ? WHERE id = ?"
                 db.execute_update(query, (self.name, self.id))
@@ -103,10 +127,10 @@ class Supplier:
                     _, self.id = result
                 else:
                     logger.error("Failed to obtain last insert id for Supplier")
-            return True
+            return True, "Supplier saved successfully"
         except Exception as e:
             logger.error(f"Failed to save supplier: {e}")
-            return False
+            return False, str(e)
 
     @classmethod
     def get_all(cls) -> List["Supplier"]:
@@ -160,9 +184,20 @@ class Size:
     id: Optional[int] = None
     name: str = ""
 
-    def save(self) -> bool:
-        """Save or update the size."""
+    def save(self) -> Tuple[bool, str]:
+        """Save or update the size.
+
+        Returns:
+            Tuple of (success, message) where message contains error info if failed
+        """
         try:
+            # Check for case-insensitive duplicate (beta test requirement A.2)
+            has_dup, existing = check_case_insensitive_duplicate(
+                "Sizes", self.name, self.id
+            )
+            if has_dup:
+                return False, f"A size with similar name already exists: '{existing}'"
+
             if self.id:
                 query = "UPDATE Sizes SET name = ? WHERE id = ?"
                 db.execute_update(query, (self.name, self.id))
@@ -173,10 +208,10 @@ class Size:
                     _, self.id = result
                 else:
                     logger.error("Failed to obtain last insert id for Size")
-            return True
+            return True, "Size saved successfully"
         except Exception as e:
             logger.error(f"Failed to save size: {e}")
-            return False
+            return False, str(e)
 
     @classmethod
     def get_all(cls) -> List["Size"]:
@@ -228,9 +263,20 @@ class Brand:
     id: Optional[int] = None
     name: str = ""
 
-    def save(self) -> bool:
-        """Save or update the brand."""
+    def save(self) -> Tuple[bool, str]:
+        """Save or update the brand.
+
+        Returns:
+            Tuple of (success, message) where message contains error info if failed
+        """
         try:
+            # Check for case-insensitive duplicate (beta test requirement A.2)
+            has_dup, existing = check_case_insensitive_duplicate(
+                "Brands", self.name, self.id
+            )
+            if has_dup:
+                return False, f"A brand with similar name already exists: '{existing}'"
+
             if self.id:
                 query = "UPDATE Brands SET name = ? WHERE id = ?"
                 db.execute_update(query, (self.name, self.id))
@@ -241,10 +287,10 @@ class Brand:
                     _, self.id = result
                 else:
                     logger.error("Failed to obtain last insert id for Brand")
-            return True
+            return True, "Brand saved successfully"
         except Exception as e:
             logger.error(f"Failed to save brand: {e}")
-            return False
+            return False, str(e)
 
     @classmethod
     def get_all(cls) -> List["Brand"]:
@@ -646,32 +692,53 @@ class Item:
 
 @dataclass
 class Requester:
-    """Represents a requester."""
+    """Represents a requester.
+
+    Attributes:
+        grade_level: The grade level of the requester (e.g., 'Grade 7', 'Grade 8')
+                     Used for tracking usage by grade level per beta test requirements.
+        section: The section name (e.g., 'Section A', 'Einstein')
+                 Used for tracking usage by section per beta test requirements.
+    """
 
     id: Optional[int] = None
     name: str = ""
     affiliation: str = ""
     group_name: str = ""
+    grade_level: Optional[str] = None
+    section: Optional[str] = None
     created_at: Optional[datetime] = None
 
     def save(self) -> bool:
         """Save or update the requester."""
         try:
             if self.id:
-                query = "UPDATE Requesters SET name = ?, affiliation = ?, group_name = ? WHERE id = ?"
+                query = """UPDATE Requesters SET name = ?, affiliation = ?, group_name = ?,
+                           grade_level = ?, section = ? WHERE id = ?"""
                 db.execute_update(
-                    query, (self.name, self.affiliation, self.group_name, self.id)
+                    query,
+                    (
+                        self.name,
+                        self.affiliation,
+                        self.group_name,
+                        self.grade_level,
+                        self.section,
+                        self.id,
+                    ),
                 )
             else:
                 # For new requesters, explicitly set created_at to local time
                 current_time = datetime.now()
-                query = "INSERT INTO Requesters (name, affiliation, group_name, created_at) VALUES (?, ?, ?, ?)"
+                query = """INSERT INTO Requesters (name, affiliation, group_name,
+                           grade_level, section, created_at) VALUES (?, ?, ?, ?, ?, ?)"""
                 result = db.execute_update(
                     query,
                     (
                         self.name,
                         self.affiliation,
                         self.group_name,
+                        self.grade_level,
+                        self.section,
                         current_time.isoformat(),
                     ),
                     return_last_id=True,

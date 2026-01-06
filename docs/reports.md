@@ -3,6 +3,7 @@
 Overview
 
 - Reports support Usage and Inventory analytics. Exports are generated as Excel files using `openpyxl`.
+- **Usage counting is based on lab_activity_date** (when materials are actually used in lab activities), NOT the borrow/request date.
 
 Detailed Implementation
 
@@ -18,8 +19,13 @@ Detailed Implementation
     - `get_trends_data(start_date, end_date, granularity=None|'auto', group_by='item', top_n=None, include_consumables=True, category_filter='') -> List[Dict]` — `granularity` defaults to `None` (Auto) and will use the smart granularity computed from the date range when unset.
     - `get_expiration_data(start_date, end_date, category_filter='') -> List[Dict]`
     - `get_low_stock_data(category_filter='', threshold=10) -> List[Dict]`
-    - `get_acquisition_history_data(start_date, end_date, category_filter='') -> List[Dict]`
+    - `get_acquisition_history_data(start_date, end_date, category_filter='') -> List[Dict]` — includes batch notation (B1, B2, B3) to indicate when items were received in multiple batches
     - `get_calibration_due_data(start_date, end_date, category_filter='') -> List[Dict]`
+    - `get_update_history_data(start_date, end_date, item_filter='') -> List[Dict]` — edit history with editor name and reason
+    - `get_disposal_history_data(start_date, end_date, category_filter='') -> List[Dict]` — disposal records with reason
+    - `get_usage_by_grade_level_data(start_date, end_date, category_filter='') -> List[Dict]` — usage by requester grade level
+    - `get_item_usage_details(item_name) -> List[Dict]` — detailed usage history for a specific item with all encoded information
+    - `get_item_batch_summary(item_name='') -> List[Dict]` — batch summary with B1, B2, B3 notation for items received multiple times
   - `header_utils` (inventory_app/gui/reports/header_utils.py): Header normalization and period key parsing:
     - `format_excel_headers(headers, start_date, end_date) -> List[str]`
     - `parse_and_format_period_key(period_key, granularity) -> str`
@@ -116,9 +122,14 @@ Common Reports
 - Stock Levels
 - Expiration
 - Low Stock Alerts
-- Acquisition History
+- Acquisition History — includes batch notation (B1, B2, B3) for items received multiple times
 - Calibration Due
 - Trends (grouping by item or category; time-series heatmap/top-N). Default granularity is `Auto` (uses the same smart granularity rules as Usage reports); manual granularity selection is still supported.
+- **Update History Report** - Shows history of edits to inventory items including editor name, timestamp, and reason
+- **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them
+- **Usage by Grade Level** - Shows usage broken down by requester grade level and section
+- **Item Usage Details** - Detailed usage history for a specific item with all encoded information (requester, quantity, lab activity, dates)
+- **Batch Summary** - Shows batch history for items with B1, B2, B3 notation indicating receipt dates and quantities
 
 References
 

@@ -1,5 +1,6 @@
 .clinerules/
 .roo/
+.github/
 .venv/
 logs/
 __pycache__/

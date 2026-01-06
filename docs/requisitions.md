@@ -3,6 +3,7 @@
 Overview
 
 - Requisitions manage reservations and usage with lifecycle support: requested → active → returned / overdue.
+- **Usage tracking is based on lab_activity_date** - the date when materials are actually used in the laboratory activity, NOT the borrow/request date.
 
 Data Loading
 

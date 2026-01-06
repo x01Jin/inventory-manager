@@ -13,7 +13,7 @@ Data Loading
 
 ## Importing items
 
-A bulk import feature is available via the Inventory page. The importer accepts `.xlsx` files and supports flexible header matching (case- and space-insensitive) and will scan a few rows at the top of a sheet to find the header row if your file has title lines. Required fields are `name` (or `items` / `item name` variants), `stocks`, and `item type`. For details and rules (category auto-creation, header examples, behavior on invalid rows) see `docs/importing_items.md`.
+A bulk import feature is available via the Inventory page. The importer accepts `.xlsx` files and supports flexible header matching (case- and space-insensitive) and will scan a few rows at the top of a sheet to find the header row if your file has title lines. Required fields are `name` (or `items` / `item name` variants), `stocks`, and `item type`. For details and rules (header examples, behavior on invalid rows) see `docs/importing_items.md`. Items without a specified category are assigned to "Uncategorized".
 
 Inventory Table
 
@@ -23,6 +23,21 @@ Inventory Table
 Item Management
 
 - Add, edit and delete flows are available along with validation and audit tracking.
+- **Categories are fixed** - see Settings documentation for the list of available categories and their thresholds.
+
+## Adding Items with Auto-Calculated Dates
+
+When adding a new item:
+
+1. **Select a category**: The category determines the item type and date thresholds
+2. **Item type is set automatically**: Consumable or Non-Consumable based on category
+3. **Dates are pre-calculated** based on the acquisition date:
+   - Consumables: Expiration date = acquisition date + category expiry months
+   - Non-Consumables: Disposal date = acquisition date + category disposal years
+   - Equipment: Calibration date = acquisition date + 1 year
+4. **All dates remain editable** for manual adjustment if needed
+
+Changing the category or acquisition date will recalculate the dates automatically.
 
 Stock & Alerts
 
@@ -31,3 +46,42 @@ Stock & Alerts
 - The inventory table uses row background colors to indicate items requiring attention. Overdue items (expired, disposal overdue, or calibration overdue) display a reddish pink background. Items with approaching deadlines (warnings) display a pale yellow background. For non-consumable items with multiple dates, the most critical status determines the row color.
 
 - Data integrity: database-level triggers prevent stock movements that would make the available quantity for a batch or an item negative. The application performs validation and uses transactions to avoid oversubscription, but these triggers provide a defensive constraint at the database level.
+
+## Alert Thresholds
+
+Alert thresholds vary by item category:
+
+| Category | Alert Type | Threshold |
+| -------- | ---------- | --------- |
+| Chemicals (consumable) | Expiry warning | 6 months before expiration |
+| Glassware/Apparatus | Disposal due | 3 years from acquisition |
+| Equipment | Disposal due | 5 years from acquisition |
+| All items with calibration | Calibration warning | 3 months before due |
+
+- Calibration interval is set to 1 year (365 days) from the last calibration date
+- Items past their threshold date show a red/pink background indicating overdue status
+- Items approaching their threshold show a yellow background indicating warning status
+
+## Stock Calculation Logic
+
+Stock levels are calculated differently based on item type:
+
+- **Consumables**: `Current Stock = Original Stock - Consumed - Disposed + Returned`
+  - When consumables are used, the quantity is permanently deducted from stock
+  
+- **Non-consumables**: `Current Stock = Original Stock`
+  - Non-consumables are returned after use, so original stock is retained
+  - Items are tracked but the count does not decrease from usage
+
+## Standard Categories
+
+Items should be classified into the following standard categories:
+
+- Equipment
+- Apparatus
+- Lab Models
+- Chemicals-Solid
+- Chemicals-Liquid
+- Prepared Slides
+- Consumables
+- Others

@@ -397,6 +397,85 @@ class ReportDateFormatter:
             years = days_diff // 365
             return f"~{years} year{'s' if years > 1 else ''} ({granularity} view)"
 
+    @staticmethod
+    def get_fixed_weekly_period_keys(start_date: date, end_date: date) -> List[str]:
+        """
+        Generate fixed weekly period keys (Week 1, Week 2, etc.) for beta test compliance.
+
+        This generates columns like:
+        - Week 1 (with date range)
+        - Week 2 (with date range)
+        - Week 3 (with date range)
+        - Week 4 (with date range)
+        - Week 5 (if applicable)
+
+        Per beta test requirements, reports should show fixed weekly columns for
+        tracking usage by grade levels.
+
+        Args:
+            start_date: Start date of the report period
+            end_date: End date of the report period
+
+        Returns:
+            List of period keys in format ["WEEK1", "WEEK2", "WEEK3", "WEEK4", "WEEK5"]
+        """
+        period_keys = []
+        current_start = start_date
+        week_num = 1
+
+        while current_start <= end_date:
+            # Each week is 7 days from current start
+            week_end = current_start + timedelta(days=6)
+
+            # Cap week_end at the report end_date
+            if week_end > end_date:
+                week_end = end_date
+
+            # Use simple WEEK1, WEEK2 format for column keys
+            period_keys.append(f"WEEK{week_num}")
+
+            # Move to next week
+            current_start = week_end + timedelta(days=1)
+            week_num += 1
+
+            # Cap at 5 weeks maximum (as per beta test spec: Week 1-4 or 5)
+            if week_num > 5:
+                break
+
+        return period_keys
+
+    @staticmethod
+    def get_fixed_weekly_date_ranges(start_date: date, end_date: date) -> List[tuple]:
+        """
+        Get the date ranges corresponding to fixed weekly periods.
+
+        Args:
+            start_date: Start date of the report period
+            end_date: End date of the report period
+
+        Returns:
+            List of tuples [(week_key, start_date, end_date), ...]
+        """
+        ranges = []
+        current_start = start_date
+        week_num = 1
+
+        while current_start <= end_date:
+            week_end = current_start + timedelta(days=6)
+
+            if week_end > end_date:
+                week_end = end_date
+
+            ranges.append((f"WEEK{week_num}", current_start, week_end))
+
+            current_start = week_end + timedelta(days=1)
+            week_num += 1
+
+            if week_num > 5:
+                break
+
+        return ranges
+
 
 # Global instance for convenience
 date_formatter = ReportDateFormatter()

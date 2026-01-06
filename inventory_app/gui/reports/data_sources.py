@@ -89,8 +89,19 @@ def get_dynamic_report_data(
 
 
 def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
+    """Get stock levels data with differentiated logic for consumables vs non-consumables.
+
+    Per beta test requirements:
+    - Consumables: deduct consumed quantity from original stock
+    - Non-consumables: retain original count (items are returned after use)
+
+    The 'Current Stock' column shows:
+    - For consumables: Original - Consumed - Disposed + Returned
+    - For non-consumables: Original stock (unchanged, as items are returned)
+    """
     try:
         # Compute both original (received) and current stock (consumption/disposal/returns)
+        # Use CASE expression to differentiate consumable vs non-consumable stock calculation
         query = """
             SELECT
                 i.name AS "Item Name",
@@ -98,10 +109,17 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                 i.size AS "Size",
                 i.brand AS "Brand",
                 COALESCE(SUM(ib.quantity_received), 0) AS "Original Stock",
-                COALESCE(SUM(ib.quantity_received), 0) -
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS "Current Stock",
+                CASE 
+                    WHEN i.is_consumable = 1 THEN
+                        -- Consumables: deduct consumed/disposed, add returned
+                        COALESCE(SUM(ib.quantity_received), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
+                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0)
+                    ELSE
+                        -- Non-consumables: retain original stock (items are returned after use)
+                        COALESCE(SUM(ib.quantity_received), 0)
+                END AS "Current Stock",
                 i.other_specifications AS "Specifications",
                 i.is_consumable AS "Is Consumable"
             FROM Items i
@@ -289,6 +307,19 @@ def get_low_stock_data(
 def get_acquisition_history_data(
     start_date: date, end_date: date, category_filter: str = ""
 ) -> List[Dict]:
+    """Get acquisition history data with batch notation (B1, B2, B3, etc.).
+
+    Per beta test requirement #3: Include B1, B2, B3 notation in reports to indicate
+    when items were received multiple times (multiple batches).
+
+    Args:
+        start_date: Start date for the report period
+        end_date: End date for the report period
+        category_filter: Optional filter by category
+
+    Returns:
+        List of acquisition records with batch labels
+    """
     try:
         query = """
             SELECT
@@ -296,7 +327,7 @@ def get_acquisition_history_data(
                 c.name AS "Category",
                 ib.date_received AS "Acquisition Date",
                 ib.quantity_received AS "Quantity Received",
-                ib.batch_number AS "Batch Number",
+                'B' || ib.batch_number AS "Batch",
                 s.name AS "Supplier",
                 i.other_specifications AS "Specifications"
             FROM Item_Batches ib
@@ -312,7 +343,7 @@ def get_acquisition_history_data(
             query += " AND c.name = ?"
             params.append(category_filter)
 
-        query += " ORDER BY ib.date_received DESC, i.name"
+        query += " ORDER BY i.name, ib.batch_number"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -353,7 +384,157 @@ def get_calibration_due_data(
         return []
 
 
+def get_update_history_data(
+    start_date: date, end_date: date, item_filter: str = ""
+) -> List[Dict]:
+    """Get update/edit history data for items.
+
+    Per beta test requirement #7: Generate a report showing history of updates/edits
+    to the inventory list with editor name, date/time, and reason for editing.
+
+    Args:
+        start_date: Start date for the report period
+        end_date: End date for the report period
+        item_filter: Optional filter by item name
+
+    Returns:
+        List of update history records
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                uh.editor_name AS "Editor",
+                uh.edit_timestamp AS "Edit Date/Time",
+                uh.reason AS "Reason for Edit"
+            FROM Update_History uh
+            JOIN Items i ON i.id = uh.item_id
+            JOIN Categories c ON c.id = i.category_id
+            WHERE DATE(uh.edit_timestamp) BETWEEN ? AND ?
+            """
+
+        params = [start_date.isoformat(), end_date.isoformat()]
+
+        if item_filter:
+            query += " AND i.name LIKE ?"
+            params.append(f"%{item_filter}%")
+
+        query += " ORDER BY uh.edit_timestamp DESC"
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get update history data: {e}")
+        return []
+
+
+def get_disposal_history_data(
+    start_date: date, end_date: date, category_filter: str = ""
+) -> List[Dict]:
+    """Get disposal history data for items.
+
+    Per beta test requirement #16: Create a history profile for disposed items
+    including reason for disposal.
+
+    Args:
+        start_date: Start date for the report period
+        end_date: End date for the report period
+        category_filter: Optional filter by category
+
+    Returns:
+        List of disposal history records
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                dh.reason AS "Disposal Reason",
+                dh.disposal_timestamp AS "Disposal Date",
+                dh.editor_name AS "Disposed By"
+            FROM Disposal_History dh
+            JOIN Items i ON i.id = dh.item_id
+            JOIN Categories c ON c.id = i.category_id
+            WHERE DATE(dh.disposal_timestamp) BETWEEN ? AND ?
+            """
+
+        params = [start_date.isoformat(), end_date.isoformat()]
+
+        if category_filter:
+            query += " AND c.name = ?"
+            params.append(category_filter)
+
+        query += " ORDER BY dh.disposal_timestamp DESC"
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get disposal history data: {e}")
+        return []
+
+
+def get_usage_by_grade_level_data(
+    start_date: date, end_date: date, category_filter: str = ""
+) -> List[Dict]:
+    """Get usage data broken down by grade level and section.
+
+    Per beta test requirement #19: Show usage by different grade levels and sections
+    within the specified date range.
+
+    Args:
+        start_date: Start date for the report period
+        end_date: End date for the report period
+        category_filter: Optional filter by category
+
+    Returns:
+        List of usage records by grade level
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                req.grade_level AS "Grade Level",
+                req.section AS "Section",
+                SUM(ri.quantity_requested) AS "Quantity Used",
+                r.lab_activity_name AS "Lab Activity",
+                r.lab_activity_date AS "Activity Date"
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON r.id = ri.requisition_id
+            JOIN Items i ON i.id = ri.item_id
+            JOIN Categories c ON c.id = i.category_id
+            JOIN Requesters req ON req.id = r.requester_id
+            WHERE r.lab_activity_date BETWEEN ? AND ?
+            """
+
+        params = [start_date.isoformat(), end_date.isoformat()]
+
+        if category_filter:
+            query += " AND c.name = ?"
+            params.append(category_filter)
+
+        query += """
+            GROUP BY i.id, i.name, c.name, req.grade_level, req.section, 
+                     r.lab_activity_name, r.lab_activity_date
+            ORDER BY r.lab_activity_date DESC, req.grade_level, req.section, i.name
+        """
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get usage by grade level data: {e}")
+        return []
+
+
 def get_usage_statistics(start_date: date, end_date: date) -> Dict:
+    """Get usage statistics based on lab activity date.
+
+    NOTE: Statistics are now based on lab_activity_date (when materials are used)
+    per beta test requirements, NOT expected_request (borrow date).
+    """
     try:
         stats_builder = ReportStatisticsBuilder()
 
@@ -392,3 +573,93 @@ def get_usage_statistics(start_date: date, end_date: date) -> Dict:
             "top_items": [],
             "date_range": f"{start_date} to {end_date}",
         }
+
+
+def get_item_usage_details(item_name: str) -> List[Dict]:
+    """Get detailed usage history for a specific item.
+
+    Per beta test requirement #12: When searching, retrieve all usage information
+    for individual items including all encoded information (requester, date, quantity, etc.).
+
+    Args:
+        item_name: Name of the item to search for (partial match supported)
+
+    Returns:
+        List of usage records for the item with all encoded information
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                req.name AS "Requested By",
+                req.grade_level AS "Grade Level",
+                req.section AS "Section",
+                ri.quantity_requested AS "Quantity Used",
+                r.lab_activity_name AS "Lab Activity",
+                r.lab_activity_date AS "Activity Date",
+                r.expected_request AS "Request Date",
+                r.expected_return AS "Return Date",
+                r.notes AS "Notes"
+            FROM Requisition_Items ri
+            JOIN Requisitions r ON r.id = ri.requisition_id
+            JOIN Items i ON i.id = ri.item_id
+            JOIN Categories c ON c.id = i.category_id
+            JOIN Requesters req ON req.id = r.requester_id
+            WHERE i.name LIKE ?
+            ORDER BY r.lab_activity_date DESC
+        """
+
+        params = [f"%{item_name}%"]
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get item usage details: {e}")
+        return []
+
+
+def get_item_batch_summary(item_name: str = "") -> List[Dict]:
+    """Get batch summary for items showing all receive dates (B1, B2, B3, etc.).
+
+    Per beta test requirement #3: Show batch information with B1, B2, B3 notation
+    for items received multiple times.
+
+    Args:
+        item_name: Optional filter by item name (partial match)
+
+    Returns:
+        List of item batch records with batch labels
+    """
+    try:
+        query = """
+            SELECT
+                i.name AS "Item Name",
+                c.name AS "Category",
+                GROUP_CONCAT(
+                    'B' || ib.batch_number || ': ' || ib.date_received || ' (' || ib.quantity_received || ' units)',
+                    '; '
+                ) AS "Batch History",
+                COUNT(ib.id) AS "Total Batches",
+                COALESCE(SUM(ib.quantity_received), 0) AS "Total Received",
+                s.name AS "Supplier"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Item_Batches ib ON ib.item_id = i.id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
+        """
+
+        params = []
+        if item_name:
+            query += " WHERE i.name LIKE ?"
+            params.append(f"%{item_name}%")
+
+        query += " GROUP BY i.id, i.name, c.name, s.name ORDER BY i.name"
+
+        return db.execute_query(query, tuple(params)) or []
+
+    except Exception as e:
+        logger.error(f"Failed to get item batch summary: {e}")
+        return []

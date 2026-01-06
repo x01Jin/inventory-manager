@@ -1,6 +1,7 @@
 """
 Settings page for managing combo box selections and preferences.
 Allows editing sizes, brands, suppliers, and application preferences.
+Categories are fixed and cannot be modified (defined in category_config.py).
 """
 
 from PyQt6.QtWidgets import (
@@ -21,13 +22,14 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 
-from inventory_app.database.models import Size, Brand, Supplier, Category
+from inventory_app.database.models import Size, Brand, Supplier
 from inventory_app.gui.styles import ThemeManager, DarkTheme, LightTheme
 
 
 class SettingsPage(QWidget):
     """
     Settings page with tabs for managing sizes, brands, and suppliers.
+    Categories are fixed and not editable through settings.
     """
 
     def __init__(self):
@@ -60,9 +62,6 @@ class SettingsPage(QWidget):
 
         # Suppliers tab
         self.create_suppliers_tab()
-
-        # Categories tab
-        self.create_categories_tab()
 
     def create_preferences_tab(self):
         """Create the preferences tab for theme selection."""
@@ -321,42 +320,6 @@ class SettingsPage(QWidget):
 
         self.tab_widget.addTab(tab, "Suppliers")
 
-    def create_categories_tab(self):
-        """Create the categories management tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # List
-        self.categories_list = QListWidget()
-        self.populate_categories_list()
-        layout.addWidget(self.categories_list)
-
-        # Buttons
-        button_layout = QHBoxLayout()
-        add_btn = QPushButton("Add Category")
-        add_btn.clicked.connect(self.add_category)
-        button_layout.addWidget(add_btn)
-
-        edit_btn = QPushButton("Edit Category")
-        edit_btn.clicked.connect(self.edit_category)
-        button_layout.addWidget(edit_btn)
-
-        delete_btn = QPushButton("Delete Category")
-        delete_btn.clicked.connect(self.delete_category)
-        button_layout.addWidget(delete_btn)
-
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-
-        self.tab_widget.addTab(tab, "Categories")
-
-    def populate_categories_list(self):
-        """Populate the categories list."""
-        self.categories_list.clear()
-        categories = Category.get_all()
-        for c in categories:
-            self.categories_list.addItem(c.name)
-
     def populate_sizes_list(self):
         """Populate the sizes list."""
         self.sizes_list.clear()
@@ -385,11 +348,12 @@ class SettingsPage(QWidget):
             name = dialog.get_name()
             if name:
                 size = Size(name=name)
-                if size.save():
+                success, message = size.save()
+                if success:
                     self.populate_sizes_list()
                     QMessageBox.information(self, "Success", "Size added successfully!")
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to add size")
+                    QMessageBox.critical(self, "Error", message)
 
     def edit_size(self):
         """Edit the selected size."""
@@ -407,13 +371,14 @@ class SettingsPage(QWidget):
                 size_to_edit = next((s for s in sizes if s.name == old_name), None)
                 if size_to_edit:
                     size_to_edit.name = new_name
-                    if size_to_edit.save():
+                    success, message = size_to_edit.save()
+                    if success:
                         self.populate_sizes_list()
                         QMessageBox.information(
                             self, "Success", "Size updated successfully!"
                         )
                     else:
-                        QMessageBox.critical(self, "Error", "Failed to update size")
+                        QMessageBox.critical(self, "Error", message)
 
     def delete_size(self):
         """Delete the selected size."""
@@ -439,7 +404,13 @@ class SettingsPage(QWidget):
                         self, "Success", "Size deleted successfully!"
                     )
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to delete size")
+                    # Provide informative error message about why deletion failed
+                    QMessageBox.warning(
+                        self,
+                        "Cannot Delete",
+                        f"Cannot delete size '{name}' because it is currently being used by one or more items.\n\n"
+                        "Please remove this size from all items before deleting it.",
+                    )
 
     def add_brand(self):
         """Add a new brand."""
@@ -448,13 +419,14 @@ class SettingsPage(QWidget):
             name = dialog.get_name()
             if name:
                 brand = Brand(name=name)
-                if brand.save():
+                success, message = brand.save()
+                if success:
                     self.populate_brands_list()
                     QMessageBox.information(
                         self, "Success", "Brand added successfully!"
                     )
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to add brand")
+                    QMessageBox.critical(self, "Error", message)
 
     def edit_brand(self):
         """Edit the selected brand."""
@@ -472,13 +444,14 @@ class SettingsPage(QWidget):
                 brand_to_edit = next((b for b in brands if b.name == old_name), None)
                 if brand_to_edit:
                     brand_to_edit.name = new_name
-                    if brand_to_edit.save():
+                    success, message = brand_to_edit.save()
+                    if success:
                         self.populate_brands_list()
                         QMessageBox.information(
                             self, "Success", "Brand updated successfully!"
                         )
                     else:
-                        QMessageBox.critical(self, "Error", "Failed to update brand")
+                        QMessageBox.critical(self, "Error", message)
 
     def delete_brand(self):
         """Delete the selected brand."""
@@ -504,7 +477,13 @@ class SettingsPage(QWidget):
                         self, "Success", "Brand deleted successfully!"
                     )
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to delete brand")
+                    # Provide informative error message about why deletion failed
+                    QMessageBox.warning(
+                        self,
+                        "Cannot Delete",
+                        f"Cannot delete brand '{name}' because it is currently being used by one or more items.\n\n"
+                        "Please remove this brand from all items before deleting it.",
+                    )
 
     def add_supplier(self):
         """Add a new supplier."""
@@ -513,13 +492,14 @@ class SettingsPage(QWidget):
             name = dialog.get_name()
             if name:
                 supplier = Supplier(name=name)
-                if supplier.save():
+                success, message = supplier.save()
+                if success:
                     self.populate_suppliers_list()
                     QMessageBox.information(
                         self, "Success", "Supplier added successfully!"
                     )
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to add supplier")
+                    QMessageBox.critical(self, "Error", message)
 
     def edit_supplier(self):
         """Edit the selected supplier."""
@@ -539,13 +519,14 @@ class SettingsPage(QWidget):
                 )
                 if supplier_to_edit:
                     supplier_to_edit.name = new_name
-                    if supplier_to_edit.save():
+                    success, message = supplier_to_edit.save()
+                    if success:
                         self.populate_suppliers_list()
                         QMessageBox.information(
                             self, "Success", "Supplier updated successfully!"
                         )
                     else:
-                        QMessageBox.critical(self, "Error", "Failed to update supplier")
+                        QMessageBox.critical(self, "Error", message)
 
     def delete_supplier(self):
         """Delete the selected supplier."""
@@ -571,74 +552,13 @@ class SettingsPage(QWidget):
                         self, "Success", "Supplier deleted successfully!"
                     )
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to delete supplier")
-
-    def add_category(self):
-        """Add a new category."""
-        dialog = NameDialog("Add Category", self)
-        if dialog.exec():
-            name = dialog.get_name()
-            if name:
-                category = Category(name=name)
-                if category.save():
-                    self.populate_categories_list()
-                    QMessageBox.information(
-                        self, "Success", "Category added successfully!"
+                    # Provide informative error message about why deletion failed
+                    QMessageBox.warning(
+                        self,
+                        "Cannot Delete",
+                        f"Cannot delete supplier '{name}' because it is currently being used by one or more items.\n\n"
+                        "Please remove this supplier from all items before deleting it.",
                     )
-                else:
-                    QMessageBox.critical(self, "Error", "Failed to add category")
-
-    def edit_category(self):
-        """Edit the selected category."""
-        current_item = self.categories_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a category to edit")
-            return
-
-        old_name = current_item.text()
-        dialog = NameDialog("Edit Category", self, old_name)
-        if dialog.exec():
-            new_name = dialog.get_name()
-            if new_name and new_name != old_name:
-                categories = Category.get_all()
-                category_to_edit = next(
-                    (c for c in categories if c.name == old_name), None
-                )
-                if category_to_edit:
-                    category_to_edit.name = new_name
-                    if category_to_edit.save():
-                        self.populate_categories_list()
-                        QMessageBox.information(
-                            self, "Success", "Category updated successfully!"
-                        )
-                    else:
-                        QMessageBox.critical(self, "Error", "Failed to update category")
-
-    def delete_category(self):
-        """Delete the selected category."""
-        current_item = self.categories_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a category to delete")
-            return
-
-        name = current_item.text()
-        reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Are you sure you want to delete category '{name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            categories = Category.get_all()
-            category_to_delete = next((c for c in categories if c.name == name), None)
-            if category_to_delete:
-                if category_to_delete.delete():
-                    self.populate_categories_list()
-                    QMessageBox.information(
-                        self, "Success", "Category deleted successfully!"
-                    )
-                else:
-                    QMessageBox.critical(self, "Error", "Failed to delete category")
 
 
 class NameDialog(QDialog):
