@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QSizePolicy,
     QProgressBar,
+    QFileDialog,
 )
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -111,10 +112,15 @@ class RequisitionsPage(QWidget):
         self.delete_button.clicked.connect(self.delete_requisition)
         self.delete_button.setEnabled(False)
 
+        self.print_button = QPushButton("🖨️ Print")
+        self.print_button.clicked.connect(self.print_requisition)
+        self.print_button.setEnabled(False)
+
         action_layout.addWidget(self.add_button)
         action_layout.addWidget(self.edit_button)
         action_layout.addWidget(self.return_button)
         action_layout.addWidget(self.delete_button)
+        action_layout.addWidget(self.print_button)
         action_layout.addStretch()
 
         layout.addLayout(action_layout)
@@ -583,6 +589,343 @@ class RequisitionsPage(QWidget):
                 self, "Error", f"Failed to delete requisition: {str(e)}"
             )
 
+    def print_requisition(self):
+        """
+        Print or export the currently selected requisition.
+
+        Per beta test requirement B.2: In REQUISITIONS, have an option to print.
+        Exports requisition details to a printable PDF or HTML file.
+        """
+        requisition_id = self.table.get_selected_requisition_id()
+        if not requisition_id:
+            QMessageBox.warning(
+                self, "No Selection", "Please select a requisition to print."
+            )
+            return
+
+        try:
+            requisition_summary = self.model.get_requisition_by_id(requisition_id)
+            if not requisition_summary:
+                QMessageBox.warning(self, "Error", "Could not load requisition data.")
+                return
+
+            # Ask user where to save the file
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Requisition Report",
+                f"requisition_{requisition_id}.html",
+                "HTML Files (*.html);;All Files (*.*)",
+            )
+
+            if not file_path:
+                return  # User cancelled
+
+            # Generate HTML report
+            html_content = self._generate_requisition_html(requisition_summary)
+
+            # Write to file
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Requisition report saved successfully!\n\n"
+                f"File: {file_path}\n\n"
+                "You can open this file in a browser and use Print (Ctrl+P) to print it.",
+            )
+
+            logger.info(f"Requisition {requisition_id} exported to {file_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to print requisition {requisition_id}: {e}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to export requisition: {str(e)}"
+            )
+
+    def _generate_requisition_html(self, req_summary) -> str:
+        """
+        Generate a printable HTML report for a requisition.
+
+        Args:
+            req_summary: RequisitionSummary object
+
+        Returns:
+            HTML string for the requisition report
+        """
+        from datetime import date
+        from inventory_app.utils.date_utils import format_date_short, format_time_12h
+        from inventory_app.gui.requisitions.requisition_management.return_processor import (
+            ReturnProcessor,
+        )
+
+        req = req_summary.requisition
+        requester = req_summary.requester
+
+        # Format dates
+        expected_request_str = ""
+        if req.expected_request:
+            expected_request_str = f"{format_date_short(req.expected_request)} - {format_time_12h(req.expected_request.time())}"
+
+        expected_return_str = ""
+        if req.expected_return:
+            expected_return_str = f"{format_date_short(req.expected_return)} - {format_time_12h(req.expected_return.time())}"
+
+        activity_date_str = ""
+        if req.lab_activity_date:
+            activity_date_str = format_date_short(req.lab_activity_date)
+
+        # Build items table rows
+        items_rows = ""
+        for i, item in enumerate(req_summary.items, 1):
+            items_rows += f"""
+            <tr>
+                <td>{i}</td>
+                <td>{item["name"]}</td>
+                <td style="text-align: center;">{item["quantity_requested"]}</td>
+            </tr>
+            """
+
+        # Build return details section if processed
+        return_details_html = ""
+        if req.status == "returned" and req.id is not None:
+            try:
+                return_processor = ReturnProcessor()
+                summary = return_processor.get_requisition_return_summary(req.id)
+
+                if summary and (
+                    summary["total_returned"] > 0
+                    or summary["total_lost"] > 0
+                    or summary["total_consumed"] > 0
+                ):
+                    return_details_html = """
+                    <div class="section">
+                        <h2>🔒 Final Return Details</h2>
+                    """
+
+                    if summary["returned_consumables"]:
+                        return_details_html += "<h3>✅ Consumables Returned:</h3><ul>"
+                        for item in summary["returned_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["consumed_items"]:
+                        return_details_html += "<h3>🔥 Consumables Consumed:</h3><ul>"
+                        for item in summary["consumed_items"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["returned_non_consumables"]:
+                        return_details_html += (
+                            "<h3>↩️ Non-Consumables Returned:</h3><ul>"
+                        )
+                        for item in summary["returned_non_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["lost_non_consumables"]:
+                        return_details_html += (
+                            "<h3>❌ Non-Consumables Lost/Damaged:</h3><ul>"
+                        )
+                        for item in summary["lost_non_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    return_details_html += f"""
+                        <p class="totals"><strong>Totals:</strong> {summary["total_returned"]} returned, 
+                        {summary["total_consumed"]} consumed, {summary["total_lost"]} lost</p>
+                    </div>
+                    """
+            except Exception:
+                pass  # Skip return details on error
+
+        # Status color mapping
+        status_colors = {
+            "active": "#22c55e",
+            "requested": "#f59e0b",
+            "overdue": "#ef4444",
+            "returned": "#64748b",
+        }
+        status_color = status_colors.get(req.status, "#374151")
+
+        html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requisition #{req.id} - Laboratory Inventory</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{
+            margin: 0;
+            color: #333;
+        }}
+        .header .subtitle {{
+            color: #666;
+            font-size: 14px;
+        }}
+        .status {{
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            background-color: {status_color};
+        }}
+        .section {{
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }}
+        .section h2 {{
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 8px;
+        }}
+        .info-label {{
+            font-weight: bold;
+            color: #555;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }}
+        th, td {{
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }}
+        th {{
+            background-color: #333;
+            color: white;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f2f2f2;
+        }}
+        .totals {{
+            font-weight: bold;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+        }}
+        .print-footer {{
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }}
+        @media print {{
+            body {{
+                padding: 10px;
+            }}
+            .section {{
+                break-inside: avoid;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📋 Laboratory Requisition</h1>
+        <p class="subtitle">Requisition #{req.id}</p>
+        <span class="status">{req.status.upper()}</span>
+    </div>
+    
+    <div class="section">
+        <h2>👤 Requester Information</h2>
+        <div class="info-grid">
+            <span class="info-label">Name:</span>
+            <span>{requester.name}</span>
+            <span class="info-label">Affiliation:</span>
+            <span>{requester.affiliation}</span>
+            <span class="info-label">Group:</span>
+            <span>{requester.group_name}</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>⏰ Timeline</h2>
+        <div class="info-grid">
+            <span class="info-label">Expected Request:</span>
+            <span>{expected_request_str}</span>
+            <span class="info-label">Expected Return:</span>
+            <span>{expected_return_str}</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📝 Activity Details</h2>
+        <div class="info-grid">
+            <span class="info-label">Activity:</span>
+            <span>{req.lab_activity_name}</span>
+            <span class="info-label">Activity Date:</span>
+            <span>{activity_date_str}</span>
+            <span class="info-label">Students:</span>
+            <span>{req.num_students or "N/A"}</span>
+            <span class="info-label">Groups:</span>
+            <span>{req.num_groups or "N/A"}</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📦 Requested Items ({req_summary.total_items})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Item Name</th>
+                    <th style="width: 100px;">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+    </div>
+    
+    {return_details_html}
+    
+    <div class="print-footer">
+        <p>Generated by Laboratory Inventory Management System</p>
+        <p>Printed on: {format_date_short(date.today())}</p>
+    </div>
+</body>
+</html>
+        """
+        return html
+
     def _on_filter_changed(self):
         """Handle any filter change - apply filters and refresh table with batched loading."""
         try:
@@ -670,6 +1013,7 @@ class RequisitionsPage(QWidget):
                 self.delete_button.setEnabled(
                     True
                 )  # Delete always enabled for selected items
+                self.print_button.setEnabled(True)  # Print always enabled for selected
 
                 # Update button tooltips to explain disabled state
                 if is_processed:
@@ -687,6 +1031,7 @@ class RequisitionsPage(QWidget):
                 self.edit_button.setEnabled(False)
                 self.return_button.setEnabled(False)
                 self.delete_button.setEnabled(False)
+                self.print_button.setEnabled(False)
 
             logger.debug(f"Action buttons updated for selection: {has_selection}")
 

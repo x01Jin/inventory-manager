@@ -79,7 +79,11 @@ class ReturnProcessor:
         logger.info("Return processor initialized")
 
     def process_returns(
-        self, requisition_id: int, return_items: List[ReturnItem], editor_name: str
+        self,
+        requisition_id: int,
+        return_items: List[ReturnItem],
+        editor_name: str,
+        condition_types: Optional[dict] = None,
     ) -> bool:
         """
         Process all returns for a requisition in one final operation.
@@ -88,10 +92,14 @@ class ReturnProcessor:
             requisition_id: ID of the requisition
             return_items: List of ReturnItem objects with final return/loss information
             editor_name: Name of person processing the returns
+            condition_types: Dict mapping item_id to condition_type for defective items
 
         Returns:
             bool: True if processing successful
         """
+        if condition_types is None:
+            condition_types = {}
+
         try:
             logger.info(f"Processing final returns for requisition {requisition_id}")
 
@@ -142,6 +150,20 @@ class ReturnProcessor:
                         if return_item.quantity_lost > 0:
                             lost_items.append(
                                 f"{return_item.quantity_lost}x (ID: {return_item.item_id})"
+                            )
+
+                        # Record defective items (per beta test B.2)
+                        if return_item.quantity_defective > 0:
+                            condition = condition_types.get(
+                                return_item.item_id, "OTHER"
+                            )
+                            self._record_defective_item(
+                                requisition_id,
+                                return_item.item_id,
+                                return_item.quantity_defective,
+                                condition,
+                                return_item.defective_notes,
+                                editor_name,
                             )
 
                 # Update requisition status to final "returned"
@@ -301,6 +323,54 @@ class ReturnProcessor:
             )
         except Exception as e:
             logger.error(f"Failed to update requisition {requisition_id} status: {e}")
+
+    def _record_defective_item(
+        self,
+        requisition_id: int,
+        item_id: int,
+        quantity: int,
+        condition_type: str,
+        notes: str,
+        reported_by: str,
+    ) -> None:
+        """
+        Record defective/broken items in the Defective_Items table.
+
+        Per beta test requirement B.2: Add info for defective/broken items returned.
+
+        Args:
+            requisition_id: ID of the requisition
+            item_id: ID of the item
+            quantity: Number of defective items
+            condition_type: Type of defect (BROKEN, DEFECTIVE, DAMAGED, OTHER)
+            notes: Additional notes about the defect
+            reported_by: Name of person reporting
+        """
+        try:
+            query = """
+            INSERT INTO Defective_Items (item_id, requisition_id, quantity, condition_type, notes, reported_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+            db.execute_update(
+                query,
+                (
+                    item_id,
+                    requisition_id,
+                    quantity,
+                    condition_type,
+                    notes or "",
+                    reported_by,
+                ),
+            )
+            logger.info(
+                f"Recorded {quantity} defective items (ID: {item_id}) with condition '{condition_type}' "
+                f"for requisition {requisition_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to record defective item {item_id} for requisition {requisition_id}: {e}"
+            )
+            # Don't raise - defective recording failure shouldn't block return processing
 
     def get_requisition_items_for_return(self, requisition_id: int) -> List[ReturnItem]:
         """

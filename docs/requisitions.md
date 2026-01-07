@@ -24,9 +24,32 @@ Workflow
 
 - Returns and partial returns supported with logging of consumed or lost items.
 
-- Filtering and status: the requisitions UI supports filtering by status and the dashboard/statistics include requested requisitions in their summaries.
+- Filtering and status: the requisitions UI supports filtering by status and the dashboard/statistics include requested requisitions in their summaries. Filters include search (by requester name, activity, items), requester dropdown, status dropdown, and date range.
 
 - Returns UX: return flows present clear summaries, confirmation prompts, and validation to reduce errors during return processing. Returned requisitions are rendered using a consistent theme color to make returned status easy to identify in lists and previews.
+
+Defective Items Tracking
+
+- During return processing, non-consumable items can be marked as defective
+- For each defective item, users specify:
+  - Quantity defective (separate from lost count)
+  - Condition type: BROKEN, DEFECTIVE, DAMAGED, or OTHER
+  - Optional notes describing the defect
+- Defective items are recorded to the `Defective_Items` table for reporting
+- Defective Items Report available in Reports page
+
+Print Functionality
+
+- Requisitions can be exported to printable HTML format
+- Click the "Print" button when a requisition is selected
+- HTML report includes:
+  - Requisition ID and status
+  - Requester information
+  - Timeline (expected request/return dates)
+  - Activity details
+  - Complete items list with quantities
+  - Return details (for processed requisitions)
+- Open the HTML file in a browser and use Ctrl+P to print
 
 Validation & Audit
 

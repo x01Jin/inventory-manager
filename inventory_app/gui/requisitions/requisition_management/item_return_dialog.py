@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QSpinBox,
     QWidget,
+    QComboBox,
+    QLineEdit,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -34,10 +36,17 @@ from inventory_app.gui.styles import DarkTheme
 
 
 class ReturnItemWidget(QWidget):
-    """Simplified widget for handling return/loss input for a single item."""
+    """Simplified widget for handling return/loss input for a single item.
+
+    For non-consumables, also tracks defective/broken items with condition type and notes
+    per beta test requirement B.2.
+    """
 
     # Signal emitted when return/loss values change
     valueChanged = pyqtSignal()
+
+    # Condition types for defective items
+    CONDITION_TYPES = ["BROKEN", "DEFECTIVE", "DAMAGED", "OTHER"]
 
     def __init__(self, return_item: ReturnItem, item_name: str, parent=None):
         super().__init__(parent)
@@ -71,7 +80,7 @@ class ReturnItemWidget(QWidget):
 
         # Return controls section - simplified based on item type
         controls_layout = QVBoxLayout()
-        controls_layout.setSpacing(8)
+        controls_layout.setSpacing(4)
 
         if self.return_item.is_consumable:
             # For consumables: return spinbox (how much is being returned unused)
@@ -87,10 +96,10 @@ class ReturnItemWidget(QWidget):
             return_layout.addStretch()
             controls_layout.addLayout(return_layout)
         else:
-            # For non-consumables: lost spinbox (how much was lost/damaged)
+            # For non-consumables: lost spinbox + defective items tracking
             lost_layout = QHBoxLayout()
             lost_layout.setSpacing(5)
-            lost_layout.addWidget(QLabel("❌ Lost/Damaged:"))
+            lost_layout.addWidget(QLabel("❌ Lost:"))
             self.lost_spin = QSpinBox()
             self.lost_spin.setRange(0, self.return_item.quantity_requested)
             self.lost_spin.setValue(0)  # Default to none lost
@@ -100,7 +109,39 @@ class ReturnItemWidget(QWidget):
             lost_layout.addStretch()
             controls_layout.addLayout(lost_layout)
 
-        layout.addLayout(controls_layout, 2)
+            # Defective items section (per beta test B.2)
+            defective_layout = QHBoxLayout()
+            defective_layout.setSpacing(5)
+            defective_layout.addWidget(QLabel("⚠️ Defective:"))
+            self.defective_spin = QSpinBox()
+            self.defective_spin.setRange(0, self.return_item.quantity_requested)
+            self.defective_spin.setValue(0)
+            self.defective_spin.setFixedWidth(60)
+            self.defective_spin.valueChanged.connect(self._on_defective_changed)
+            defective_layout.addWidget(self.defective_spin)
+
+            # Condition type dropdown
+            self.condition_combo = QComboBox()
+            self.condition_combo.addItems(self.CONDITION_TYPES)
+            self.condition_combo.setFixedWidth(100)
+            self.condition_combo.setEnabled(False)  # Enable when defective > 0
+            self.condition_combo.currentTextChanged.connect(self._on_condition_changed)
+            defective_layout.addWidget(self.condition_combo)
+            defective_layout.addStretch()
+            controls_layout.addLayout(defective_layout)
+
+            # Notes for defective items
+            notes_layout = QHBoxLayout()
+            notes_layout.setSpacing(5)
+            notes_layout.addWidget(QLabel("📝 Notes:"))
+            self.notes_input = QLineEdit()
+            self.notes_input.setPlaceholderText("Describe defect (optional)")
+            self.notes_input.setEnabled(False)  # Enable when defective > 0
+            self.notes_input.textChanged.connect(self._on_notes_changed)
+            notes_layout.addWidget(self.notes_input)
+            controls_layout.addLayout(notes_layout)
+
+        layout.addLayout(controls_layout, 3)
 
         # Summary section
         summary_layout = QVBoxLayout()
@@ -133,7 +174,45 @@ class ReturnItemWidget(QWidget):
     def _on_lost_changed(self, value: int):
         """Handle lost quantity change for non-consumables."""
         self.return_item.quantity_lost = value
+        self._update_defective_max()
         self._update_display()
+
+    def _on_defective_changed(self, value: int):
+        """Handle defective quantity change for non-consumables."""
+        self.return_item.quantity_defective = value
+        # Enable/disable condition and notes based on defective quantity
+        has_defective = value > 0
+        self.condition_combo.setEnabled(has_defective)
+        self.notes_input.setEnabled(has_defective)
+        self._update_display()
+
+    def _on_condition_changed(self, condition: str):
+        """Handle condition type change."""
+        # Store condition type in return_item for later use
+        # The return_processor will use this when saving defective items
+        pass  # Condition is read directly from combo when processing
+
+    def _on_notes_changed(self, notes: str):
+        """Handle notes change for defective items."""
+        self.return_item.defective_notes = notes
+
+    def _update_defective_max(self):
+        """Update defective spinbox max based on returned quantity."""
+        if not self.return_item.is_consumable and hasattr(self, "defective_spin"):
+            # Defective can only be from items that were returned (not lost)
+            max_defective = (
+                self.return_item.quantity_requested - self.return_item.quantity_lost
+            )
+            self.defective_spin.setMaximum(max_defective)
+            # Clamp current value if needed
+            if self.defective_spin.value() > max_defective:
+                self.defective_spin.setValue(max_defective)
+
+    def get_condition_type(self) -> str:
+        """Get selected condition type for defective items."""
+        if hasattr(self, "condition_combo"):
+            return self.condition_combo.currentText()
+        return "OTHER"
 
     def _update_display(self):
         """Update status and summary displays."""
@@ -172,10 +251,18 @@ class ReturnItemWidget(QWidget):
                 return "❌ All consumed"
         else:
             lost = self.return_item.quantity_lost
+            defective = self.return_item.quantity_defective
+            returned = self.return_item.quantity_requested - lost
+
+            parts = []
+            if returned > 0:
+                parts.append(f"✅ {returned} returned")
             if lost > 0:
-                return f"❌ {lost} lost/damaged"
-            else:
-                return "✅ All returned"
+                parts.append(f"❌ {lost} lost")
+            if defective > 0:
+                parts.append(f"⚠️ {defective} defective")
+
+            return " | ".join(parts) if parts else "✅ All returned"
 
 
 class ItemReturnDialog(QDialog):
@@ -397,11 +484,31 @@ class ItemReturnDialog(QDialog):
 
         if non_consumables:
             total_lost = sum(item.quantity_lost for item in non_consumables)
+            total_defective = sum(item.quantity_defective for item in non_consumables)
             summary_parts.append(f"     Non-consumables lost: {total_lost}     ")
+            if total_defective > 0:
+                summary_parts.append(f"     Defective: {total_defective}     ")
 
         self.summary_label.setText(" | ".join(summary_parts))
 
         # Button stays enabled - validation happens during processing
+
+    def _collect_defective_condition_types(self) -> dict:
+        """Collect condition types from widgets for defective items.
+
+        Returns:
+            Dict mapping item_id to condition_type string
+        """
+        condition_types = {}
+        for widget in self.item_widgets:
+            if (
+                not widget.return_item.is_consumable
+                and widget.return_item.quantity_defective > 0
+            ):
+                condition_types[widget.return_item.item_id] = (
+                    widget.get_condition_type()
+                )
+        return condition_types
 
     def process_returns(self):
         """Process the final returns - one-time operation."""
@@ -430,9 +537,15 @@ class ItemReturnDialog(QDialog):
                 QMessageBox.warning(self, "Required", "Editor name is required.")
                 return
 
-            # Process final returns
+            # Collect condition types from widgets before processing
+            condition_types = self._collect_defective_condition_types()
+
+            # Process final returns (includes defective items recording)
             success = self.return_processor.process_returns(
-                self.requisition_id, self.return_items, editor_name.strip()
+                self.requisition_id,
+                self.return_items,
+                editor_name.strip(),
+                condition_types,
             )
 
             if success:
