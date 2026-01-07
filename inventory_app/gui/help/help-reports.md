@@ -10,10 +10,10 @@ The Reports page is where you generate, inspect, and export detailed, Excel-comp
 
 ## **Report Types & Tabs**
 
-There are three main tabs (Usage, Inventory, Trends). Choose the tab that matches your need, configure options, and click **Generate Report**.
+There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trends Reports**. Choose the tab that matches your need, configure options, and click **Generate Report**.
 
-- **Usage Reports:** Time-bucketed usage of items across the selected date range. Supports filtering by **Category** and **Supplier**, and an **Include consumables** checkbox to toggle consumable items.
-- **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, and **Calibration Due Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows).
+- **Usage Reports:** Time-bucketed usage of items across the selected date range. Choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/quarterly granularity). Supports filtering by **Category**. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
+- **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, **Calibration Due Report**, **Update History Report**, **Disposal History Report**, **Usage by Grade Level**, and **Defective Items Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows). Others show current or historical state.
 - **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Quarterly), and an optional **Top N** filter (Top 10/20/50/All).
 
 ## **Filters & Options**
@@ -27,20 +27,26 @@ There are three main tabs (Usage, Inventory, Trends). Choose the tab that matche
 
 ## **What each report contains (at-a-glance)**
 
-- **Usage Reports:** A period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels).
-- **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits.
+- **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, WEEK 1-4, and Total Usage. Professional layout matching laboratory standards.
+- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels). Filtered by category.
+- **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits. Shows separate counts for consumables (with consumption deduction) and non-consumables (showing original stock).
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
-- **Acquisition History:** Incoming/received batches and quantities during the date range.
+- **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).
 - **Calibration Due Report:** Non-consumable items with calibration due within the selected window.
+- **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, and reason for editing.
+- **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
+- **Usage by Grade Level:** Usage breakdown by requester grade level and section, showing lab activity name and date. Useful for tracking material usage across different educational groups.
+- **Defective Items Report:** Items reported as defective or damaged during requisition returns, including condition type, quantity, notes, and who reported.
 - **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, etc.) depending on granularity.
 
 ## **File output & naming**
 
 - Reports are exported in Excel (.xlsx) format. Default file names follow predictable patterns:
-  - Usage: `<granularity>_report_YYYYMMDD_HHMMSS.xlsx` (e.g., `daily_report_20251201_120000.xlsx`)
-  - Inventory: `inventory_<report_type>_YYYYMMDD_HHMMSS.xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
-  - Trends: `trends_report_<group_by>_YYYYMMDD_HHMMSS.xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
+  - Monthly Usage: `monthly_usage_report_[MONTH]_YYYYMMDD_HHMMSS.xlsx`
+  - Date Range Usage: `usage_report_[granularity]_YYYYMMDD_HHMMSS.xlsx` (e.g., `usage_report_daily_20251201_120000.xlsx`)
+  - Inventory: `inventory_[report_type]_YYYYMMDD_HHMMSS.xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
+  - Trends: `trends_report_[group_by]_YYYYMMDD_HHMMSS.xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
 - The application saves the file to the application's working directory and will attempt to open it automatically (on Windows the app uses the OS to open the file). If automatic opening fails, the saved file path is shown in the status area so you can open it manually.
 
 ## **Status & results panels**
@@ -57,8 +63,12 @@ There are three main tabs (Usage, Inventory, Trends). Choose the tab that matche
 
 ## **Quick recipes / common tasks**
 
-- **Generate a usage report for last month:** Select **Usage Reports** → choose the **Last Month** preset → set filters (optional) → **Generate Report**.
+- **Generate a monthly usage report:** Select **Usage Reports** → choose **Monthly Usage** → select year and month → set category filter (optional) → **Generate Report**.
+- **Generate a date range usage report for last month:** Select **Usage Reports** → choose **Date Range** → set date range to **Last Month** → **Generate Report**.
+- **Track material usage by grade level:** Select **Inventory Reports** → choose **Usage by Grade Level** → set date range → **Generate Report**.
 - **Find low stock items:** Select **Inventory Reports** → choose **Low Stock Alert** → (optionally) toggle absolute threshold → **Generate Report**.
+- **View edit history for items:** Select **Inventory Reports** → choose **Update History Report** → set date range → **Generate Report**.
+- **Check for defective items returned:** Select **Inventory Reports** → choose **Defective Items Report** → set date range → **Generate Report**.
 - **Create a trends report for top items:** Select **Trends Reports** → choose date range → set **Group By** to `Item` and **Top Items** to `Top 10` → **Generate Report**.
 
 ## **Limitations & notes**

@@ -6,7 +6,8 @@ The Requisitions page is where you create, manage, and finalize requests for inv
 
 - **➕ New Requisition:** Open the Create dialog to build a new requisition. Requires selecting a **Requester**, adding one or more **Items**, and setting activity and schedule details. Creation uses an immediate transaction to reserve stock atomically.
 - **✏️ Edit Requisition:** Enabled when a requisition row is selected. Opens the Edit dialog to change requester, items, schedule, and activity details. Editing is disabled for fully processed (returned) requisitions.
-- **↩️ Return Items:** Opens the one-time Final Return dialog for the selected requisition. Use this to record returned quantities, lost/damaged non-consumables, and to finalize the requisition (locks it permanently).
+- **↩️ Return Items:** Opens the one-time Final Return dialog for the selected requisition. Use this to record returned quantities, lost/damaged non-consumables, and defective items, then finalize and lock the requisition.
+- **🖨️ Print:** Enabled when a requisition row is selected. Generates an HTML report of the selected requisition with all details for printing or archival.
 - **🗑️ Delete Requisition:** Permanently deletes the selected requisition (prompt + editor name required). Deletion cannot be undone and removes related records.
 - **🔄 Refresh:** Reloads requisition data, updates statuses (requested/active/overdue) and requester options.
 
@@ -72,16 +73,31 @@ After creation the requisition is visible in the table and requests/reservations
 1. Select the requisition and click **↩️ Return Items**.
 2. Read the warning: this is a ONE-TIME, FINAL process. Once you click 'Process Returns' the requisition will be LOCKED and cannot be edited.
 3. For **Consumables:** specify how many were returned unused (any remainder is considered consumed).
-4. For **Non-Consumables:** specify how many were lost/damaged (returned count = requested - lost).
-5. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption) and locks the requisition.
+4. For **Non-Consumables:** specify how many were lost/damaged and how many were defective/broken. For defective items:
+   - Enter the quantity of defective/broken items
+   - Select the condition type (BROKEN, DEFECTIVE, DAMAGED, or OTHER)
+   - Add optional notes describing the defect
+5. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption), defective items (if any), and locks the requisition.
 
 Tips:
 
-- Ensure every requested quantity is accounted for before processing. The dialog summarizes returned/consumed/lost counts to help.
+- Ensure every requested quantity is accounted for before processing (returned + lost + defective = requested). The dialog summarizes these counts to help.
+- Defective/broken items are recorded separately in the system and can be tracked in the Defective Items Report.
 
 ## **Delete a Requisition**
 
 - Select a requisition and click **🗑️ Delete Requisition**. You will be asked to confirm and enter your name/initials. Deletion is permanent and removes associated requisition items and related records.
+
+## **Print a Requisition**
+
+- Select a requisition and click **🖨️ Print**. An HTML file will be generated containing a professional, formatted report of the requisition with:
+  - Requisition ID and status
+  - Requester information (name, affiliation, group)
+  - Timeline (expected request and return dates)
+  - Activity details (name, date, students, groups)
+  - Complete list of requested items and quantities
+  - For returned requisitions: return details showing consumables returned/consumed, non-consumables returned/lost, and defective items
+- You will be prompted to choose a save location and filename for the HTML file. You can open the file in any web browser and use the browser's print function (Ctrl+P) to print or save as PDF.
 
 ## **Validation & common warnings**
 

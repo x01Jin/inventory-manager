@@ -20,14 +20,14 @@ Welcome to the Laboratory Inventory Monitor — this page gives non-technical, p
 
 ## Common tasks
 
-- Add an item: Go to **Inventory** → `➕ Add Item`. Fill the form and save.
+- Add an item: Go to **Inventory** → `➕ Add Item`. Select a category (dates will auto-populate based on category), fill the form, and save.
 - Edit an item: Select a row and click `✏️ Edit Item`, or double-click a row to open the editor.
 - Delete an item: Select it and click `🗑️ Delete Item`. You will be asked for your name and a reason. Deletion is permanent — use caution.
 - Search & filters: Use the search box and filters (Category, Supplier, etc.) on the Inventory and Requisitions pages to narrow results.
-- Work with requisitions: **Requisitions** → `➕ New Requisition` to create; select a requisition to `✏️ Edit`, `↩️ Return Items` (finalize and lock), or `🗑️ Delete` (requires editor name).
+- Work with requisitions: **Requisitions** → `➕ New Requisition` to create; select a requisition to `✏️ Edit`, `↩️ Return Items` (finalize and lock), `🖨️ Print` (export to HTML and print), or `🗑️ Delete` (requires editor name).
 - Manage requesters: **Requesters** → `➕ Add Requester` to register people who can request items. You cannot delete a requester if they have recorded requisitions.
-- Generate exports: **Reports** → choose a report type, set date range and filters, then click `🚀 Generate Report`. Reports are saved as Excel files and may open automatically.
-- Manage lookup lists: **Settings** → Add/Edit/Delete Sizes, Brands, Suppliers, and Categories. These values appear in dropdowns across the app.
+- Generate exports: **Reports** → choose a report type (Monthly Usage, Stock Levels, Defective Items, Update History, etc.), set date range and filters, then click `🚀 Generate Report`. Reports are saved as Excel files and may open automatically.
+- Manage lookup lists: **Settings** → Add/Edit/Delete Sizes, Brands, and Suppliers. Categories are **predefined and fixed** and cannot be modified. These values populate dropdowns across the app.
 
 ## Important behaviors & rules
 
