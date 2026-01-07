@@ -14,6 +14,7 @@ The Usage Reports tab provides two distinct report types accessible through a dr
 Generates a detailed monthly report in the format specified in beta test requirements #20, #21:
 
 - **Format**: Excel file with category-grouped items and weekly breakdown
+- **Data Filtering**: Only items with actual usage during the month are included (items with zero usage are excluded from the report)
 - **Layout**:
   - Row 1: Empty (spacing)
   - Row 2: Title header merged in columns F-G ("REPORT ON THE USAGE OF LABORATORY MATERIALS, EQUIPMENT AND APPRATUSES, ETC. FOR THE MONTH OF [MONTH]")

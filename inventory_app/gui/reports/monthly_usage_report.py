@@ -258,7 +258,9 @@ def get_monthly_usage_data(
                 total_usage += item_usage
 
             row["Total Number of Usage per Item"] = total_usage
-            result.append(row)
+            # Only include items with actual usage in the monthly report
+            if total_usage > 0:
+                result.append(row)
 
         return result, weeks
 
