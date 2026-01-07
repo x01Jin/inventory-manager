@@ -45,6 +45,8 @@ Stock & Alerts
 
 - The inventory table uses row background colors to indicate items requiring attention. Overdue items (expired, disposal overdue, or calibration overdue) display a reddish pink background. Items with approaching deadlines (warnings) display a pale yellow background. For non-consumable items with multiple dates, the most critical status determines the row color.
 
+- **Items with 0 current stock are excluded from alerts and indicators**: When items reach 0 stock (fully depleted/disposed), they remain in the database for historical record and requisition integrity, but are excluded from expiration alerts, calibration alerts, and low stock warnings. This prevents alerts on items that are already depleted or disposed of.
+
 - Data integrity: database-level triggers prevent stock movements that would make the available quantity for a batch or an item negative. The application performs validation and uses transactions to avoid oversubscription, but these triggers provide a defensive constraint at the database level.
 
 ## Alert Thresholds

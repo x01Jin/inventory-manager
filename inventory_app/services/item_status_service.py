@@ -78,20 +78,49 @@ class ItemStatusService:
     def get_all_items_status(self) -> List[ItemStatus]:
         """
         Get status for all items in the inventory.
+        Excludes items with 0 current stock to prevent alerts for depleted items.
 
         Returns:
             List of ItemStatus objects
         """
         try:
-            # Get all items with their data
+            # Get all items with their data, excluding items with 0 stock
+            # Items with 0 stock are assumed to be depleted/disposed and should not trigger alerts
+            from inventory_app.services.movement_types import MovementType
+
             query = """
             SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
                    i.acquisition_date, c.name as category_name
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) -
+                    COALESCE(movements.consumed_qty, 0) -
+                    COALESCE(movements.disposed_qty, 0) +
+                    COALESCE(movements.returned_qty, 0) as total_stock
+                FROM Item_Batches ib
+                LEFT JOIN (
+                    SELECT
+                        sm.item_id,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
+                    FROM Stock_Movements sm
+                    GROUP BY sm.item_id
+                ) movements ON ib.item_id = movements.item_id
+                GROUP BY ib.item_id
+            ) stock ON i.id = stock.item_id
+            WHERE COALESCE(stock.total_stock, 0) > 0
             ORDER BY i.name
             """
-            rows = db.execute_query(query)
+            params = (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
+            rows = db.execute_query(query, params)
             statuses = []
 
             for item_data in rows:
@@ -99,7 +128,9 @@ class ItemStatusService:
                 if status:
                     statuses.append(status)
 
-            logger.debug(f"Calculated status for {len(statuses)} items")
+            logger.debug(
+                f"Calculated status for {len(statuses)} items (excluding 0-stock items)"
+            )
             return statuses
 
         except Exception as e:

@@ -338,7 +338,9 @@ class InventoryTable(QTableWidget):
                 name_item.setData(Qt.ItemDataRole.UserRole, item_id)
 
             # Apply row-level styling based on item status
-            self._apply_row_styling(row, item_status)
+            # Skip styling for items with 0 stock (depleted/disposed items)
+            if total_stock > 0:
+                self._apply_row_styling(row, item_status)
 
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")

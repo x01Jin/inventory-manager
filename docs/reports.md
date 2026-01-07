@@ -106,6 +106,14 @@ Generates a time-series usage report for any custom date range with automatic gr
   - `excel_utils` (inventory_app/gui/reports/excel_utils.py): Excel file creation and styling:
     - `create_excel_report(data, output_path, title, start_date, end_date, granularity=None) -> None` — writes the workbook, applies header styling, numeric formatting, autofilter, frozen header pane, and increases header column padding to prevent sort/filter control overlap.
 
+- **Zero-Stock Item Filtering**: Items with 0 current stock (fully depleted or disposed) are excluded from:
+  - Expiration alerts/reports (items are assumed depleted and no longer relevant for expiration tracking)
+  - Calibration alerts/reports (items are assumed disposed and no longer need calibration tracking)
+  - Stock level reports (items with 0 stock are filtered out to show only active inventory)
+  - Low stock warnings (percentage thresholds skip items with 0 original stock)
+  - Dashboard alerts and status indicators
+  - Note: Zero-stock items remain in the inventory table and database for historical record keeping and requisition integrity
+
 - Excel export details:
   - Uses `openpyxl.Workbook` to construct reports.
   - Headers are formatted via `_format_excel_headers` and period keys are turned into human-readable labels (daily/weekly/monthly/quarterly/yearly) with `ReportDateFormatter` helpers.

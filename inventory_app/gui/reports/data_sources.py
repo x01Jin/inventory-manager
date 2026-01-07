@@ -90,6 +90,7 @@ def get_dynamic_report_data(
 
 def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
     """Get stock levels data with differentiated logic for consumables vs non-consumables.
+    Excludes items with 0 current stock (depleted/disposed items).
 
     Per beta test requirements:
     - Consumables: deduct consumed quantity from original stock
@@ -137,7 +138,12 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable ORDER BY c.name, i.name"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable"
+
+        # Filter out items with 0 current stock (depleted/disposed items)
+        query += ' HAVING "Current Stock" > 0'
+
+        query += " ORDER BY c.name, i.name"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -223,6 +229,10 @@ def get_trends_data(
 def get_expiration_data(
     start_date: date, end_date: date, category_filter: str = ""
 ) -> List[Dict]:
+    """Get expiration data, excluding items with 0 current stock.
+
+    Items with 0 stock are assumed to be depleted/disposed and should not appear in alerts.
+    """
     try:
         query = """
             SELECT
@@ -231,21 +241,47 @@ def get_expiration_data(
                 i.size AS "Size",
                 i.brand AS "Brand",
                 i.expiration_date AS "Expiration Date",
-                COALESCE(SUM(ib.quantity_received), 0) AS "Stock Quantity",
+                COALESCE(stock.total_stock, 0) AS "Stock Quantity",
                 i.other_specifications AS "Specifications"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
-            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) -
+                    COALESCE(movements.consumed_qty, 0) -
+                    COALESCE(movements.disposed_qty, 0) +
+                    COALESCE(movements.returned_qty, 0) as total_stock
+                FROM Item_Batches ib
+                LEFT JOIN (
+                    SELECT
+                        sm.item_id,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
+                    FROM Stock_Movements sm
+                    GROUP BY sm.item_id
+                ) movements ON ib.item_id = movements.item_id
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+            ) stock ON i.id = stock.item_id
             WHERE i.expiration_date BETWEEN ? AND ?
+            AND COALESCE(stock.total_stock, 0) > 0
             """
 
-        params = [start_date.isoformat(), end_date.isoformat()]
+        params = [
+            MovementType.CONSUMPTION.value,
+            MovementType.DISPOSAL.value,
+            MovementType.RETURN.value,
+            start_date.isoformat(),
+            end_date.isoformat(),
+        ]
 
         if category_filter:
             query += " AND c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.expiration_date, i.other_specifications ORDER BY i.expiration_date"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.expiration_date, i.other_specifications, stock.total_stock ORDER BY i.expiration_date"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -355,6 +391,10 @@ def get_acquisition_history_data(
 def get_calibration_due_data(
     start_date: date, end_date: date, category_filter: str = ""
 ) -> List[Dict]:
+    """Get calibration due data, excluding items with 0 current stock.
+
+    Items with 0 stock are assumed to be depleted/disposed and should not appear in alerts.
+    """
     try:
         query = """
             SELECT
@@ -366,10 +406,36 @@ def get_calibration_due_data(
                 i.other_specifications AS "Specifications"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    SUM(ib.quantity_received) -
+                    COALESCE(movements.consumed_qty, 0) -
+                    COALESCE(movements.disposed_qty, 0) +
+                    COALESCE(movements.returned_qty, 0) as total_stock
+                FROM Item_Batches ib
+                LEFT JOIN (
+                    SELECT
+                        sm.item_id,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
+                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
+                    FROM Stock_Movements sm
+                    GROUP BY sm.item_id
+                ) movements ON ib.item_id = movements.item_id
+                GROUP BY ib.item_id
+            ) stock ON i.id = stock.item_id
             WHERE i.calibration_date BETWEEN ? AND ?
+            AND COALESCE(stock.total_stock, 0) > 0
             """
 
-        params = [start_date.isoformat(), end_date.isoformat()]
+        params = [
+            MovementType.CONSUMPTION.value,
+            MovementType.DISPOSAL.value,
+            MovementType.RETURN.value,
+            start_date.isoformat(),
+            end_date.isoformat(),
+        ]
 
         if category_filter:
             query += " AND c.name = ?"
