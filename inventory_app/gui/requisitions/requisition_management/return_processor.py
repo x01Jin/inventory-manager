@@ -83,7 +83,6 @@ class ReturnProcessor:
         requisition_id: int,
         return_items: List[ReturnItem],
         editor_name: str,
-        condition_types: Optional[dict] = None,
     ) -> bool:
         """
         Process all returns for a requisition in one final operation.
@@ -92,14 +91,10 @@ class ReturnProcessor:
             requisition_id: ID of the requisition
             return_items: List of ReturnItem objects with final return/loss information
             editor_name: Name of person processing the returns
-            condition_types: Dict mapping item_id to condition_type for defective items
 
         Returns:
             bool: True if processing successful
         """
-        if condition_types is None:
-            condition_types = {}
-
         try:
             logger.info(f"Processing final returns for requisition {requisition_id}")
 
@@ -154,14 +149,10 @@ class ReturnProcessor:
 
                         # Record defective items (per beta test B.2)
                         if return_item.quantity_defective > 0:
-                            condition = condition_types.get(
-                                return_item.item_id, "OTHER"
-                            )
                             self._record_defective_item(
                                 requisition_id,
                                 return_item.item_id,
                                 return_item.quantity_defective,
-                                condition,
                                 return_item.defective_notes,
                                 editor_name,
                             )
@@ -329,7 +320,6 @@ class ReturnProcessor:
         requisition_id: int,
         item_id: int,
         quantity: int,
-        condition_type: str,
         notes: str,
         reported_by: str,
     ) -> None:
@@ -342,14 +332,13 @@ class ReturnProcessor:
             requisition_id: ID of the requisition
             item_id: ID of the item
             quantity: Number of defective items
-            condition_type: Type of defect (BROKEN, DEFECTIVE, DAMAGED, OTHER)
-            notes: Additional notes about the defect
+            notes: Description of the defect
             reported_by: Name of person reporting
         """
         try:
             query = """
-            INSERT INTO Defective_Items (item_id, requisition_id, quantity, condition_type, notes, reported_by)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by)
+            VALUES (?, ?, ?, ?, ?)
             """
             db.execute_update(
                 query,
@@ -357,13 +346,12 @@ class ReturnProcessor:
                     item_id,
                     requisition_id,
                     quantity,
-                    condition_type,
                     notes or "",
                     reported_by,
                 ),
             )
             logger.info(
-                f"Recorded {quantity} defective items (ID: {item_id}) with condition '{condition_type}' "
+                f"Recorded {quantity} defective items (ID: {item_id}) "
                 f"for requisition {requisition_id}"
             )
         except Exception as e:
@@ -549,6 +537,39 @@ class ReturnProcessor:
                 f"Failed to get return summary for requisition {requisition_id}: {e}"
             )
             return {}
+
+    def get_requisition_defective_items(self, requisition_id: int) -> list:
+        """
+        Get all defective items recorded for a requisition.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            List of defective items with details (item name, quantity, notes, reported by)
+        """
+        try:
+            query = """
+            SELECT
+                i.name AS item_name,
+                di.quantity,
+                di.notes,
+                di.reported_by,
+                di.reported_date,
+                c.name AS category
+            FROM Defective_Items di
+            JOIN Items i ON i.id = di.item_id
+            JOIN Categories c ON c.id = i.category_id
+            WHERE di.requisition_id = ?
+            ORDER BY di.reported_date DESC, i.name
+            """
+            return db.execute_query(query, (requisition_id,)) or []
+
+        except Exception as e:
+            logger.error(
+                f"Failed to get defective items for requisition {requisition_id}: {e}"
+            )
+            return []
 
 
 # Global instance for easy access

@@ -398,6 +398,33 @@ class RequisitionPreview(QWidget):
                     item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
                     layout.addWidget(item_label)
 
+            # Defective Items (if any)
+            defective_items = return_processor.get_requisition_defective_items(
+                requisition_id
+            )
+
+            if defective_items:
+                defective_section = QLabel("⚠️ Defective Items:")
+                defective_section.setStyleSheet(
+                    "font-weight: bold; font-size: 10pt; margin-top: 5px;"
+                )
+                layout.addWidget(defective_section)
+
+                for item in defective_items:
+                    item_label = QLabel(
+                        f"  • {item['item_name']} (x{item['quantity']})"
+                    )
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+                    if item["notes"]:
+                        notes_label = QLabel(f"    Issue: {item['notes']}")
+                        notes_label.setStyleSheet(
+                            f"font-size: 9pt; margin-left: 20px; color: {DarkTheme.WARNING_COLOR}; font-style: italic;"
+                        )
+                        notes_label.setWordWrap(True)
+                        layout.addWidget(notes_label)
+
             # Summary totals
             totals_label = QLabel(
                 f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost"

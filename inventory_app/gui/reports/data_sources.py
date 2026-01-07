@@ -757,7 +757,6 @@ def get_defective_items_data(
                 i.size AS "Size",
                 i.brand AS "Brand",
                 di.quantity AS "Defective Quantity",
-                di.condition_type AS "Condition",
                 di.notes AS "Notes",
                 di.reported_by AS "Reported By",
                 di.reported_date AS "Report Date",
