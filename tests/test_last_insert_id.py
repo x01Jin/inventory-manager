@@ -1,5 +1,5 @@
 from inventory_app.database.connection import db
-from inventory_app.database.models import Category, Supplier
+from inventory_app.database.models import Supplier
 
 
 def setup_temp_db(tmp_path):
@@ -31,19 +31,11 @@ def test_execute_update_returns_last_id(tmp_path):
 def test_model_save_sets_id(tmp_path):
     setup_temp_db(tmp_path)
 
-    cat = Category(name="ModelCat")
-    saved = cat.save()
-    assert saved is True
-    assert cat.id is not None and cat.id > 0
-
-    # Confirm via DB
-    rows = db.execute_query("SELECT * FROM Categories WHERE id = ?", (cat.id,))
-    assert rows and rows[0]["name"] == "ModelCat"
-
-    # Also test supplier
+    # Categories are now fixed (v0.7.0b patch) and don't have save() method
+    # Test with Supplier instead which still has save()
     sup = Supplier(name="TestSupplier")
-    saved = sup.save()
-    assert saved is True
+    success, message = sup.save()
+    assert success is True
     assert sup.id is not None and sup.id > 0
 
     rows = db.execute_query("SELECT * FROM Suppliers WHERE id = ?", (sup.id,))

@@ -10,9 +10,10 @@ def test_build_dynamic_report_query_uses_placeholders():
     query, params = builder.build_dynamic_report_query(start, end, "daily")
 
     # Query should use placeholders for date bounds and other comparisons
+    # After patch, lab_activity_date is used instead of expected_request
     assert (
-        "r.expected_request >= ? AND r.expected_request < ?" in query
-        or "r.expected_request >= ?" in query
+        "r.lab_activity_date >= ? AND r.lab_activity_date < ?" in query
+        or "r.lab_activity_date >= ?" in query
     )
     # Last two params should be the global bounds that cover period columns
     from inventory_app.gui.reports.report_utils import date_formatter

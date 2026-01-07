@@ -47,6 +47,9 @@ def test_usage_report_generates_valid_excel(tmp_path):
     r1.expected_request = datetime(2023, 1, 1, 10, 0, 0)
     r1.expected_return = datetime(2023, 1, 2, 10, 0, 0)
     r1.lab_activity_name = "Chem Lab"
+    r1.lab_activity_date = date(
+        2023, 1, 1
+    )  # Reports use lab_activity_date for usage counting
     assert r1.save("tester") is True
     assert r1.id is not None
 
@@ -64,6 +67,9 @@ def test_usage_report_generates_valid_excel(tmp_path):
     r2.expected_request = datetime(2023, 1, 2, 11, 0, 0)
     r2.expected_return = datetime(2023, 1, 3, 11, 0, 0)
     r2.lab_activity_name = "Bio Lab"
+    r2.lab_activity_date = date(
+        2023, 1, 2
+    )  # Reports use lab_activity_date for usage counting
     assert r2.save("tester") is True
     assert r2.id is not None
 
