@@ -448,23 +448,26 @@ def get_disposal_history_data(
     try:
         query = """
             SELECT
-                i.name AS "Item Name",
-                c.name AS "Category",
-                i.size AS "Size",
-                i.brand AS "Brand",
+                COALESCE(i.name, '[Item Deleted]') AS "Item Name",
+                COALESCE(c.name, '[Category Unknown]') AS "Category",
+                COALESCE(i.size, '-') AS "Size",
+                COALESCE(i.brand, '-') AS "Brand",
                 dh.reason AS "Disposal Reason",
                 dh.disposal_timestamp AS "Disposal Date",
                 dh.editor_name AS "Disposed By"
             FROM Disposal_History dh
-            JOIN Items i ON i.id = dh.item_id
-            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Items i ON i.id = dh.item_id
+            LEFT JOIN Categories c ON c.id = i.category_id
             WHERE DATE(dh.disposal_timestamp) BETWEEN ? AND ?
             """
 
         params = [start_date.isoformat(), end_date.isoformat()]
 
         if category_filter:
-            query += " AND c.name = ?"
+            query += (
+                " AND (c.name = ? OR (c.name IS NULL AND ? = '[Category Unknown]'))"
+            )
+            params.append(category_filter)
             params.append(category_filter)
 
         query += " ORDER BY dh.disposal_timestamp DESC"

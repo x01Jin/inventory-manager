@@ -599,10 +599,9 @@ class Item:
                     "DELETE FROM Update_History WHERE item_id = ?", (self.id,)
                 )
 
-                # 5. Delete disposal history (only depends on items)
-                logger.info(f"Deleting Disposal_History for item {self.id}")
-                db.execute_update(
-                    "DELETE FROM Disposal_History WHERE item_id = ?", (self.id,)
+                # 5. PRESERVE disposal history (per beta test #16: disposal history profile must persist)
+                logger.info(
+                    f"Preserving Disposal_History for item {self.id} (required for historical reports)"
                 )
 
                 # 6. Finally delete the item itself (no dependencies remain)

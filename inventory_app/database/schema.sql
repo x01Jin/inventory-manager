@@ -233,11 +233,10 @@ CREATE INDEX idx_req_history_req ON Requisition_History(requisition_id);
 -- 13. Disposal_History: Disposed items
 CREATE TABLE Disposal_History (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id INTEGER NOT NULL,
+    item_id INTEGER,
     reason TEXT NOT NULL,
     disposal_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    editor_name TEXT NOT NULL,
-        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
+    editor_name TEXT NOT NULL
 );
 CREATE INDEX idx_movements_source ON Stock_Movements(source_id);
 
