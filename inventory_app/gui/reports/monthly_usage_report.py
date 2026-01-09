@@ -365,7 +365,7 @@ def create_monthly_usage_excel(
         title_text = (
             "REPORT ON THE USAGE OF LABORATORY MATERIALS,\n"
             "EQUIPMENT AND APPRATUSES, ETC.\n"
-            f"FOR THE MONTH OF {month_name}"
+            f"FOR THE MONTH OF {month_name} {year}"
         )
         ws["F2"] = title_text
         ws["F2"].font = title_font
@@ -403,7 +403,7 @@ def create_monthly_usage_excel(
 
         # Month name header over week columns (row 4, columns G onwards)
         month_cell = ws.cell(row=4, column=week_start_col)
-        month_cell.value = month_name  # type: ignore[assignment]
+        month_cell.value = f"{month_name.lower()} {year}"  # type: ignore[assignment]
         month_cell.font = header_font  # Same style as other headers
         month_cell.fill = header_fill  # Same orange color
         month_cell.alignment = center_align
