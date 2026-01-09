@@ -479,9 +479,11 @@ class ReturnProcessor:
                 "consumed_items": [],
                 "returned_non_consumables": [],
                 "lost_non_consumables": [],
+                "defective_items": [],
                 "total_returned": 0,
                 "total_consumed": 0,
                 "total_lost": 0,
+                "total_defective": 0,
             }
 
             # Process each original requisition item
@@ -529,6 +531,21 @@ class ReturnProcessor:
                             {"item_name": item_name, "quantity": returned_quantity}
                         )
                         summary["total_returned"] += returned_quantity
+
+            # Fetch and count defective items
+            defective_query = """
+            SELECT i.name AS item_name, di.quantity
+            FROM Defective_Items di
+            JOIN Items i ON i.id = di.item_id
+            WHERE di.requisition_id = ?
+            """
+            defective_rows = db.execute_query(defective_query, (requisition_id,))
+            if defective_rows:
+                for row in defective_rows:
+                    summary["defective_items"].append(
+                        {"item_name": row["item_name"], "quantity": row["quantity"]}
+                    )
+                    summary["total_defective"] += row["quantity"]
 
             return summary
 

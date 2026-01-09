@@ -427,7 +427,7 @@ class RequisitionPreview(QWidget):
 
             # Summary totals
             totals_label = QLabel(
-                f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost"
+                f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost, {summary['total_defective']} defective"
             )
             totals_label.setStyleSheet(
                 f"font-weight: bold; font-size: 10pt; color: {DarkTheme.SUCCESS_COLOR}; margin-top: 8px;"

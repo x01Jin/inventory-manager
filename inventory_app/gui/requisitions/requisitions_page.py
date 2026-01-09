@@ -762,7 +762,7 @@ class RequisitionsPage(QWidget):
 
                     return_details_html += f"""
                         <p class="totals"><strong>Totals:</strong> {summary["total_returned"]} returned, 
-                        {summary["total_consumed"]} consumed, {summary["total_lost"]} lost</p>
+                        {summary["total_consumed"]} consumed, {summary["total_lost"]} lost, {summary["total_defective"]} defective</p>
                     </div>
                     """
             except Exception:
