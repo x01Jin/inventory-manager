@@ -132,6 +132,99 @@ class TestRequisitionPrintFunctionality:
         # For processed requisitions: returned/consumed quantities
         pass
 
+    def test_print_html_includes_defective_items_when_present(self, temp_db):
+        """Test that exported HTML includes defective items information when present."""
+        # Create database schema
+        temp_db.create_database()
+
+        # Insert sample item and requester
+        _, item_id = temp_db.execute_update(
+            "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+            ("DefItem", 1, 0),
+            return_last_id=True,
+        )
+        _, requester_id = temp_db.execute_update(
+            "INSERT INTO Requesters (name, affiliation, group_name) VALUES (?, ?, ?)",
+            ("Bob", "Teacher", "Group 1"),
+            return_last_id=True,
+        )
+
+        # Insert a processed requisition and link the item
+        expected_request = "2025-01-01 09:00:00"
+        expected_return = "2025-01-01 12:00:00"
+        _, req_id = temp_db.execute_update(
+            "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                requester_id,
+                expected_request,
+                expected_return,
+                "returned",
+                "Lab Test",
+                "2025-01-01",
+            ),
+            return_last_id=True,
+        )
+
+        temp_db.execute_update(
+            "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+            (req_id, item_id, 2),
+        )
+
+        # Ensure batch exists so stock movement triggers permit disposal (avoid trigger errors)
+        temp_db.execute_update(
+            "INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received) VALUES (?, ?, date('now'), ?)",
+            (item_id, 1, 10),
+        )
+
+        # Add a disposal movement so the return summary is non-empty
+        temp_db.execute_update(
+            "INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id) VALUES (?, ?, ?, date('now'), ?)",
+            (item_id, "DISPOSAL", 1, req_id),
+        )
+
+        # Record a defective item for this requisition
+        temp_db.execute_update(
+            "INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by) VALUES (?, ?, ?, ?, ?)",
+            (item_id, req_id, 1, "broken part", "Bob"),
+        )
+
+        # Verify defective record exists in the DB for this requisition
+        rows = temp_db.execute_query(
+            "SELECT di.notes, i.name FROM Defective_Items di JOIN Items i ON i.id = di.item_id WHERE di.requisition_id = ?",
+            (req_id,),
+        )
+        assert rows, f"Expected defective items to be recorded for requisition {req_id}"
+        assert any((r.get("notes") or "") == "broken part" for r in rows), (
+            f"Inserted defective notes not found in DB rows: {rows}"
+        )
+
+        # Also verify via return processor (sanity check against global module - may differ)
+        # Patch the return_processor module's db reference to point to test DB so HTML generation queries the same DB
+        import importlib
+
+        rp_mod = importlib.import_module(
+            "inventory_app.gui.requisitions.requisition_management.return_processor"
+        )
+        setattr(rp_mod, "db", temp_db)  # type: ignore[attr-defined]
+
+        # Also patch the global connection module's db reference used elsewhere
+        import inventory_app.database.connection as conn_mod
+
+        setattr(conn_mod, "db", temp_db)  # type: ignore[attr-defined]
+
+        # Load model and generate HTML (now modules use the test DB)
+        from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
+        from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
+
+        model = RequisitionsModel()
+        model.load_data()
+        req_summary = model.get_requisition_by_id(req_id)
+
+        html = RequisitionsPage._generate_requisition_html(req_summary)
+
+        assert ("Defective Items" in html) or ("⚠️ Defective Items" in html)
+        assert "broken part" in html
+
     def test_print_html_color_coding(self, temp_db, tmp_path):
         """Test that HTML includes color-coded status."""
         # Requisition status should be color-coded in HTML

@@ -5,8 +5,8 @@ Uses composition pattern with DatabaseConnection.
 """
 
 from typing import List, Optional, Tuple
-from datetime import datetime, date
-from dataclasses import dataclass
+from datetime import datetime, date, timezone
+from dataclasses import dataclass, field
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
@@ -584,7 +584,7 @@ class Item:
                 # 2. Delete stock movements (references both items and batches)
                 logger.info(f"Deleting Stock_Movements for item {self.id}")
                 db.execute_update(
-                    "DELETE FROM Stock_MovEMENTS WHERE item_id = ?", (self.id,)
+                    "DELETE FROM Stock_Movements WHERE item_id = ?", (self.id,)
                 )
 
                 # 3. Delete item batches (only depends on items, safe after movements deleted)
@@ -844,14 +844,18 @@ class Requisition:
 
     id: Optional[int] = None
     requester_id: int = 0
-    expected_request: datetime = datetime.now()
-    expected_return: datetime = datetime.now()
+    expected_request: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    expected_return: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     status: str = "requested"  # 'requested', 'active', 'returned', 'overdue'
     lab_activity_name: str = ""
     lab_activity_description: Optional[str] = (
         None  # For detailed activity information stored for reports
     )
-    lab_activity_date: date = date.today()
+    lab_activity_date: date = field(default_factory=date.today)
     num_students: Optional[int] = None
     num_groups: Optional[int] = None
 

@@ -1,8 +1,21 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, date
 
 import inventory_app.database.connection as conn
 from inventory_app.database.models import Requisition
+
+
+def test_requisition_defaults_are_timezone_aware_and_fresh():
+    """Requisition defaults should be timezone-aware and evaluated at instantiation."""
+    r1 = Requisition()
+    r2 = Requisition()
+
+    # Each instance should get a fresh datetime (not the same object/time)
+    assert r1.expected_request.tzinfo is not None
+    assert r2.expected_request.tzinfo is not None
+    assert r1.expected_request != r2.expected_request
+    # lab_activity_date should be a date instance
+    assert isinstance(r1.lab_activity_date, date)
 
 
 def _make_bad_row(**overrides):

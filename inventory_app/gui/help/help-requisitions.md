@@ -40,7 +40,7 @@ The right-hand preview shows a clear, read-only summary of the selected requisit
 - **Timeline:** Expected Request and Expected Return datetimes (if set).
 - **Activity Details:** Activity name, activity date, students/groups.
 - **Requested Items:** One line per requested item with requested quantities.
-- **Final Return Details:** Once a requisition is processed (returned), the preview shows a breakdown of returned consumables, consumed items, non-consumables returned, and lost/damaged quantities.
+- **Final Return Details:** Once a requisition is processed (returned), the preview shows a breakdown of returned consumables, consumed items, non-consumables returned, lost/damaged quantities, and any defective items with notes.
 
 ## **Status meanings & automatic updates**
 
@@ -75,8 +75,7 @@ After creation the requisition is visible in the table and requests/reservations
 3. For **Consumables:** specify how many were returned unused (any remainder is considered consumed).
 4. For **Non-Consumables:** specify how many were lost/damaged and how many were defective/broken. For defective items:
    - Enter the quantity of defective/broken items
-   - Select the condition type (BROKEN, DEFECTIVE, DAMAGED, or OTHER)
-   - Add optional notes describing the defect
+   - Add notes describing the defect (required when defective quantity > 0)
 5. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption), defective items (if any), and locks the requisition.
 
 Tips:

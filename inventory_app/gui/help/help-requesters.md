@@ -30,7 +30,9 @@ Notes:
 ## **Adding a Requester — Step-by-step**
 
 1. Click **➕ Add Requester**.
-2. Fill **Full Name** (required), **Affiliation** (required), and **Group** (required).
+2. Fill **Full Name** (required), **Affiliation** (required), **Group** (required), **Grade Level** (optional), and **Section** (optional).
+   - **Grade Level:** Educational level (e.g., Grade 7, Grade 10) or department level. Used for filtering usage reports by grade level.
+   - **Section:** Class section or organizational section identifier. Also used in "Usage by Grade Level" reports.
 3. Enter **Your Name/Initials** in the **Editor Information** section (this is required and recorded for audit).
 4. Click **Save Requester**. If a requester with the same name, affiliation and group already exists you will be warned and asked if you want to continue.
 5. On success the requester is added, the list refreshes, and the requester becomes available in requisition selectors.

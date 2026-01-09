@@ -643,7 +643,8 @@ class RequisitionsPage(QWidget):
                 self, "Error", f"Failed to export requisition: {str(e)}"
             )
 
-    def _generate_requisition_html(self, req_summary) -> str:
+    @staticmethod
+    def _generate_requisition_html(req_summary) -> str:
         """
         Generate a printable HTML report for a requisition.
 
@@ -737,6 +738,26 @@ class RequisitionsPage(QWidget):
                             return_details_html += (
                                 f"<li>{item['item_name']} (x{item['quantity']})</li>"
                             )
+                        return_details_html += "</ul>"
+
+                    defective_items = return_processor.get_requisition_defective_items(
+                        req.id
+                    )
+                    if defective_items:
+                        return_details_html += "<h3>⚠️ Defective Items:</h3><ul>"
+                        for item in defective_items:
+                            notes = item.get("notes") or ""
+                            reporter = item.get("reported_by") or ""
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})"
+                            )
+                            if notes:
+                                return_details_html += f" — Issue: {notes}"
+                            if reporter:
+                                return_details_html += (
+                                    f" <em>(reported by {reporter})</em>"
+                                )
+                            return_details_html += "</li>"
                         return_details_html += "</ul>"
 
                     return_details_html += f"""

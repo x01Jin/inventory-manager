@@ -12,7 +12,7 @@ The Reports page is where you generate, inspect, and export detailed, Excel-comp
 
 There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trends Reports**. Choose the tab that matches your need, configure options, and click **Generate Report**.
 
-- **Usage Reports:** Time-bucketed usage of items across the selected date range. Choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/quarterly granularity). Supports filtering by **Category**. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
+- **Usage Reports:** Time-bucketed usage of items across the selected date range. Use the **Report Type** dropdown to choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/quarterly granularity). Monthly Usage supports category filtering and is the default selection. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
 - **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, **Calibration Due Report**, **Update History Report**, **Disposal History Report**, **Usage by Grade Level**, and **Defective Items Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows). Others show current or historical state.
 - **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Quarterly), and an optional **Top N** filter (Top 10/20/50/All).
 
@@ -71,11 +71,25 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 - **Check for defective items returned:** Select **Inventory Reports** → choose **Defective Items Report** → set date range → **Generate Report**.
 - **Create a trends report for top items:** Select **Trends Reports** → choose date range → set **Group By** to `Item` and **Top Items** to `Top 10` → **Generate Report**.
 
+## **Zero-Stock Item Filtering**
+
+Items with current stock of 0 (fully consumed or disposed) are automatically excluded from:
+
+- Expiration alerts and reports
+- Calibration alerts and reports
+- Stock level reports
+- Low stock warnings
+- Dashboard alert indicators
+- Inventory table color-coded status indicators (no warning colors shown for 0-stock items)
+
+**Note:** Items remain in the database for historical purposes and requisition integrity. They are simply filtered from active monitoring and alert displays. Use historical reports to access disposed item records.
+
 ## **Limitations & notes**
 
 - Reports are exported as Excel files and are intended for human review and simple data interchange. They are not a substitute for a full BI system.
 - The application currently saves files to the working directory and does not prompt for a destination directory on every export.
 - Generated Excel files use consistent, human-friendly headers and period labels to make them easy to read and compatible with spreadsheet analysis tools.
+- Items with 0 stock are excluded from most alerts and reports; use history/disposal reports to review disposed items.
 
 ## **Troubleshooting & support**
 

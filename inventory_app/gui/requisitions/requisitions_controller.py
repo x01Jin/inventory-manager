@@ -7,9 +7,8 @@ Uses composition pattern with DatabaseConnection.
 from typing import List, Dict, Optional
 from datetime import date, datetime
 from dataclasses import dataclass
-import time
 
-from inventory_app.database.connection import db
+import inventory_app.database.connection as conn
 from inventory_app.database.models import Requester, Requisition
 from inventory_app.services import ItemService
 from inventory_app.utils.logger import logger
@@ -80,7 +79,7 @@ class RequisitionsController:
             ORDER BY r.expected_request DESC, r.id, ri.item_id
             """
 
-            rows = db.execute_query(query)
+            rows = conn.db.execute_query(query)
             if not rows:
                 logger.info("No requisitions found")
                 return []
@@ -208,23 +207,23 @@ class RequisitionsController:
         """
         try:
             # Perform deletion in a single transaction to ensure atomicity
-            with db.transaction():
+            with conn.db.transaction():
                 # Step 1: Delete requisition history records first (simple DELETE)
                 self._delete_requisition_history(requisition_id)
 
                 # Step 2: Delete requisition items (removes FK references to requisition)
-                db.execute_update(
+                conn.db.execute_update(
                     "DELETE FROM Requisition_Items WHERE requisition_id = ?",
                     (requisition_id,),
                 )
 
                 # Step 3: Delete ALL stock movements for this requisition
-                db.execute_update(
+                conn.db.execute_update(
                     "DELETE FROM Stock_Movements WHERE source_id = ?", (requisition_id,)
                 )
 
                 # Step 4: Finally delete the requisition itself
-                success = db.execute_update(
+                success = conn.db.execute_update(
                     "DELETE FROM Requisitions WHERE id = ?", (requisition_id,)
                 )
 
@@ -266,7 +265,7 @@ class RequisitionsController:
             JOIN Requisitions r ON b.id = r.requester_id
             ORDER BY b.name
             """
-            rows = db.execute_query(query)
+            rows = conn.db.execute_query(query)
             requesters = []
             for row in rows:
                 requesters.append(Requester(**dict(row)))
@@ -280,7 +279,7 @@ class RequisitionsController:
         """Get a single requisition by ID."""
         try:
             query = "SELECT * FROM Requisitions WHERE id = ?"
-            rows = db.execute_query(query, (requisition_id,))
+            rows = conn.db.execute_query(query, (requisition_id,))
             if not rows:
                 return None
 
@@ -316,7 +315,7 @@ class RequisitionsController:
         """Delete all history records for a requisition."""
         try:
             query = "DELETE FROM Requisition_History WHERE requisition_id = ?"
-            db.execute_update(query, (requisition_id,))
+            conn.db.execute_update(query, (requisition_id,))
             logger.debug(f"Deleted history records for requisition {requisition_id}")
         except Exception as e:
             logger.error(
@@ -326,7 +325,7 @@ class RequisitionsController:
     def _clear_requisition_items(self, requisition_id: int) -> None:
         """Remove all items from a requisition."""
         try:
-            db.execute_update(
+            conn.db.execute_update(
                 "DELETE FROM Requisition_Items WHERE requisition_id = ?",
                 (requisition_id,),
             )
