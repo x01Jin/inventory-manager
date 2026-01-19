@@ -56,24 +56,50 @@ class ActivityManager:
     def __init__(self):
         pass
 
+    def load_activity_data(self):
+        """Load activity data from database. Called in background thread."""
+        try:
+            return activity_logger.get_recent_activities(51)
+        except Exception as e:
+            logger.error(f"Failed to load activity data: {e}")
+            return []
+
+    def populate_activity_widget(self, activity_container, activities):
+        """Populate activity widget with loaded data."""
+        try:
+            if not activities:
+                self._clear_tables()
+                return
+
+            if hasattr(self, 'latest_table') and hasattr(self, 'history_table'):
+                if activities:
+                    self._populate_table(self.latest_table, activities[:1])
+
+                if len(activities) > 1:
+                    self._populate_table(self.history_table, activities[1:51])
+                else:
+                    self._clear_table(self.history_table)
+        except Exception as e:
+            logger.error(f"Failed to populate activity widget: {e}")
+            self._clear_tables()
+
     def update_recent_activity(self, activity_container):
         """Update the recent activity tables with real data."""
         try:
-            activities = activity_logger.get_recent_activities(51)  # Get 51 activities (1 latest + 50 history)
+            activities = activity_logger.get_recent_activities(51)
 
             if not activities:
                 self._clear_tables()
                 return
 
-            # Update latest activity table (first activity)
-            if activities:
-                self._populate_table(self.latest_table, activities[:1])
+            if hasattr(self, 'latest_table') and hasattr(self, 'history_table'):
+                if activities:
+                    self._populate_table(self.latest_table, activities[:1])
 
-            # Update history table (next 50 activities)
-            if len(activities) > 1:
-                self._populate_table(self.history_table, activities[1:51])
-            else:
-                self._clear_table(self.history_table)
+                if len(activities) > 1:
+                    self._populate_table(self.history_table, activities[1:51])
+                else:
+                    self._clear_table(self.history_table)
 
         except Exception as e:
             logger.error(f"Failed to update recent activity: {e}")

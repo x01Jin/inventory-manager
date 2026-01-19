@@ -3,6 +3,8 @@ Metrics management for the dashboard.
 Handles metric calculations and card creation.
 """
 
+from typing import Dict, Optional
+
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout
 from PyQt6.QtCore import Qt
 
@@ -18,7 +20,7 @@ class MetricsManager:
     def __init__(self):
         pass
 
-    def create_compact_metric_card(self, title: str, value: str):
+    def create_compact_metric_card(self, title: str, value: str, loading: bool = False):
         """Create a compact metric card widget."""
         Theme = get_current_theme()
         card = QGroupBox(title)
@@ -30,13 +32,17 @@ class MetricsManager:
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(2)
 
-        value_label = QLabel(value)
+        if loading:
+            value_label = QLabel("...")
+        else:
+            value_label = QLabel(value)
         value_label.setStyleSheet(f"""
             font-size: {Theme.FONT_SIZE_HEADER}pt; 
             font-weight: bold;
             border: none;
             background-color: transparent;
         """)
+        value_label.setObjectName("value_label")
 
         layout.addWidget(value_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -186,7 +192,7 @@ class MetricsManager:
                 "overdue_reqs": 0,
             }
 
-    def create_metrics_widget(self):
+    def create_metrics_widget(self, loading: bool = False):
         """Create a widget containing all metric cards in a compact grid."""
 
         widget = QWidget()
@@ -194,35 +200,32 @@ class MetricsManager:
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
 
-        metrics = self.get_all_metrics()
         metric_keys = self.get_metric_keys()
 
-        # Create 3x3 grid of metric cards
         for i, (key, title) in enumerate(metric_keys):
             row = i // 3
             col = i % 3
-            value = str(metrics.get(key, 0))
-            card = self.create_compact_metric_card(title, value)
+            value = "..." if loading else "0"
+            card = self.create_compact_metric_card(title, value, loading)
             layout.addWidget(card, row, col)
 
         return widget
 
-    def update_metrics_widget(self, metrics_widget):
+    def update_metrics_widget(self, metrics_widget, metrics: Optional[Dict[str, int]] = None):
         """Update the metrics widget with current data."""
         try:
-            metrics = self.get_all_metrics()
+            if metrics is None:
+                metrics = self.get_all_metrics()
             metric_keys = self.get_metric_keys()
 
             layout = metrics_widget.layout()
             if not layout:
                 return
 
-            # Update each card in the grid
             for i, (key, title) in enumerate(metric_keys):
                 value = str(metrics.get(key, 0))
                 card = layout.itemAt(i).widget()
                 if card:
-                    # Update the value label (only child in the card's layout)
                     card_layout = card.layout()
                     if card_layout and card_layout.count() >= 1:
                         value_label = card_layout.itemAt(0).widget()

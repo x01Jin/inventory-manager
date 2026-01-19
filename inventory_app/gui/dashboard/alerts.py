@@ -18,22 +18,19 @@ class AlertsManager:
     def __init__(self):
         pass
 
-    def update_alerts_table(self, alerts_table: QTableWidget):
-        """Update alerts table with critical alerts."""
+    def load_alerts_data(self):
+        """Load alerts data from database. Called in background thread."""
         try:
-            # Collect alerts from multiple sources (expiration, calibration, low stock)
             all_alerts = alert_engine.get_all_alerts()
 
             rows = []
 
-            # Only include the specific alert types requested
             allowed = {
                 "expiring",
                 "expired",
                 "calibration overdue",
                 "calibration warning",
             }
-            # Map each alert type to the desired dashboard status
             type_to_status = {
                 "expired": "Critical",
                 "calibration overdue": "Critical",
@@ -53,11 +50,9 @@ class AlertsManager:
                         }
                     )
 
-            # Low stock items (use default threshold)
             low = get_low_stock_data()
             for r in low:
                 name = r.get("Item Name") or r.get("ITEMS") or ""
-                # Per mapping, low stock items are a Warning on the dashboard
                 rows.append(
                     {
                         "item": name,
@@ -67,7 +62,6 @@ class AlertsManager:
                     }
                 )
 
-            # Deduplicate by item name: prefer higher status then preferred type order
             status_priority = {"Critical": 2, "Warning": 1}
             type_order = {
                 "expired": 0,
@@ -85,7 +79,6 @@ class AlertsManager:
                     dedup[key] = r
                     continue
 
-                # Choose the more urgent entry
                 if status_priority[r["status"]] > status_priority[existing["status"]]:
                     dedup[key] = r
                 elif (
@@ -97,7 +90,6 @@ class AlertsManager:
                         dedup[key] = r
 
             final = list(dedup.values())
-            # Sort by status (Critical first), then days_until ascending, then type order
             final.sort(
                 key=lambda x: (
                     -status_priority[x["status"]],
@@ -106,17 +98,27 @@ class AlertsManager:
                 )
             )
 
+            return final
+
+        except Exception as e:
+            logger.error(f"Failed to load alerts data: {e}")
+            return []
+
+    def populate_alerts_table(self, alerts_table: QTableWidget, alerts_data: list):
+        """Populate alerts table with loaded data."""
+        try:
             MAX_DISPLAY_ROWS = 50
-            display_count = min(len(final), MAX_DISPLAY_ROWS)
+            display_count = min(len(alerts_data), MAX_DISPLAY_ROWS)
             alerts_table.setRowCount(display_count)
-            if len(final) > MAX_DISPLAY_ROWS:
+
+            if len(alerts_data) > MAX_DISPLAY_ROWS:
                 alerts_table.setToolTip(
-                    f"Showing {MAX_DISPLAY_ROWS} of {len(final)} critical alerts"
+                    f"Showing {MAX_DISPLAY_ROWS} of {len(alerts_data)} critical alerts"
                 )
             else:
                 alerts_table.setToolTip("")
 
-            for row, r in enumerate(final[:display_count]):
+            for row, r in enumerate(alerts_data[:display_count]):
                 alerts_table.setItem(row, 0, QTableWidgetItem(r["type"]))
                 alerts_table.setItem(row, 1, QTableWidgetItem(r["item"]))
 
@@ -126,6 +128,15 @@ class AlertsManager:
                 elif r["status"] == "Warning":
                     status_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
                 alerts_table.setItem(row, 2, status_item)
+
+        except Exception as e:
+            logger.error(f"Failed to populate alerts table: {e}")
+
+    def update_alerts_table(self, alerts_table: QTableWidget):
+        """Update alerts table with critical alerts."""
+        try:
+            alerts_data = self.load_alerts_data()
+            self.populate_alerts_table(alerts_table, alerts_data)
 
         except Exception as e:
             logger.error(f"Failed to update alerts: {e}")

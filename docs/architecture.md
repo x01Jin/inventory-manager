@@ -35,8 +35,11 @@ The application uses Qt's QThreadPool and QRunnable for background data loading 
 
 Background processing is used in:
 
+- Dashboard metrics loading (`metrics_worker.py`)
+- Dashboard activity loading
+- Dashboard alerts loading
 - Inventory table data loading
-- Requisition table data loading  
+- Requisition table data loading
 - Requester table data loading
 - Excel import operations
 - Available items loading in requisition dialogs

@@ -24,7 +24,9 @@ The dashboard displays nine metric cards providing instant insight into system s
 
 **Notes:**
 
-- Metrics are computed from the database in real-time when the dashboard loads
+- Metrics are loaded asynchronously in background threads to prevent UI freezes
+- Query consolidation reduces database roundtrips from 9+ separate queries to 4 optimized queries
+- Loading state is displayed while metrics compute in the background
 - Total Stock excludes disposed batches and accounts for consumptions, disposals, and returns
 - Low Stock metric uses absolute threshold (1-9); percentage-based thresholds are used in reports only
 
@@ -93,11 +95,12 @@ Real-time alerts for items requiring immediate attention:
 
 ## Data Refresh Behavior
 
-- Dashboard loads on page open and when switching back to the Dashboard tab
-- Metrics are computed in real-time from the database
-- Activity log is queried with `ORDER BY timestamp DESC LIMIT 20`
-- Alert engine generates fresh alerts on each load
-- Schedule chart queries for upcoming requisitions with date filtering
+- Dashboard loads asynchronously when the page opens or when switching to the Dashboard tab
+- Metrics, activity, and alerts load in parallel using background workers
+- Loading state is shown on metric cards ("...") until data arrives
+- Dashboard uses the WorkerPool with QThreadPool for background execution
+- Query consolidation reduces database roundtrips from 9+ to 4 queries
+- Workers can be cancelled to prevent stale data from overwriting fresh data
 
 ## Integration with Other Pages
 
@@ -112,9 +115,12 @@ Real-time alerts for items requiring immediate attention:
 
 The dashboard is read-only and non-configurable. Data sources and thresholds are defined in:
 
+- `inventory_app/gui/dashboard/metrics_worker.py` - Consolidated metrics queries (4 queries vs 9+)
+- `inventory_app/gui/dashboard/metrics.py` - Metric definitions and UI widgets
+- `inventory_app/gui/dashboard/activity.py` - Activity loading and display
+- `inventory_app/gui/dashboard/alerts.py` - Alert loading and display
 - `inventory_app/services/alert_engine.py` - Alert generation logic
 - `inventory_app/services/item_status_service.py` - Status computations
-- `inventory_app/gui/dashboard/metrics.py` - Metric definitions
 - `inventory_app/gui/dashboard/schedule_chart.py` - Schedule data fetching
 
 ## Limitations
@@ -123,3 +129,12 @@ The dashboard is read-only and non-configurable. Data sources and thresholds are
 - No export functionality; use Reports page for exports
 - Activity history is limited (~20 entries) by design for performance
 - Alert display is capped at 50 rows for UI performance
+
+## Performance Optimizations
+
+The dashboard implements several performance optimizations:
+
+1. **Async Loading**: All dashboard sections (metrics, activity, alerts) load asynchronously using QThreadPool workers
+2. **Query Consolidation**: Metrics use 4 consolidated queries instead of 9+ separate database calls
+3. **Cancellation Support**: Background workers can be cancelled to prevent stale data from overwriting fresh data on rapid refresh
+4. **Parallel Loading**: Metrics, activity, and alerts load simultaneously rather than sequentially
