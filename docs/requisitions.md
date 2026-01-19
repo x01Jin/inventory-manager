@@ -18,7 +18,7 @@ Key Components
 
 Workflow
 
-- Create requisitions with requester selection and item selection. The system performs stock validation and reservations. Requisitions creation uses `DatabaseConnection.transaction()` with an IMMEDIATE transaction to re-check and reserve stock atomically to prevent oversubscription. Concurrent reservation attempts will be rejected when stock is insufficient.
+- Create requisitions with requester selection and item selection. The system performs stock validation and reservations. Requisition creation uses `DatabaseConnection.transaction(immediate=True)` to re-check and reserve stock atomically (this uses an immediate transaction to prevent concurrent oversubscription). Stock availability and reservation logic relies on the centralized `stock_calculation_service` which implements the two-phase requested-quantity logic (active requisitions reduce available stock via REQUEST/RESERVATION movements; finalized requisitions do not). For performance, selection lists and expensive queries may be cached with `cached_query`; cache entries should be invalidated after writes using `db.invalidate_cache_for_table(...)` or `db.clear_query_cache()`.
 
 - Available items in requisition dialogs load asynchronously to keep the dialog responsive during item searches.
 

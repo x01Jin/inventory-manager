@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Any, List, Dict, Union, overload, Tuple, Literal
 
 from inventory_app.utils.logger import logger
+from inventory_app.database.query_cache import QueryCache
 
 
 class DatabaseConnection:
@@ -25,8 +26,8 @@ class DatabaseConnection:
         """
         self.db_path = Path(db_path)
         self._connection: Optional[sqlite3.Connection] = None
-        # If a transaction is active, this holds the sqlite3.Connection
         self._transaction_conn: Optional[sqlite3.Connection] = None
+        self._query_cache = QueryCache(default_ttl=30.0)
 
     def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
         """
@@ -302,6 +303,22 @@ class DatabaseConnection:
             return len(tables) > 0
         except Exception:
             return False
+
+    def clear_query_cache(self) -> None:
+        """Clear the query cache."""
+        self._query_cache.clear()
+
+    def invalidate_cache_for_table(self, table_name: str) -> int:
+        """
+        Invalidate cache entries related to a specific table.
+
+        Args:
+            table_name: Name of the table to invalidate cache for
+
+        Returns:
+            Number of entries invalidated
+        """
+        return self._query_cache.invalidate(table_name)
 
 
 # Global database instance

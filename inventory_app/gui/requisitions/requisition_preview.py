@@ -425,14 +425,28 @@ class RequisitionPreview(QWidget):
                         notes_label.setWordWrap(True)
                         layout.addWidget(notes_label)
 
-            # Summary totals
-            totals_label = QLabel(
-                f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost, {summary['total_defective']} defective"
-            )
-            totals_label.setStyleSheet(
+            # Summary totals (vertical)
+            totals_header = QLabel("📊 Totals:")
+            totals_header.setStyleSheet(
                 f"font-weight: bold; font-size: 10pt; color: {DarkTheme.SUCCESS_COLOR}; margin-top: 8px;"
             )
-            layout.addWidget(totals_label)
+            layout.addWidget(totals_header)
+
+            returned_label = QLabel(f"• Returned: {summary['total_returned']}")
+            returned_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(returned_label)
+
+            consumed_label = QLabel(f"• Consumed: {summary['total_consumed']}")
+            consumed_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(consumed_label)
+
+            lost_label = QLabel(f"• Lost: {summary['total_lost']}")
+            lost_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(lost_label)
+
+            defective_label = QLabel(f"• Defective: {summary['total_defective']}")
+            defective_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(defective_label)
 
             # Lock notice
             lock_notice = QLabel("🔒 This requisition has been finalized...")

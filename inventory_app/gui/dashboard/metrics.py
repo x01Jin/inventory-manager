@@ -6,12 +6,68 @@ Handles metric calculations and card creation.
 from typing import Dict, Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QPainter
 
 from inventory_app.gui.styles import get_current_theme
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+
+
+class SkeletonCard(QGroupBox):
+    """Skeleton loading card with animated pulse effect."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(title, parent)
+        self.setStyleSheet("""
+            QGroupBox {
+                background-color: transparent;
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 9pt;
+            }
+        """)
+        self._pulse_value = 0
+        self._pulse_direction = 1
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+
+        self.value_label = QLabel("...")
+        self.value_label.setStyleSheet("""
+            font-size: 18pt;
+            font-weight: bold;
+            border: none;
+            background-color: transparent;
+            color: #666;
+        """)
+        self.value_label.setObjectName("skeleton_value")
+        layout.addWidget(self.value_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self._animation_timer = QTimer(self)
+        self._animation_timer.timeout.connect(self._animate_pulse)
+        self._animation_timer.start(50)
+
+    def _animate_pulse(self):
+        self._pulse_value += 0.1 * self._pulse_direction
+        if self._pulse_value >= 1.0:
+            self._pulse_value = 1.0
+            self._pulse_direction = -1
+        elif self._pulse_value <= 0.0:
+            self._pulse_value = 0.0
+            self._pulse_direction = 1
+        self.update()
+
+    def paintEvent(self, a0):
+        super().paintEvent(a0)
+        if hasattr(self, '_pulse_value'):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            color = QColor(60, 60, 60)
+            color.setAlphaF(0.3 + self._pulse_value * 0.2)
+            painter.fillRect(self.rect(), color)
 
 
 class MetricsManager:
@@ -47,6 +103,10 @@ class MetricsManager:
         layout.addWidget(value_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         return card
+
+    def create_skeleton_metric_card(self, title: str):
+        """Create a skeleton loading card for metrics."""
+        return SkeletonCard(title)
 
     def get_metric_keys(self):
         """Get the list of metric keys and their display names."""

@@ -125,27 +125,29 @@ class DashboardPage(QWidget):
         if self._activity_worker:
             self._activity_worker.cancel()
 
-        from .activity import ActivityManager
-        activity_mgr = ActivityManager()
-        self._activity_worker = Worker(activity_mgr.load_activity_data)
+        logger.debug("Starting activity data load")
+        self._activity_worker = Worker(self.activity_manager.load_activity_data)
         self._activity_worker.signals.result.connect(
-            lambda data: activity_mgr.populate_activity_widget(self.activity_text, data)
+            lambda data: self._on_activity_loaded(data)
         )
         self._activity_worker.signals.error.connect(
             lambda e: logger.error(f"Activity loading failed: {e}")
         )
         worker_pool.start(self._activity_worker)
 
+    def _on_activity_loaded(self, data):
+        """Handle loaded activity data."""
+        logger.debug(f"Activity data received: {len(data) if data else 0} items")
+        self.activity_manager.populate_activity_widget(self.activity_text, data)
+
     def _load_alerts_async(self):
         """Load alerts data in background thread."""
         if self._alerts_worker:
             self._alerts_worker.cancel()
 
-        from .alerts import AlertsManager
-        alerts_mgr = AlertsManager()
-        self._alerts_worker = Worker(alerts_mgr.load_alerts_data)
+        self._alerts_worker = Worker(self.alerts_manager.load_alerts_data)
         self._alerts_worker.signals.result.connect(
-            lambda data: alerts_mgr.populate_alerts_table(self.alerts_table, data)
+            lambda data: self.alerts_manager.populate_alerts_table(self.alerts_table, data)
         )
         self._alerts_worker.signals.error.connect(
             lambda e: logger.error(f"Alerts loading failed: {e}")

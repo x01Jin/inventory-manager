@@ -4,6 +4,7 @@ Simple and clean composition using navigation and dashboard.
 """
 
 import sys
+import time
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -13,6 +14,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QVBoxLayout,
 )
+from PyQt6.QtCore import QTimer
 
 from inventory_app.gui.styles import DarkTheme, ThemeManager
 from inventory_app.gui.navigation import NavigationPanel
@@ -29,10 +31,19 @@ from inventory_app.utils.logger import logger
 class MainWindow(QMainWindow):
     """Main application window with theme support."""
 
+    PAGE_REFRESH_INTERVAL = 30.0
+    REFRESH_DEBOUNCE_DELAY = 500
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Laboratory Inventory Manager (L.I.M.)")
         self.setMinimumSize(1280, 720)
+
+        self._page_refresh_times = {}
+        self._refresh_debounce_timer = QTimer()
+        self._refresh_debounce_timer.setSingleShot(True)
+        self._refresh_debounce_timer.timeout.connect(self._execute_debounced_refresh)
+        self._pending_page_index = None
 
         # Apply theme based on saved preference
         app_instance = QApplication.instance()
@@ -93,40 +104,70 @@ class MainWindow(QMainWindow):
             window_geometry.moveCenter(center_point)
             self.move(window_geometry.topLeft())
 
+    def _is_page_data_stale(self, page_index: int) -> bool:
+        """Check if page data is stale and needs refresh."""
+        current_time = time.monotonic()
+        last_refresh = self._page_refresh_times.get(page_index)
+
+        if last_refresh is None:
+            return True
+
+        return (current_time - last_refresh) > self.PAGE_REFRESH_INTERVAL
+
+    def _mark_page_refreshed(self, page_index: int) -> None:
+        """Mark a page as refreshed."""
+        self._page_refresh_times[page_index] = time.monotonic()
+
+    def _execute_debounced_refresh(self) -> None:
+        """Execute the debounced refresh for the pending page."""
+        if self._pending_page_index is not None:
+            self._refresh_page_data(self._pending_page_index)
+            self._pending_page_index = None
+
+    def _refresh_page_data(self, page_index: int) -> None:
+        """Refresh page data if needed."""
+        if page_index == 0 and hasattr(
+            self.dashboard_page, "refresh_data"
+        ):
+            self.dashboard_page.refresh_data()
+            self._mark_page_refreshed(page_index)
+            logger.info("Refreshed dashboard data")
+        elif page_index == 1 and hasattr(
+            self.inventory_page, "refresh_data"
+        ):
+            self.inventory_page.refresh_data()
+            self._mark_page_refreshed(page_index)
+            logger.info("Refreshed inventory data")
+        elif page_index == 2 and hasattr(
+            self.requisitions_page, "refresh_data"
+        ):
+            self.requisitions_page.refresh_data()
+            self._mark_page_refreshed(page_index)
+            logger.info("Refreshed requisitions data")
+        elif page_index == 3 and hasattr(
+            self.requesters_page, "refresh_data"
+        ):
+            self.requesters_page.refresh_data()
+            self._mark_page_refreshed(page_index)
+            logger.info("Refreshed requesters data")
+        elif page_index == 4 and hasattr(self.reports_page, "refresh_data"):
+            try:
+                self.help_page.load_current_tab()
+                logger.info("Refreshed help tab content")
+            except Exception:
+                logger.exception("Failed to refresh help tab content")
+
     def on_page_changed(self, page_index: int):
-        """Handle page changes and refresh page data."""
+        """Handle page changes and refresh page data with caching and throttling."""
         try:
-            # Switch to the requested page
             self.content_stack.setCurrentIndex(page_index)
 
-            # Refresh the page data when switching
-            if page_index == 0 and hasattr(
-                self.dashboard_page, "refresh_data"
-            ):  # Dashboard
-                self.dashboard_page.refresh_data()
-                logger.info("Refreshed dashboard data")
-            elif page_index == 1 and hasattr(
-                self.inventory_page, "refresh_data"
-            ):  # Inventory
-                self.inventory_page.refresh_data()
-                logger.info("Refreshed inventory data")
-            elif page_index == 2 and hasattr(
-                self.requisitions_page, "refresh_data"
-            ):  # Requisitions
-                self.requisitions_page.refresh_data()
-                logger.info("Refreshed requisitions data")
-            elif page_index == 3 and hasattr(
-                self.requesters_page, "refresh_data"
-            ):  # Requesters
-                self.requesters_page.refresh_data()
-                logger.info("Refreshed requesters data")
-            elif page_index == 4 and hasattr(self.reports_page, "refresh_data"):  # Help
-                # Refresh help tab content when requested
-                try:
-                    self.help_page.load_current_tab()
-                    logger.info("Refreshed help tab content")
-                except Exception:
-                    logger.exception("Failed to refresh help tab content")
+            if self._refresh_debounce_timer.isActive():
+                self._refresh_debounce_timer.stop()
+
+            if self._is_page_data_stale(page_index):
+                self._pending_page_index = page_index
+                self._refresh_debounce_timer.start(self.REFRESH_DEBOUNCE_DELAY)
 
         except Exception as e:
             logger.error(f"Failed to change page to {page_index}: {e}")

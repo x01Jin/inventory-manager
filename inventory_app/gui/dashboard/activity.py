@@ -3,7 +3,13 @@ Activity management for the dashboard.
 Handles recent activity display.
 """
 
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QWidget, QVBoxLayout, QStyledItemDelegate
+from PyQt6.QtWidgets import (
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
+    QVBoxLayout,
+    QStyledItemDelegate,
+)
 from PyQt6.QtCore import Qt, QSize
 
 from inventory_app.gui.styles import DarkTheme
@@ -37,8 +43,9 @@ class WordWrapDelegate(QStyledItemDelegate):
             available_width = 200  # Fallback width
 
         # Calculate text dimensions with word wrapping
-        text_rect = font_metrics.boundingRect(0, 0, available_width, 0,
-                                           Qt.TextFlag.TextWordWrap, text)
+        text_rect = font_metrics.boundingRect(
+            0, 0, available_width, 0, Qt.TextFlag.TextWordWrap, text
+        )
 
         # Return size with reduced minimum height
         height = max(text_rect.height() + 6, 20)  # Reduced padding, minimum 20px
@@ -59,7 +66,9 @@ class ActivityManager:
     def load_activity_data(self):
         """Load activity data from database. Called in background thread."""
         try:
-            return activity_logger.get_recent_activities(51)
+            activities = activity_logger.get_recent_activities(51)
+            logger.debug(f"Loaded {len(activities)} activities from database")
+            return activities
         except Exception as e:
             logger.error(f"Failed to load activity data: {e}")
             return []
@@ -68,17 +77,33 @@ class ActivityManager:
         """Populate activity widget with loaded data."""
         try:
             if not activities:
+                logger.debug("No activities to display")
                 self._clear_tables()
                 return
 
-            if hasattr(self, 'latest_table') and hasattr(self, 'history_table'):
+            logger.debug(
+                f"Populating activity widget with {len(activities)} activities"
+            )
+
+            if hasattr(self, "latest_table") and hasattr(self, "history_table"):
                 if activities:
                     self._populate_table(self.latest_table, activities[:1])
+                    logger.debug(
+                        f"Populated latest table with {min(1, len(activities))} activities"
+                    )
 
                 if len(activities) > 1:
                     self._populate_table(self.history_table, activities[1:51])
+                    logger.debug(
+                        f"Populated history table with {min(50, len(activities) - 1)} activities"
+                    )
                 else:
                     self._clear_table(self.history_table)
+            else:
+                logger.error(
+                    "ActivityManager missing latest_table or history_table attributes"
+                )
+                self._clear_tables()
         except Exception as e:
             logger.error(f"Failed to populate activity widget: {e}")
             self._clear_tables()
@@ -92,7 +117,7 @@ class ActivityManager:
                 self._clear_tables()
                 return
 
-            if hasattr(self, 'latest_table') and hasattr(self, 'history_table'):
+            if hasattr(self, "latest_table") and hasattr(self, "history_table"):
                 if activities:
                     self._populate_table(self.latest_table, activities[:1])
 
@@ -107,78 +132,95 @@ class ActivityManager:
 
     def _populate_table(self, table_group, activities):
         """Populate a table with activity data."""
-        # Get the table widget from the group box
-        table = table_group.findChild(QTableWidget)
+        table_name = table_group.objectName().replace("_group", "_table")
+        table = table_group.findChild(QTableWidget, table_name)
         if not table:
-            return
+            table = table_group.findChild(QTableWidget)
+            if not table:
+                logger.error(
+                    f"Could not find QTableWidget in group box: {table_group.title()}"
+                )
+                return
 
         table.setRowCount(len(activities))
 
         for row, activity in enumerate(activities):
-            # Description
-            desc = activity.get('description', '')
+            desc = activity.get("description", "")
             desc_item = QTableWidgetItem(desc)
-            desc_item.setToolTip(desc)  # Show full text on hover
+            desc_item.setToolTip(desc)
             table.setItem(row, 0, desc_item)
 
-            # User
-            user = activity.get('user', 'System')
+            user = activity.get("user", "System")
             user_item = QTableWidgetItem(user)
             table.setItem(row, 1, user_item)
 
-            # Time
-            if activity.get('time') is not None:
+            if activity.get("time") is not None:
                 time_str = f"{date_utils.format_date_short(activity['time'])} at {date_utils.format_time_12h(activity['time'])}"
             else:
                 time_str = "Unknown time"
             time_item = QTableWidgetItem(time_str)
             table.setItem(row, 2, time_item)
 
-        # Resize rows to content for word wrapping
         table.resizeRowsToContents()
+        logger.debug(f"Populated table with {len(activities)} rows")
 
     def _clear_tables(self):
-        """Clear both tables."""
-        self._clear_table(self.latest_table)
-        self._clear_table(self.history_table)
+        """Clear both tables (defensive - handles deleted or missing widgets)."""
+        if hasattr(self, "latest_table"):
+            self._clear_table(self.latest_table)
+        if hasattr(self, "history_table"):
+            self._clear_table(self.history_table)
 
     def _clear_table(self, table_group):
-        """Clear a specific table."""
-        table = table_group.findChild(QTableWidget)
-        if table:
-            table.setRowCount(0)
+        """Clear a specific table safely."""
+        try:
+            if not table_group:
+                return
+            table = table_group.findChild(QTableWidget)
+            if table:
+                table.setRowCount(0)
+        except RuntimeError as e:
+            # Widget may have been deleted on teardown; ignore and log
+            logger.warning(f"Could not clear table (widget deleted): {e}")
 
     def create_activity_widget(self):
         """Create and configure the activity widget with two tables."""
-        # Create main container widget
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
 
-        # Create latest activity table
         self.latest_table = self._create_activity_table("Latest Activity", 1)
         layout.addWidget(self.latest_table)
+        logger.debug(f"Created latest_table: {self.latest_table.objectName()}")
 
-        # Create history table
         self.history_table = self._create_activity_table("Activity History", 50)
         layout.addWidget(self.history_table)
+        logger.debug(f"Created history_table: {self.history_table.objectName()}")
 
-        # Set size policy for expansion
-        container.setSizePolicy(container.sizePolicy().Policy.Expanding, container.sizePolicy().Policy.Expanding)
+        container.setSizePolicy(
+            container.sizePolicy().Policy.Expanding,
+            container.sizePolicy().Policy.Expanding,
+        )
 
+        logger.debug("Activity widget created with tables")
         return container
 
     def _create_activity_table(self, title, max_rows):
         """Create a configured activity table."""
         # Create group box for the table
         from PyQt6.QtWidgets import QGroupBox
+
         group = QGroupBox(title)
+        group.setObjectName(
+            f"{title.replace(' ', '_')}_group"
+        )  # Set object name for easier lookup
         group_layout = QVBoxLayout(group)
         group_layout.setContentsMargins(2, 2, 2, 2)
 
         # Create table
         table = QTableWidget()
+        table.setObjectName(f"{title.replace(' ', '_')}_table")  # Set object name
         table.setColumnCount(3)
         table.setHorizontalHeaderLabels(["Description", "User", "Time"])
         if title == "Latest Activity":
@@ -199,8 +241,8 @@ class ActivityManager:
 
         # Set column widths - reduced for compactness
         table.setColumnWidth(0, 300)  # Description
-        table.setColumnWidth(1, 70)   # User
-        table.setColumnWidth(2, 70)   # Time
+        table.setColumnWidth(1, 70)  # User
+        table.setColumnWidth(2, 70)  # Time
 
         # Configure vertical header
         v_header = table.verticalHeader()

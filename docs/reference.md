@@ -146,6 +146,7 @@ python scripts/maintenance.py --db-path C:\path\to\inventory.db --days-to-keep 9
 
 ```python
 from inventory_app.database.connection import db
+from inventory_app.database.query_cache import cached_query
 
 # Context-managed connection
 with db.get_connection() as conn:
@@ -157,7 +158,7 @@ with db.transaction(immediate=False):
     item.save()
     batch.save()
 
-# Immediate transaction (reserved stock)
+# Immediate transaction (reserved stock) - uses BEGIN IMMEDIATE to obtain a write lock early
 with db.transaction(immediate=True):
     requisition.create()
 
@@ -170,6 +171,18 @@ affected, last_id = db.execute_update(
     (name, category_id),
     return_last_id=True
 )
+
+# Cache control (QueryCache)
+# Clear entire cache
+db.clear_query_cache()
+
+# Invalidate cache entries related to a particular table (returns number invalidated)
+db.invalidate_cache_for_table("Items")
+
+# Decorator usage for expensive queries
+@cached_query(ttl=60)
+def get_expensive_report(query=None, params=()):
+    return db.execute_query(query, params)
 ```
 
 ### Database Backups

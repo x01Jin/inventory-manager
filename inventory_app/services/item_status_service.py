@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.services.stock_calculation_service import stock_calculation_service
 
 
 # Alert threshold constants (in days) per beta test requirements
@@ -84,43 +85,22 @@ class ItemStatusService:
             List of ItemStatus objects
         """
         try:
-            # Get all items with their data, excluding items with 0 stock
-            # Items with 0 stock are assumed to be depleted/disposed and should not trigger alerts
-            from inventory_app.services.movement_types import MovementType
+            query = stock_calculation_service.get_item_status_stock_subquery()
+            stock_params = stock_calculation_service.get_item_status_stock_params()
 
-            query = """
+            query = f"""
             SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
                    i.acquisition_date, c.name as category_name
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN (
-                SELECT
-                    ib.item_id,
-                    SUM(ib.quantity_received) -
-                    COALESCE(movements.consumed_qty, 0) -
-                    COALESCE(movements.disposed_qty, 0) +
-                    COALESCE(movements.returned_qty, 0) as total_stock
-                FROM Item_Batches ib
-                LEFT JOIN (
-                    SELECT
-                        sm.item_id,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
-                    FROM Stock_Movements sm
-                    GROUP BY sm.item_id
-                ) movements ON ib.item_id = movements.item_id
-                GROUP BY ib.item_id
+                {query}
             ) stock ON i.id = stock.item_id
             WHERE COALESCE(stock.total_stock, 0) > 0
             ORDER BY i.name
             """
-            params = (
-                MovementType.CONSUMPTION.value,
-                MovementType.DISPOSAL.value,
-                MovementType.RETURN.value,
-            )
-            rows = db.execute_query(query, params)
+            full_params = stock_params
+            rows = db.execute_query(query, full_params)
             statuses = []
 
             for item_data in rows:
