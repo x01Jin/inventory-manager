@@ -43,10 +43,10 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 ## **File output & naming**
 
 - Reports are exported in Excel (.xlsx) format. Default file names follow predictable patterns:
-  - Monthly Usage: `monthly_usage_report_[MONTH]_YYYYMMDD_HHMMSS.xlsx`
-  - Date Range Usage: `usage_report_[granularity]_YYYYMMDD_HHMMSS.xlsx` (e.g., `usage_report_daily_20251201_120000.xlsx`)
-  - Inventory: `inventory_[report_type]_YYYYMMDD_HHMMSS.xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
-  - Trends: `trends_report_[group_by]_YYYYMMDD_HHMMSS.xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
+  - Monthly Usage: `monthly_usage_[MONTH]_[YEAR]_[TIMESTAMP].xlsx` (e.g., `monthly_usage_december_2025_20251201_120000.xlsx`)
+  - Date Range Usage: `[granularity]_report_[TIMESTAMP].xlsx` (e.g., `weekly_report_20251201_120000.xlsx`)
+  - Inventory: `inventory_[report_type]_[TIMESTAMP].xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
+  - Trends: `trends_report_[group_by]_[TIMESTAMP].xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
 - The application saves the file to the application's working directory and will attempt to open it automatically (on Windows the app uses the OS to open the file). If automatic opening fails, the saved file path is shown in the status area so you can open it manually.
 
 ## **Status & results panels**

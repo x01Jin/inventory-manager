@@ -24,3 +24,7 @@ Best Practices
 
 - All data operations are handled through service layers rather than direct DB calls from GUI modules.
 - Editor names must be provided for operations that modify persistent data for auditability.
+
+Maintenance utilities
+
+- The `ActivityLogger` utility (see `inventory_app.utils.activity_logger`) provides `cleanup_old_activities(days_to_keep)` and `maintain_activity_limit(max_activities)` for pruning the activity log. A helper script is available at `scripts/maintenance.py` to schedule/automate these operations on servers or workstations.

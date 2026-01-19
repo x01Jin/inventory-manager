@@ -51,18 +51,37 @@ Stock & Alerts
 
 ## Alert Thresholds
 
-Alert thresholds vary by item category:
+Alert thresholds vary by item category and type:
 
-| Category | Alert Type | Threshold |
-| -------- | ---------- | --------- |
-| Chemicals (consumable) | Expiry warning | 6 months before expiration |
-| Glassware/Apparatus | Disposal due | 3 years from acquisition |
-| Equipment | Disposal due | 5 years from acquisition |
-| All items with calibration | Calibration warning | 3 months before due |
+| Category | Alert Type | Warning Threshold | Overdue When |
+| -------- | ---------- | ----------------- | ------------ |
+| Chemicals-Solid | Expiration | 180 days (6 months) before | Already expired |
+| Chemicals-Liquid | Expiration | 180 days (6 months) before | Already expired |
+| Prepared Slides | Expiration | 180 days (6 months) before | Already expired |
+| Consumables | Expiration | 180 days (6 months) before | Already expired |
+| Equipment | Disposal | 90 days (3 months) before | Already past disposal date |
+| Equipment | Calibration | 90 days (3 months) before | Already past calibration date |
+| Apparatus | Disposal | 90 days (3 months) before | Already past disposal date |
+| Lab Models | Disposal | 90 days (3 months) before | Already past disposal date |
+| Others | Disposal | 90 days (3 months) before | Already past disposal date |
 
-- Calibration interval is set to 1 year (365 days) from the last calibration date
-- Items past their threshold date show a red/pink background indicating overdue status
-- Items approaching their threshold show a yellow background indicating warning status
+**Calibration Details:**
+
+- Initial calibration due 1 year from acquisition date
+- Subsequent calibrations due 1 year from last calibration date
+- Only equipment items have calibration tracking
+
+**Severity Classification:**
+
+- **Critical**: Already past deadline or within 7 days
+- **Warning**: Within threshold period (90-180 days depending on type)
+- **Info**: More than threshold period away
+
+Row Background Colors:
+
+- **Red/Pink**: Overdue (past deadline) - critical
+- **Yellow**: Warning (within threshold) - needs attention
+- **Default**: No immediate attention needed
 
 ## Stock Calculation Logic
 

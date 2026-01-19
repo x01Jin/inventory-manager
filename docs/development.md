@@ -2,11 +2,27 @@
 
 Running Tests
 
-- Test helper scripts are available in the `tests/` folder. They help populate sample items, requesters and requisitions for test and profiling.
+- Tests are run with `pytest`. Ensure you have the project's virtual environment active and run:
+
+```powershell
+python -m pytest -q
+```
+
+- The test suite includes GUI tests (`pytest-qt`) and DB-related tests. Many tests create temporary DBs or use fixtures to avoid altering your working database.
+
+Seeding sample data for manual QA
+
+- Use `scripts/sample_data.py` to generate a realistic dataset useful for manual QA and demonstrations:
+
+```powershell
+python scripts/sample_data.py
+```
+
+- This script creates the database (if absent) and populates items, requesters, requisitions and activity logs over a simulated timeline.
 
 Contributing
 
-- Follow the repository style. Open a PR with a description of changes, update docs and add tests for features where appropriate.
+- Follow the repository style. Open a PR with a description of changes, update docs and add tests for features where appropriate. Run the full test suite before submitting a PR and ensure new tests cover added functionality.
 
 Debugging
 

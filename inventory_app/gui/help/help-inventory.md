@@ -92,10 +92,13 @@ Key fields and behaviors in the Add/Edit dialog:
 
 When you select a category, dates are automatically calculated using industry standards:
 
-- **Chemicals:** Expiration set to 6 months from acquisition date
-- **Prepared Slides:** Expiration set based on preparation standards
-- **Equipment / Apparatus:** Disposal set to 5 years (Equipment) or 3 years (Apparatus) from acquisition; Calibration set to 1 year from acquisition
-- **Other items:** Dates may be set based on category standards
+- **Chemicals (Solid/Liquid):** Expiration set to 24 months (2 years) from acquisition date; alerts appear 6 months before expiration
+- **Prepared Slides:** Expiration set to 36 months (3 years) from acquisition date
+- **Consumables:** Expiration set to 12 months (1 year) from acquisition date
+- **Equipment:** Disposal set to 5 years from acquisition; Calibration set to 1 year from acquisition
+- **Apparatus / Glassware:** Disposal set to 3 years from acquisition; Calibration set to 1 year from acquisition (if applicable)
+- **Lab Models / Others:** Disposal set to 5 years from acquisition
+- **Uncategorized:** No automatic date calculation
 
 You can always edit these dates manually if the calculated values don't match your laboratory's specific requirements.
 

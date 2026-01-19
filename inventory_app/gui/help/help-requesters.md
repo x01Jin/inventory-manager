@@ -84,6 +84,3 @@ Notes:
 - If deletion is blocked unexpectedly, check for hidden requisitions or cached data, then **🔄 Refresh** the page. If problems persist, include the action time and any on-screen error messages when contacting support.
 
 -- End of Requesters Help --
-
---
-Placeholder content.
