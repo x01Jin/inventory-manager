@@ -157,7 +157,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Calibration Due Report — items with `calibration_date` within the range. Addresses beta test requirement #11 for calibration alerts.
   - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
-  - Defective Items Report — defective/broken items returned with condition type, notes, reporter, and date. Addresses beta test requirement B.3.
+  - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
 
 Background Processing and UI Integration
@@ -225,7 +225,7 @@ Common Reports
 
 The Defective Items Report tracks broken/defective items returned from requisitions:
 
-- **Columns**: Item Name, Category, Size, Brand, Defective Quantity, Condition (BROKEN/DEFECTIVE/DAMAGED/OTHER), Notes, Reported By, Report Date, Lab Activity, Requester
+- **Columns**: Item Name, Category, Size, Brand, Defective Quantity, Notes, Reported By, Report Date, Lab Activity, Requester
 - **Filtering**: By date range and category
 - **Source**: Defective_Items table populated during return processing
 

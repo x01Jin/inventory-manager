@@ -118,7 +118,7 @@ The system validates stock availability and reserves items atomically.
 3. For each requested item:
    - **Consumables**: Enter quantity returned unused (remainder = consumed)
    - **Non-Consumables**: Enter returned, lost, and defective quantities
-4. For defective items, add condition type and notes
+4. For defective items, add notes describing the defect
 5. Confirm and process (this is final - requisition becomes locked)
 
 ### Generating Reports

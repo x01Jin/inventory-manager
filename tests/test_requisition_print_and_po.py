@@ -302,7 +302,7 @@ class TestPrintBetaRequirements:
     def test_print_includes_defective_items_info(self, temp_db, tmp_path):
         """Test that printed requisition includes defective items info."""
         # Per B.2: "Add info for defective/broken items returned"
-        # Should show condition type and notes for defective items
+        # Should show notes for defective items
         from inventory_app.gui.reports.data_sources import get_defective_items_data
 
         assert callable(get_defective_items_data)

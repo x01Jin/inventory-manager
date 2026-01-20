@@ -39,7 +39,7 @@ from inventory_app.gui.styles import DarkTheme
 class ReturnItemWidget(QWidget):
     """Simplified widget for handling return/loss input for a single item.
 
-    For non-consumables, also tracks defective/broken items with condition type and notes
+    For non-consumables, also tracks defective/broken items with notes
     per beta test requirement B.2.
     """
 
@@ -507,22 +507,6 @@ class ItemReturnDialog(QDialog):
         self.summary_label.setText(" | ".join(summary_parts))
 
         # Button stays enabled - validation happens during processing
-
-    def _collect_defective_condition_types(self) -> dict:
-        """Collect condition types from widgets for defective items.
-
-        Returns:
-            Dict mapping item_id to condition_type string (always 'DEFECTIVE' as default)
-        """
-        condition_types = {}
-        for widget in self.item_widgets:
-            if (
-                not widget.return_item.is_consumable
-                and widget.return_item.quantity_defective > 0
-            ):
-                # Use 'DEFECTIVE' as default since the dropdown was redundant
-                condition_types[widget.return_item.item_id] = "DEFECTIVE"
-        return condition_types
 
     def process_returns(self):
         """Process the final returns - one-time operation."""

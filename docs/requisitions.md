@@ -33,8 +33,7 @@ Defective Items Tracking
 - During return processing, non-consumable items can be marked as defective
 - For each defective item, users specify:
   - Quantity defective (separate from lost count)
-  - Condition type: BROKEN, DEFECTIVE, DAMAGED, or OTHER
-  - Optional notes describing the defect
+  - Required notes describing the defect
 - Defective items are recorded to the `Defective_Items` table for reporting
 - Defective Items Report available in Reports page
 
