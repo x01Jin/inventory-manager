@@ -85,7 +85,7 @@ class ValidationService:
 
     def _validate_requester_data(self, requester_data: Dict) -> bool:
         """Validate requester information."""
-        required_fields = ["name", "affiliation", "group_name"]
+        required_fields = ["name"]
 
         if not isinstance(requester_data, dict):
             self._last_error = "Invalid requester data"
@@ -102,6 +102,25 @@ class ValidationService:
                 return False
             if len(value) > self.MAX_STR_LEN:
                 self._last_error = f"Requester field {field} is too long"
+                logger.error(self._last_error)
+                return False
+
+        requester_type = requester_data.get("requester_type", "").lower()
+        if requester_type == "student":
+            grade_level = requester_data.get("grade_level", "")
+            section = requester_data.get("section", "")
+            if not grade_level or not grade_level.strip():
+                self._last_error = "Grade level is required for students"
+                logger.error(self._last_error)
+                return False
+            if not section or not section.strip():
+                self._last_error = "Section is required for students"
+                logger.error(self._last_error)
+                return False
+        elif requester_type == "teacher":
+            department = requester_data.get("department", "")
+            if not department or not department.strip():
+                self._last_error = "Department is required for teachers"
                 logger.error(self._last_error)
                 return False
 

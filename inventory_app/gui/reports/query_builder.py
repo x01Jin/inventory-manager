@@ -29,6 +29,7 @@ class ReportQueryBuilder:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
+        show_individual_only: bool = False,
     ) -> Tuple[str, Tuple]:
         """
         Build the complete dynamic report query.
@@ -41,6 +42,7 @@ class ReportQueryBuilder:
             category_filter: Category filter
             supplier_filter: Supplier filter
             include_consumables: Whether to include consumable items
+            show_individual_only: Whether to show only individual requests
 
         Returns:
             Tuple of (SQL query string, parameters tuple)
@@ -54,6 +56,7 @@ class ReportQueryBuilder:
                 category_filter,
                 supplier_filter,
                 include_consumables,
+                show_individual_only,
             )
 
             return query, tuple(params)
@@ -70,6 +73,7 @@ class ReportQueryBuilder:
         category_filter: str,
         supplier_filter: str,
         include_consumables: bool,
+        show_individual_only: bool = False,
     ) -> Tuple[str, list]:
         """Build optimized single query without CTEs for better performance."""
         try:
@@ -128,12 +132,12 @@ class ReportQueryBuilder:
             WHERE r.lab_activity_date >= ? AND r.lab_activity_date < ?
             """
 
-            if category_filter:
-                query += " AND req.affiliation = ?"
             if supplier_filter:
-                query += " AND req.group_name = ?"
+                query += " AND req.department = ?"
             if not include_consumables:
                 query += " AND i.is_consumable = 0"
+            if show_individual_only:
+                query += " AND r.is_individual = 1"
 
             # GROUP BY clause
             group_by_columns = (
@@ -430,11 +434,8 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if category_filter:
-            total_query += " AND req.affiliation = ?"
-            params.append(category_filter)
         if supplier_filter:
-            total_query += " AND req.group_name = ?"
+            total_query += " AND req.department = ?"
             params.append(supplier_filter)
 
         return total_query, tuple(params)
@@ -460,11 +461,8 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if category_filter:
-            category_query += " AND req.affiliation = ?"
-            params.append(category_filter)
         if supplier_filter:
-            category_query += " AND req.group_name = ?"
+            category_query += " AND req.department = ?"
             params.append(supplier_filter)
 
         category_query += " GROUP BY c.id, c.name ORDER BY qty DESC"
@@ -492,11 +490,8 @@ class ReportStatisticsBuilder:
         params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
 
         # Add filters
-        if category_filter:
-            top_items_query += " AND req.affiliation = ?"
-            params.append(category_filter)
         if supplier_filter:
-            top_items_query += " AND req.group_name = ?"
+            top_items_query += " AND req.department = ?"
             params.append(supplier_filter)
 
         top_items_query += " GROUP BY i.id, i.name ORDER BY qty DESC LIMIT ?"

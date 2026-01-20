@@ -144,8 +144,8 @@ class TestRequisitionPrintFunctionality:
             return_last_id=True,
         )
         _, requester_id = temp_db.execute_update(
-            "INSERT INTO Requesters (name, affiliation, group_name) VALUES (?, ?, ?)",
-            ("Bob", "Teacher", "Group 1"),
+            "INSERT INTO Requesters (name, requester_type, department) VALUES (?, ?, ?)",
+            ("Bob", "teacher", "Science"),
             return_last_id=True,
         )
 

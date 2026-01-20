@@ -20,9 +20,11 @@ class RequisitionSummary:
 
     requisition: Requisition
     requester: Requester
-    items: List[Dict]  # List of item details with quantities
+    items: List[Dict]
     total_items: int
-    status: str  # 'Active', 'Returned', 'Overdue'
+    status: str
+    is_individual: int = 0
+    individual_name: Optional[str] = None
 
 
 class RequisitionsController:
@@ -59,9 +61,13 @@ class RequisitionsController:
                 r.num_students,
                 r.num_groups,
                 r.status as req_status,
+                r.is_individual,
+                r.individual_name,
                 req.name as requester_name,
-                req.affiliation,
-                req.group_name,
+                req.requester_type,
+                req.grade_level,
+                req.section,
+                req.department,
                 ri.item_id,
                 ri.quantity_requested,
                 i.name as item_name,
@@ -93,16 +99,12 @@ class RequisitionsController:
                     # Create requisition object with proper date conversion
                     # Handle invalid date formats gracefully
                     try:
-                        lab_activity_date = (
+                        if row["lab_activity_date"]:
                             date.fromisoformat(row["lab_activity_date"])
-                            if row["lab_activity_date"]
-                            else date.today()
-                        )
                     except (ValueError, TypeError):
                         logger.warning(
                             f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}"
                         )
-                        lab_activity_date = date.today()
 
                     try:
                         expected_request = (
@@ -130,23 +132,23 @@ class RequisitionsController:
 
                     req_dict = {
                         "id": req_id,
-                        "requester_id": row["requester_id"],
-                        "lab_activity_name": row["lab_activity_name"],
-                        "lab_activity_date": lab_activity_date,
                         "expected_request": expected_request,
                         "expected_return": expected_return,
                         "num_students": row["num_students"],
                         "num_groups": row["num_groups"],
                         "status": row["req_status"],
+                        "is_individual": row["is_individual"] or 0,
+                        "individual_name": row["individual_name"],
                     }
                     requisition = Requisition(**req_dict)
 
-                    # Create requester object
                     requester_dict = {
                         "id": row["requester_id"],
                         "name": row["requester_name"],
-                        "affiliation": row["affiliation"],
-                        "group_name": row["group_name"],
+                        "requester_type": row.get("requester_type", "teacher"),
+                        "grade_level": row.get("grade_level"),
+                        "section": row.get("section"),
+                        "department": row.get("department"),
                     }
                     requester = Requester(**requester_dict)
 
@@ -155,6 +157,8 @@ class RequisitionsController:
                         "requester": requester,
                         "items": [],
                         "status": row["req_status"] or "Active",
+                        "is_individual": row["is_individual"] or 0,
+                        "individual_name": row["individual_name"],
                     }
 
                 # Add item if it exists (some requisitions might have no items)
@@ -182,6 +186,8 @@ class RequisitionsController:
                         item["quantity_requested"] for item in req_data["items"]
                     ),
                     status=req_data["status"],
+                    is_individual=req_data["is_individual"],
+                    individual_name=req_data["individual_name"],
                 )
                 summaries.append(summary)
 

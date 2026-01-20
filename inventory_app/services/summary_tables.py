@@ -287,7 +287,8 @@ class SummaryTablesService:
                         num_students, num_groups
                     )
                     SELECT
-                        NEW.id, r.name, r.group_name, r.grade_level, r.section,
+                        NEW.id, r.name, COALESCE(r.grade_level, r.department, ''),
+                        r.grade_level, r.section,
                         NEW.status, NEW.lab_activity_name, NEW.lab_activity_date, NEW.expected_return,
                         NEW.num_students, NEW.num_groups
                     FROM Requesters r WHERE r.id = NEW.requester_id;
@@ -334,7 +335,7 @@ class SummaryTablesService:
                 BEGIN
                     UPDATE Requisition_Summary SET
                         requester_name = NEW.name,
-                        requester_group = NEW.group_name,
+                        requester_group = COALESCE(NEW.grade_level, NEW.department, ''),
                         grade_level = NEW.grade_level,
                         section = NEW.section,
                         last_updated = CURRENT_TIMESTAMP
@@ -483,7 +484,7 @@ class SummaryTablesService:
         SELECT
             r.id,
             COALESCE(req.name, 'Unknown'),
-            COALESCE(req.group_name, ''),
+            COALESCE(req.grade_level, req.department, ''),
             req.grade_level,
             req.section,
             r.status,

@@ -68,6 +68,7 @@ class ReportGenerator:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
+        show_individual_only: bool = False,
         structured: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
@@ -80,6 +81,7 @@ class ReportGenerator:
             category_filter: Filter by category
             supplier_filter: Filter by supplier
             include_consumables: Whether to include consumable items
+            show_individual_only: Whether to show only individual requests
 
         Returns:
             Path to generated Excel file
@@ -100,6 +102,7 @@ class ReportGenerator:
                 category_filter=category_filter,
                 supplier_filter=supplier_filter,
                 include_consumables=include_consumables,
+                show_individual_only=show_individual_only,
             )
 
             if not report_data:
@@ -137,6 +140,7 @@ class ReportGenerator:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
+        show_individual_only: bool = False,
     ) -> List[Dict]:
         """Wrapper over data_sources.get_dynamic_report_data"""
         try:
@@ -147,6 +151,7 @@ class ReportGenerator:
                 category_filter=category_filter,
                 supplier_filter=supplier_filter,
                 include_consumables=include_consumables,
+                show_individual_only=show_individual_only,
             )
         except Exception as e:
             logger.error(f"Failed to get dynamic report data: {e}")
@@ -243,6 +248,10 @@ class ReportGenerator:
         category_filter: str = "",
         output_path: Optional[str] = None,
         low_stock_threshold: Optional[int] = None,
+        item_name_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
         structured: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
@@ -261,6 +270,11 @@ class ReportGenerator:
             start_date: Start date for the report period
             end_date: End date for the report period
             category_filter: Category filter
+            low_stock_threshold: Threshold for Low Stock Alert (units)
+            item_name_filter: Filter by item name (for Item Usage Details, Batch Summary)
+            grade_filter: Filter by grade level (for Usage by Grade Level)
+            section_filter: Filter by section (for Usage by Grade Level)
+            show_individual_only: Whether to show only individual requests (for Usage by Grade Level)
             output_path: Optional output file path
 
         Returns:
@@ -308,17 +322,21 @@ class ReportGenerator:
             elif report_type == "Usage by Grade Level":
                 # Beta test requirement #19: Usage by grade level and section
                 report_data = self._get_usage_by_grade_level_data(
-                    start_date, end_date, category_filter
+                    start_date,
+                    end_date,
+                    category_filter,
+                    grade_filter,
+                    section_filter,
+                    show_individual_only,
                 )
                 title = "Usage by Grade Level Report"
             elif report_type == "Item Usage Details":
                 # Beta test requirement #12: Item usage search with full history
-                # Note: category_filter is used as item_name filter for this report
-                report_data = self._get_item_usage_details(category_filter)
+                report_data = self._get_item_usage_details(item_name_filter)
                 title = "Item Usage Details Report"
             elif report_type == "Batch Summary":
                 # Beta test requirement #3: Batch history with B1, B2, B3 notation
-                report_data = self._get_item_batch_summary(category_filter)
+                report_data = self._get_item_batch_summary(item_name_filter)
                 title = "Batch Summary Report"
             elif report_type == "Defective Items Report":
                 # Beta test requirement: Add info for defective/broken items returned
@@ -542,14 +560,27 @@ class ReportGenerator:
             return []
 
     def _get_usage_by_grade_level_data(
-        self, start_date: date, end_date: date, category_filter: str = ""
+        self,
+        start_date: date,
+        end_date: date,
+        category_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
     ) -> List[Dict]:
         """Get usage data by grade level and section.
 
         Per beta test requirement #19: Usage by grade level and section.
         """
         try:
-            return get_usage_by_grade_level_data(start_date, end_date, category_filter)
+            return get_usage_by_grade_level_data(
+                start_date,
+                end_date,
+                category_filter,
+                grade_filter,
+                section_filter,
+                show_individual_only,
+            )
         except Exception as e:
             logger.error(f"Failed to get usage by grade level data: {e}")
             return []

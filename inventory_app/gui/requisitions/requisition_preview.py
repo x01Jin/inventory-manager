@@ -111,10 +111,9 @@ class RequisitionPreview(QWidget):
     def populate_details(self, req_summary: RequisitionSummary):
         """Populate the preview with detailed requisition information."""
         req = req_summary.requisition
-        requester = req_summary.requester
 
         # Header
-        header = QLabel("📋 Requisition Details")
+        header = QLabel("Requisition Details")
         header.setStyleSheet(
             f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; margin-bottom: 10px;"
         )
@@ -126,16 +125,17 @@ class RequisitionPreview(QWidget):
         self.container_layout.addWidget(status_frame)
 
         # Requester Information
-        requester_section = self.create_requester_section(requester)
+        requester_section = self.create_requester_section(req_summary)
         self.container_layout.addWidget(requester_section)
 
-        # Timeline (below requester info as requested)
+        # Activity Details (skip for individual requests)
+        if not (hasattr(req_summary, "is_individual") and req_summary.is_individual):
+            activity_section = self.create_activity_section(req)
+            self.container_layout.addWidget(activity_section)
+
+        # Timeline
         timeline_section = self.create_timeline_section(req)
         self.container_layout.addWidget(timeline_section)
-
-        # Activity Details
-        activity_section = self.create_activity_section(req)
-        self.container_layout.addWidget(activity_section)
 
         # Requested Items
         items_section = self.create_items_section(
@@ -167,28 +167,65 @@ class RequisitionPreview(QWidget):
 
         return frame
 
-    def create_requester_section(self, requester) -> QGroupBox:
+    def create_requester_section(self, req_summary) -> QGroupBox:
         """Create the requester information section."""
-        group = QGroupBox("👤 Requester Information")
+        group = QGroupBox("Requester Information")
         group.setStyleSheet(self._get_group_style())
 
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        name_label = QLabel(f"• Name: {requester.name}")
-        name_label.setStyleSheet(
-            f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
-        )
-        name_label.setWordWrap(True)
-        layout.addWidget(name_label)
+        if hasattr(req_summary, "is_individual") and req_summary.is_individual:
+            name_label = QLabel(f"Name: {req_summary.individual_name or 'N/A'}")
+            name_label.setStyleSheet(
+                f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
+            )
+            name_label.setWordWrap(True)
+            layout.addWidget(name_label)
 
-        affiliation_label = QLabel(f"• Affiliation: {requester.affiliation}")
-        affiliation_label.setWordWrap(True)
-        layout.addWidget(affiliation_label)
+            if req_summary.individual_contact:
+                contact_label = QLabel(f"Contact: {req_summary.individual_contact}")
+                contact_label.setWordWrap(True)
+                layout.addWidget(contact_label)
 
-        group_label = QLabel(f"• Group: {requester.group_name}")
-        group_label.setWordWrap(True)
-        layout.addWidget(group_label)
+            if req_summary.individual_purpose:
+                purpose_label = QLabel(f"Purpose: {req_summary.individual_purpose}")
+                purpose_label.setWordWrap(True)
+                layout.addWidget(purpose_label)
+
+            individual_label = QLabel("Individual Request")
+            individual_label.setStyleSheet(
+                f"font-style: italic; color: {DarkTheme.TEXT_MUTED};"
+            )
+            layout.addWidget(individual_label)
+        else:
+            requester = req_summary.requester
+            name_label = QLabel(f"Name: {requester.name}")
+            name_label.setStyleSheet(
+                f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
+            )
+            name_label.setWordWrap(True)
+            layout.addWidget(name_label)
+
+            req_type = getattr(requester, 'requester_type', None) or 'faculty'
+            type_label = QLabel(f"Type: {req_type.title()}")
+            type_label.setStyleSheet(
+                f"font-style: italic; color: {DarkTheme.TEXT_MUTED};"
+            )
+            layout.addWidget(type_label)
+
+            if req_type == 'student':
+                if requester.grade_level and requester.section:
+                    group_label = QLabel(f"Grade/Section: {requester.grade_level} - {requester.section}")
+                    group_label.setWordWrap(True)
+                    layout.addWidget(group_label)
+            elif req_type == 'teacher':
+                if requester.department:
+                    group_label = QLabel(f"Department: {requester.department}")
+                    group_label.setWordWrap(True)
+                    layout.addWidget(group_label)
+            elif req_type == 'faculty':
+                pass
 
         return group
 

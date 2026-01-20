@@ -1,5 +1,17 @@
 # Development Guide
 
+## Init
+
+create a venv first but you should have python 3.13.11 installed
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate 
+pip install -r requirements.txt
+```
+
+## Guide
+
 Running Tests
 
 - Tests are run with `pytest`. Ensure you have the project's virtual environment active and run:

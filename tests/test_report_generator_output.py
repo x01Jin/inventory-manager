@@ -36,7 +36,7 @@ def test_usage_report_generates_valid_excel(tmp_path):
     assert eraser.id is not None
 
     # Create a requester
-    reqr = Requester(name="Student", affiliation="Grade 10", group_name="A")
+    reqr = Requester(name="Student", requester_type="student", grade_level="10", section="A")
     assert reqr.save() is True
     assert reqr.id is not None
 

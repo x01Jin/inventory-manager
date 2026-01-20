@@ -14,25 +14,26 @@ def test_requesters_table_sorts_by_created_newest_first(qtbot):
         RequesterRow(
             id=1,
             name="A",
-            affiliation="X",
-            group_name="G",
+            requester_type="student",
+            grade_level="10",
+            section="A",
             created_datetime=now - timedelta(days=2),
         ),
         RequesterRow(
-            id=2, name="B", affiliation="X", group_name="G", created_datetime=now
+            id=2, name="B", requester_type="student", grade_level="10", section="A", created_datetime=now
         ),
         RequesterRow(
             id=3,
             name="C",
-            affiliation="X",
-            group_name="G",
+            requester_type="student",
+            grade_level="10",
+            section="A",
             created_datetime=now - timedelta(days=1),
         ),
     ]
 
     table.populate_table(rows)
 
-    # After populate, default sort should be applied so newest (id=2) appears first
     first_item = table.item(0, 4)
     second_item = table.item(1, 4)
     third_item = table.item(2, 4)

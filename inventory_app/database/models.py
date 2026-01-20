@@ -7,6 +7,7 @@ Uses composition pattern with DatabaseConnection.
 from typing import List, Optional, Tuple
 from datetime import datetime, date, timezone
 from dataclasses import dataclass, field
+from enum import Enum
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
@@ -707,55 +708,59 @@ class Item:
             return []
 
 
+class RequesterType(Enum):
+    STUDENT = "student"
+    TEACHER = "teacher"
+    FACULTY = "faculty"
+
+
 @dataclass
 class Requester:
     """Represents a requester.
 
-    Attributes:
-        grade_level: The grade level of the requester (e.g., 'Grade 7', 'Grade 8')
-                     Used for tracking usage by grade level per beta test requirements.
-        section: The section name (e.g., 'Section A', 'Einstein')
-                 Used for tracking usage by section per beta test requirements.
+    Requesters have a type that determines which additional fields are required:
+    - Student: Requires grade_level and section
+    - Teacher: Requires department
+    - Faculty/Individual: Simplified mode with name only
     """
 
     id: Optional[int] = None
     name: str = ""
-    affiliation: str = ""
-    group_name: str = ""
+    requester_type: str = "teacher"
     grade_level: Optional[str] = None
     section: Optional[str] = None
+    department: Optional[str] = None
     created_at: Optional[datetime] = None
 
     def save(self) -> bool:
         """Save or update the requester."""
         try:
             if self.id:
-                query = """UPDATE Requesters SET name = ?, affiliation = ?, group_name = ?,
-                           grade_level = ?, section = ? WHERE id = ?"""
+                query = """UPDATE Requesters SET name = ?, requester_type = ?,
+                           grade_level = ?, section = ?, department = ? WHERE id = ?"""
                 db.execute_update(
                     query,
                     (
                         self.name,
-                        self.affiliation,
-                        self.group_name,
+                        self.requester_type,
                         self.grade_level,
                         self.section,
+                        self.department,
                         self.id,
                     ),
                 )
             else:
-                # For new requesters, explicitly set created_at to local time
                 current_time = datetime.now()
-                query = """INSERT INTO Requesters (name, affiliation, group_name,
-                           grade_level, section, created_at) VALUES (?, ?, ?, ?, ?, ?)"""
+                query = """INSERT INTO Requesters (name, requester_type, grade_level, section,
+                           department, created_at) VALUES (?, ?, ?, ?, ?, ?)"""
                 result = db.execute_update(
                     query,
                     (
                         self.name,
-                        self.affiliation,
-                        self.group_name,
+                        self.requester_type,
                         self.grade_level,
                         self.section,
+                        self.department,
                         current_time.isoformat(),
                     ),
                     return_last_id=True,
@@ -853,6 +858,11 @@ class Requisition:
     lab_activity_date: date = field(default_factory=date.today)
     num_students: Optional[int] = None
     num_groups: Optional[int] = None
+    # Individual request fields
+    is_individual: int = 0
+    individual_name: Optional[str] = None
+    individual_contact: Optional[str] = None
+    individual_purpose: Optional[str] = None
 
     def save(self, editor_name: str) -> bool:
         """Save or update the requisition with history tracking."""
@@ -872,7 +882,9 @@ class Requisition:
                 UPDATE Requisitions SET requester_id = ?,
                 expected_request = ?, expected_return = ?, status = ?,
                 lab_activity_name = ?, lab_activity_description = ?, lab_activity_date = ?,
-                num_students = ?, num_groups = ? WHERE id = ?
+                num_students = ?, num_groups = ?,
+                is_individual = ?, individual_name = ?,
+                individual_contact = ?, individual_purpose = ? WHERE id = ?
                 """
                 db.execute_update(
                     query,
@@ -886,6 +898,10 @@ class Requisition:
                         self.lab_activity_date.isoformat(),
                         self.num_students,
                         self.num_groups,
+                        self.is_individual,
+                        self.individual_name,
+                        self.individual_contact,
+                        self.individual_purpose,
                         self.id,
                     ),
                 )
@@ -894,7 +910,8 @@ class Requisition:
                 query = """
                 INSERT INTO Requisitions (requester_id, expected_request,
                 expected_return, status, lab_activity_name, lab_activity_description, lab_activity_date,
-                num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                num_students, num_groups, is_individual, individual_name,
+                individual_contact, individual_purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 result = db.execute_update(
                     query,
@@ -908,6 +925,10 @@ class Requisition:
                         self.lab_activity_date.isoformat(),
                         self.num_students,
                         self.num_groups,
+                        self.is_individual,
+                        self.individual_name,
+                        self.individual_contact,
+                        self.individual_purpose,
                     ),
                     return_last_id=True,
                 )
@@ -1243,18 +1264,18 @@ class RequesterBulkCreator:
         try:
             with db.transaction():
                 query = """
-                INSERT INTO Requesters (name, affiliation, group_name,
-                grade_level, section, created_at) VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO Requesters (name, requester_type, grade_level, section,
+                department, created_at) VALUES (?, ?, ?, ?, ?, ?)
                 """
                 params = []
                 for req in requesters_data:
                     params.append(
                         (
                             req.get("name"),
-                            req.get("affiliation"),
-                            req.get("group_name"),
+                            req.get("requester_type", "teacher"),
                             req.get("grade_level"),
                             req.get("section"),
+                            req.get("department"),
                             current_time.isoformat(),
                         )
                     )
@@ -1264,10 +1285,10 @@ class RequesterBulkCreator:
                 for i, req_data in enumerate(requesters_data):
                     req = Requester(
                         name=req_data.get("name", ""),
-                        affiliation=req_data.get("affiliation", ""),
-                        group_name=req_data.get("group_name", ""),
+                        requester_type=req_data.get("requester_type", "teacher"),
                         grade_level=req_data.get("grade_level"),
                         section=req_data.get("section"),
+                        department=req_data.get("department"),
                         created_at=current_time,
                     )
                     req.id = ids[i]

@@ -120,7 +120,7 @@ class RequisitionsFilters(QWidget):
         )
         layout.addWidget(self.summary_label)
 
-    def set_model(self, model: RequisitionsModel):
+    def set_model(self, model: "RequisitionsModel"):
         """Set the model reference for accessing data."""
         self.model = model
         self._load_requester_options()
@@ -138,7 +138,11 @@ class RequisitionsFilters(QWidget):
             # Add requester names (only those with requisitions)
             requesters = self.model.controller.get_requesters_with_requisitions()
             for requester in requesters:
-                display_text = f"{requester.name} ({requester.affiliation})"
+                display_text = requester.name
+                if requester.requester_type == "student":
+                    display_text = f"{requester.name} ({requester.grade_level} - {requester.section})"
+                elif requester.requester_type == "teacher":
+                    display_text = f"{requester.name} ({requester.department})"
                 self.requester_combo.addItem(display_text, requester.name.lower())
 
         except Exception as e:

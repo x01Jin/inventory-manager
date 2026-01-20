@@ -19,6 +19,7 @@ def get_dynamic_report_data(
     category_filter: str = "",
     supplier_filter: str = "",
     include_consumables: bool = True,
+    show_individual_only: bool = False,
 ) -> List[Dict]:
     try:
         query_builder = ReportQueryBuilder()
@@ -30,6 +31,7 @@ def get_dynamic_report_data(
             category_filter=category_filter,
             supplier_filter=supplier_filter,
             include_consumables=include_consumables,
+            show_individual_only=show_individual_only,
         )
 
         rows = query_builder.execute_report_query(query, params)
@@ -546,7 +548,12 @@ def get_disposal_history_data(
 
 
 def get_usage_by_grade_level_data(
-    start_date: date, end_date: date, category_filter: str = ""
+    start_date: date,
+    end_date: date,
+    category_filter: str = "",
+    grade_filter: str = "",
+    section_filter: str = "",
+    show_individual_only: bool = False,
 ) -> List[Dict]:
     """Get usage data broken down by grade level and section.
 
@@ -557,6 +564,9 @@ def get_usage_by_grade_level_data(
         start_date: Start date for the report period
         end_date: End date for the report period
         category_filter: Optional filter by category
+        grade_filter: Optional filter by grade level
+        section_filter: Optional filter by section
+        show_individual_only: Whether to show only individual requests
 
     Returns:
         List of usage records by grade level
@@ -585,8 +595,21 @@ def get_usage_by_grade_level_data(
             query += " AND c.name = ?"
             params.append(category_filter)
 
+        if grade_filter and grade_filter != "All Grades":
+            query += " AND req.grade_level = ?"
+            params.append(grade_filter)
+
+        if section_filter and section_filter != "All Sections":
+            query += " AND req.section = ?"
+            params.append(section_filter)
+
+        if show_individual_only:
+            query += " AND r.is_individual = 1"
+        else:
+            query += " AND r.is_individual = 0"
+
         query += """
-            GROUP BY i.id, i.name, c.name, req.grade_level, req.section, 
+            GROUP BY i.id, i.name, c.name, req.grade_level, req.section,
                      r.lab_activity_name, r.lab_activity_date
             ORDER BY r.lab_activity_date DESC, req.grade_level, req.section, i.name
         """

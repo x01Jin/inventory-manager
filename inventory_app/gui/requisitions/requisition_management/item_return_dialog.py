@@ -346,7 +346,7 @@ class ItemReturnDialog(QDialog):
         info_layout.setContentsMargins(10, 4, 10, 6)
 
         requester_text = (
-            f"👤 {self.requester.name} ({self.requester.affiliation})"
+            f"👤 {self.requester.name}"
             if self.requester
             else "Requester: Unknown"
         )

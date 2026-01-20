@@ -12,10 +12,12 @@ def test_report_worker_passes_filters(monkeypatch):
         category_filter=None,
         supplier_filter=None,
         include_consumables=True,
+        show_individual_only=False,
         structured=False,
     ):
         captured["category_filter"] = category_filter
         captured["supplier_filter"] = supplier_filter
+        captured["show_individual_only"] = show_individual_only
         return "fake_path.xlsx"
 
     monkeypatch.setattr(report_generator, "generate_report", fake_generate_report)
@@ -31,3 +33,4 @@ def test_report_worker_passes_filters(monkeypatch):
     assert result == "fake_path.xlsx"
     assert captured["category_filter"] == "CAT-A"
     assert captured["supplier_filter"] == "SUP-X"
+    assert not captured["show_individual_only"]

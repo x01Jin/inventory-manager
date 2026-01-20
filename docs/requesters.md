@@ -4,6 +4,32 @@
 
 The Requesters page manages personnel who are authorized to create requisitions and borrow inventory. Requesters are associated with requisitions to track inventory usage by person, class, and organizational unit.
 
+## Requester Types
+
+Requesters are categorized into three types, each with specific required fields:
+
+| Type | Description | Required Fields |
+| ------ | ------------- | ----------------- |
+| **Student** | Educational institution students | Name, Grade Level, Section |
+| **Teacher** | Faculty or staff members | Name, Department |
+| **Faculty** | External or simplified requests | Name, Affiliation |
+
+### Student Fields
+
+- **Name**: Full name of the student
+- **Grade Level**: Educational level (e.g., "Grade 7", "Grade 10")
+- **Section**: Class section or group (e.g., "Section A", "Einstein")
+
+### Teacher Fields
+
+- **Name**: Full name of the teacher/staff
+- **Department**: Department or unit (e.g., "Science", "Mathematics")
+
+### Faculty Fields
+
+- **Name**: Full name of the requester
+- **Affiliation**: Organization or lab (e.g., "Physics Lab", "Biology Dept")
+
 ## Data Loading
 
 - Requester data loads asynchronously in a background thread
@@ -11,92 +37,45 @@ The Requesters page manages personnel who are authorized to create requisitions 
 - The table populates progressively as data becomes available
 - Buttons are disabled during data load to prevent conflicts
 
-## Requester Fields
-
-| Field | Required | Description | Example |
-| ------- | ---------- | ------------- | --------- |
-| **Name** | Yes | Full name of the requester | John Smith |
-| **Affiliation** | Yes | Department, role, or organizational unit | Science Department, Grade 10 |
-| **Group Name** | Yes | Class, team, or group identifier | Class 10-A, Biology Lab |
-| **Grade Level** | No | Educational grade level | Grade 7, Grade 8, Grade 10 |
-| **Section** | No | Section or class identifier | Section A, Einstein, Blue Team |
-
-### Field Details
-
-#### Name
-
-- Full name of the person making the request
-- Displayed in requisition records and reports
-- Used in requester search and filtering
-
-#### Affiliation
-
-- General organizational unit or role
-- Common values: Teacher, Student, Lab Assistant, Department
-- Used for filtering and usage tracking by organizational unit
-
-#### Group Name
-
-- Class, team, or project group identifier
-- Links requesters to specific groups for activity tracking
-- Useful for school settings (class sections) or department teams
-
-#### Grade Level
-
-- Educational level (primarily for school settings)
-- Supports usage tracking by grade in reports
-- Optional field; leave blank for non-educational contexts
-
-#### Section
-
-- Further subdivision within a grade or group
-- Example: "Section A", "Einstein", "Team Alpha"
-- Used in "Usage by Grade Level" reports for detailed breakdowns
-
 ## Usage in Reports
 
-The Grade Level and Section fields enable specialized reporting:
+Requester type-specific fields enable specialized reporting:
 
-- **Usage by Grade Level Report**: Groups consumption by grade level and section
-- **Usage by Requester**: Filter reports by requester affiliation or group
-- **Activity Tracking**: Associates usage with specific classes and groups
+- **Usage by Grade Level Report**: Groups consumption by grade level and section (students only)
+- **Usage by Department Report**: Groups consumption by department (teachers only)
+- **Activity Tracking**: Associates usage with specific requester types
 
 ## Key Components
 
 - **Requesters Table**: Displays all registered requesters with columns:
   - Requisitions Count: Number of associated requisitions (determines delete eligibility)
+  - Type: Student, Teacher, or Faculty
   - Name: Requester full name
-  - Affiliation: Organizational unit
-  - Group: Class or group identifier
-  - Grade Level: Educational grade (if applicable)
-  - Section: Section identifier (if applicable)
+  - Grade/Section or Department: Type-specific details
+  - Affiliation: For faculty members
   - Created: Record creation timestamp
 
-- **Add Requester Dialog**: Form for creating new requester records
+- **Add Requester Dialog**: Form for creating new requester records with type selection
 - **Edit Requester Dialog**: Form for modifying existing requester records
-- **Search Box**: Filters requesters by name, affiliation, or group
+- **Search Box**: Filters requesters by name, grade level, section, department, or affiliation
 
 ## Common Operations
 
 ### Adding a Requester
 
 1. Click **Add Requester** button
-2. Fill required fields (Name, Affiliation, Group)
-3. Optionally fill Grade Level and Section
+2. Select the requester type from the dropdown (Student/Teacher/Faculty)
+3. Fill the required fields based on type
 4. Enter Editor Name (for audit trail)
 5. Click **Save Requester**
-
-The new requester is immediately available for requisition creation.
 
 ### Editing a Requester
 
 1. Select a requester row in the table
 2. Click **Edit Requester** or double-click the row
-3. Modify fields as needed
+3. Modify fields as needed (can also change requester type)
 4. Enter Editor Name
 5. Click **Save**
-
-All edits are logged with timestamp and editor name.
 
 ### Deleting a Requester
 
@@ -117,8 +96,10 @@ All edits are logged with timestamp and editor name.
 Use the search box to filter by:
 
 - Name (partial match, case-insensitive)
+- Grade Level (partial match, case-insensitive)
+- Section (partial match, case-insensitive)
+- Department (partial match, case-insensitive)
 - Affiliation (partial match, case-insensitive)
-- Group (partial match, case-insensitive)
 
 Results update instantly as you type.
 
@@ -126,8 +107,8 @@ Results update instantly as you type.
 
 | Rule | Behavior |
 | ------ | ---------- |
-| Required Fields | Name, Affiliation, Group, Editor Name must not be empty |
-| Duplicate Check | Warning shown if requester with same name+affiliation+group exists |
+| Required Fields | Name and type-specific fields are required based on requester type |
+| Duplicate Check | Warning shown if requester with same name and type exists |
 | Delete Protection | Cannot delete requesters with requisition history |
 | Case Sensitivity | Search and display are case-insensitive; storage preserves input |
 
@@ -135,17 +116,18 @@ Results update instantly as you type.
 
 Requesters are linked to requisitions through:
 
-- **Requester Dropdown**: Available requesters appear in requisition creation dialog
-- **Affiliation Display**: Shown alongside name for disambiguation
+- **Requester Selection**: Available requesters appear in requisition creation dialog
+- **Type Display**: Requester type shown alongside name for disambiguation
+- **Type-Specific Fields**: Validation based on requester type during requisition creation
 - **Requisition Count**: Displayed in requesters table
 - **Audit Trail**: Requester creation/edits tracked in activity log
 
 ## Best Practices
 
-1. **Use Consistent Naming**: Establish naming conventions for affiliations and groups
-2. **Include Grade/Section**: For educational settings, always include grade level and section
+1. **Use Consistent Naming**: Establish naming conventions for departments and affiliations
+2. **Include Grade/Section**: For educational settings, always include grade level and section for students
 3. **Regular Cleanup**: Remove obsolete requesters (no active requisitions) periodically
-4. **Meaningful Groups**: Use descriptive group names for easy filtering and reporting
+4. **Type Selection**: Choose the correct requester type to enable proper reporting
 
 ## Limitations
 
@@ -157,5 +139,5 @@ Requesters are linked to requisitions through:
 ## Related Documentation
 
 - See `docs/requisitions.md` for requisition creation workflows
-- See `docs/reports.md` for Usage by Grade Level report details
+- See `docs/reports.md` for Usage by Grade Level and Department report details
 - See `docs/architecture.md` for database schema (Requesters table)

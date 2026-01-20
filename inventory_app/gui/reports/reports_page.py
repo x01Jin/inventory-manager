@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QTabWidget,
     QSizePolicy,
+    QLineEdit,
 )
 from PyQt6.QtCore import Qt, QDate
 
@@ -43,6 +44,8 @@ class ReportsPage(QWidget):
         self.current_report_type = "usage"
         self.apply_theme()
         self.setup_ui()
+        self.load_grade_levels()
+        self.load_sections()
 
     def apply_theme(self):
         """Apply current theme to the reports page."""
@@ -300,12 +303,16 @@ class ReportsPage(QWidget):
         # Category filter
         category_layout = QHBoxLayout()
         category_layout.setSpacing(4)
-        category_layout.addWidget(QLabel(ReportConfig.LABELS["category"]))
+        category_layout.addWidget(QLabel("Category:"))
         self.category_combo = QComboBox()
         self.category_combo.addItem("All Categories")
         self.load_categories()
         category_layout.addWidget(self.category_combo)
         filters_layout.addLayout(category_layout)
+
+        # Individual requests filter
+        self.show_individual_only_check = QCheckBox("Show only individual requests")
+        filters_layout.addWidget(self.show_individual_only_check)
 
         # Consumable filter
         self.consumable_check = QCheckBox("Include consumable items")
@@ -360,7 +367,15 @@ class ReportsPage(QWidget):
                 "Update History Report",
                 "Disposal History Report",
                 "Defective Items Report",
+                "Low Stock Alert",
+                "Acquisition History",
+                "Usage by Grade Level",
+                "Item Usage Details",
+                "Batch Summary",
             ]
+        )
+        self.inventory_report_type.currentTextChanged.connect(
+            self._on_inventory_report_type_changed
         )
         type_layout.addWidget(self.inventory_report_type)
         layout.addWidget(type_group)
@@ -390,6 +405,59 @@ class ReportsPage(QWidget):
         self.load_categories(self.inv_category_combo)
         category_layout.addWidget(self.inv_category_combo)
         filters_layout.addLayout(category_layout)
+
+        # Low stock threshold container (for Low Stock Alert)
+        self.threshold_widget = QWidget()
+        threshold_layout = QHBoxLayout(self.threshold_widget)
+        threshold_layout.setSpacing(4)
+        threshold_layout.setContentsMargins(0, 0, 0, 0)
+        threshold_layout.addWidget(QLabel("Threshold (units):"))
+        self.low_stock_threshold = QSpinBox()
+        self.low_stock_threshold.setRange(0, 9999)
+        self.low_stock_threshold.setValue(5)
+        threshold_layout.addWidget(self.low_stock_threshold)
+        self.threshold_widget.setVisible(False)
+        filters_layout.addWidget(self.threshold_widget)
+
+        # Item name filter container (for Item Usage Details and Batch Summary)
+        self.item_name_widget = QWidget()
+        item_name_layout = QHBoxLayout(self.item_name_widget)
+        item_name_layout.setSpacing(4)
+        item_name_layout.setContentsMargins(0, 0, 0, 0)
+        item_name_layout.addWidget(QLabel("Item Name:"))
+        self.item_name_filter = QLineEdit()
+        self.item_name_filter.setPlaceholderText("Search by item name...")
+        item_name_layout.addWidget(self.item_name_filter)
+        self.item_name_widget.setVisible(False)
+        filters_layout.addWidget(self.item_name_widget)
+
+        # Grade and Section filter container (for Usage by Grade Level)
+        self.grade_section_widget = QWidget()
+        grade_section_layout = QHBoxLayout(self.grade_section_widget)
+        grade_section_layout.setSpacing(4)
+        grade_section_layout.setContentsMargins(0, 0, 0, 0)
+
+        grade_section_layout.addWidget(QLabel("Grade Level:"))
+        self.grade_filter = QComboBox()
+        self.grade_filter.addItem("All Grades")
+        grade_section_layout.addWidget(self.grade_filter)
+
+        grade_section_layout.addWidget(QLabel("Section:"))
+        self.section_filter = QComboBox()
+        self.section_filter.addItem("All Sections")
+        grade_section_layout.addWidget(self.section_filter)
+
+        self.grade_section_widget.setVisible(False)
+        filters_layout.addWidget(self.grade_section_widget)
+
+        # Individual requests filter container (for Usage by Grade Level)
+        self.individual_filter_widget = QWidget()
+        individual_layout = QVBoxLayout(self.individual_filter_widget)
+        individual_layout.setContentsMargins(0, 0, 0, 0)
+        self.inv_show_individual_only_check = QCheckBox("Show only individual requests")
+        individual_layout.addWidget(self.inv_show_individual_only_check)
+        self.individual_filter_widget.setVisible(False)
+        filters_layout.addWidget(self.individual_filter_widget)
 
         layout.addWidget(filters_group)
 
@@ -516,11 +584,79 @@ class ReportsPage(QWidget):
             from inventory_app.database.connection import db
 
             categories = db.execute_query("SELECT name FROM Categories ORDER BY name")
+            if combo_box.count() == 0:
+                combo_box.addItem("All Categories")
             if categories:
                 for cat in categories:
                     combo_box.addItem(cat["name"])
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
+
+    def load_grade_levels(self):
+        """Load grade levels from database for Usage by Grade Level report."""
+        try:
+            from inventory_app.database.connection import db
+
+            grades = db.execute_query(
+                "SELECT DISTINCT grade_level FROM Requesters WHERE grade_level IS NOT NULL AND grade_level != '' ORDER BY grade_level"
+            )
+            self.grade_filter.clear()
+            self.grade_filter.addItem("All Grades")
+            if grades:
+                for row in grades:
+                    self.grade_filter.addItem(row["grade_level"])
+                self.grade_filter.setEnabled(True)
+            else:
+                self.grade_filter.setEnabled(False)
+        except Exception as e:
+            logger.error(f"Failed to load grade levels: {e}")
+            self.grade_filter.setEnabled(False)
+
+    def load_sections(self):
+        """Load sections from database for Usage by Grade Level report."""
+        try:
+            from inventory_app.database.connection import db
+
+            sections = db.execute_query(
+                "SELECT DISTINCT section FROM Requesters WHERE section IS NOT NULL AND section != '' ORDER BY section"
+            )
+            self.section_filter.clear()
+            self.section_filter.addItem("All Sections")
+            if sections:
+                for row in sections:
+                    self.section_filter.addItem(row["section"])
+                self.section_filter.setEnabled(True)
+            else:
+                self.section_filter.setEnabled(False)
+        except Exception as e:
+            logger.error(f"Failed to load sections: {e}")
+            self.section_filter.setEnabled(False)
+
+    def _on_inventory_report_type_changed(self, report_type: str):
+        """Handle inventory report type dropdown changes to show/hide appropriate inputs."""
+        self.threshold_widget.setVisible(report_type == "Low Stock Alert")
+
+        self.item_name_widget.setVisible(
+            report_type in {"Item Usage Details", "Batch Summary"}
+        )
+
+        self.grade_section_widget.setVisible(report_type == "Usage by Grade Level")
+        self.individual_filter_widget.setVisible(report_type == "Usage by Grade Level")
+
+        self.inv_category_combo.setEnabled(
+            report_type
+            not in {"Item Usage Details", "Batch Summary", "Low Stock Alert"}
+        )
+
+        if report_type in {
+            "Stock Levels Report",
+            "Low Stock Alert",
+            "Item Usage Details",
+            "Batch Summary",
+        }:
+            self.inventory_date_selector.setEnabled(False)
+        else:
+            self.inventory_date_selector.setEnabled(True)
 
     def load_suppliers(self):
         """Load suppliers from database (deprecated - no longer used)."""
@@ -695,6 +831,7 @@ class ReportsPage(QWidget):
             category_filter = ""
 
         include_consumables = self.consumable_check.isChecked()
+        show_individual_only = self.show_individual_only_check.isChecked()
 
         # Start background worker
         self.worker = ReportWorker(
@@ -703,6 +840,7 @@ class ReportsPage(QWidget):
             end_date,
             category_filter=category_filter,
             include_consumables=include_consumables,
+            show_individual_only=show_individual_only,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
@@ -720,20 +858,44 @@ class ReportsPage(QWidget):
             self.reset_ui()
             return
 
-        # Get filter values
+        inventory_report_type = self.inventory_report_type.currentText()
+
+        # Build kwargs based on report type
+        kwargs: dict[str, object] = {
+            "inventory_report_type": inventory_report_type,
+        }
+
+        # Category filter (used differently for some reports)
         category_filter = self.inv_category_combo.currentText()
         if category_filter == "All Categories":
             category_filter = ""
 
-        inventory_report_type = self.inventory_report_type.currentText()
+        # Report-specific filters
+        if inventory_report_type == "Low Stock Alert":
+            kwargs["low_stock_threshold"] = self.low_stock_threshold.value()
+        elif inventory_report_type in {"Item Usage Details", "Batch Summary"}:
+            kwargs["item_name_filter"] = self.item_name_filter.text().strip()
+        elif inventory_report_type == "Usage by Grade Level":
+            kwargs["grade_filter"] = self.grade_filter.currentText()
+            kwargs["section_filter"] = self.section_filter.currentText()
+            kwargs["show_individual_only"] = (
+                self.inv_show_individual_only_check.isChecked()
+            )
+
+        # Only pass category filter for reports that use it
+        if inventory_report_type not in {
+            "Item Usage Details",
+            "Batch Summary",
+            "Low Stock Alert",
+        }:
+            kwargs["category_filter"] = category_filter
 
         # Start background worker
         self.worker = ReportWorker(
             "inventory",
             start_date,
             end_date,
-            category_filter=category_filter,
-            inventory_report_type=inventory_report_type,
+            **kwargs,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)

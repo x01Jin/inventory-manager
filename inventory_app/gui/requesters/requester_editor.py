@@ -1,13 +1,16 @@
 """
 Requester editor dialog for adding and editing requester information.
-Provides form for requester management in laboratory requisitions.
+Provides tab-based form for requester management in laboratory requisitions.
 """
 
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QGroupBox, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout,
+    QLineEdit, QPushButton, QTabWidget, QWidget,
+    QMessageBox, QFormLayout
 )
+from PyQt6.QtCore import Qt
+
 from inventory_app.database.models import Requester
 from inventory_app.services.requesters_activity import requesters_activity_manager
 from inventory_app.utils.logger import logger
@@ -34,53 +37,33 @@ class RequesterEditor(QDialog):
         """Setup the dialog UI."""
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
-        # Requester Information Group
-        info_group = QGroupBox("Requester Information")
-        info_layout = QVBoxLayout(info_group)
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
 
-        # Name (required)
-        name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Full Name:"))
-        self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Enter requester's full name...")
-        name_layout.addWidget(self.name_input)
-        info_layout.addLayout(name_layout)
+        self._setup_student_tab()
+        self._setup_teacher_tab()
+        self._setup_faculty_tab()
 
-        # Affiliation (required)
-        affiliation_layout = QHBoxLayout()
-        affiliation_layout.addWidget(QLabel("Affiliation:"))
-        self.affiliation_input = QLineEdit()
-        self.affiliation_input.setPlaceholderText("Grade/Section or Department...")
-        affiliation_layout.addWidget(self.affiliation_input)
-        info_layout.addLayout(affiliation_layout)
+        self.editor_layout = QFormLayout()
+        self.editor_layout.setSpacing(10)
+        self.editor_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        # Group Name (required)
-        group_layout = QHBoxLayout()
-        group_layout.addWidget(QLabel("Group:"))
-        self.group_input = QLineEdit()
-        self.group_input.setPlaceholderText("Class group or team name...")
-        group_layout.addWidget(self.group_input)
-        info_layout.addLayout(group_layout)
-
-        layout.addWidget(info_group)
-
-        # Editor Information (Spec #14)
-        editor_group = QGroupBox("Editor Information (Required)")
-        editor_layout = QVBoxLayout(editor_group)
-        editor_layout.addWidget(QLabel("Your Name/Initials:"))
         self.editor_input = QLineEdit()
         self.editor_input.setPlaceholderText("Enter your name or initials...")
-        editor_layout.addWidget(self.editor_input)
-        layout.addWidget(editor_group)
+        self.editor_layout.addRow("Your Name/Initials:", self.editor_input)
 
-        # Buttons
+        editor_container = QWidget()
+        editor_container.setLayout(self.editor_layout)
+        layout.addWidget(editor_container)
+
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        self.save_button = QPushButton("Save Requester")
+        self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_requester)
-        self.save_button.setDefault(True)  # Enter key activates save
+        self.save_button.setDefault(True)
         button_layout.addWidget(self.save_button)
 
         self.cancel_button = QPushButton("Cancel")
@@ -89,10 +72,96 @@ class RequesterEditor(QDialog):
 
         layout.addLayout(button_layout)
 
-        # Set dialog properties
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(300)
-        self.setModal(True)  # Block interaction with parent window
+        self.setMinimumWidth(400)
+        self.setModal(True)
+        self._update_tab_positions()
+
+    def _setup_student_tab(self):
+        """Setup the Student tab."""
+        tab = QWidget()
+        form_layout = QFormLayout(tab)
+        form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.student_name = QLineEdit()
+        self.student_name.setPlaceholderText("Enter student's full name")
+
+        self.grade_level = QLineEdit()
+        self.grade_level.setPlaceholderText("e.g., Grade 7, Grade 10")
+
+        self.section = QLineEdit()
+        self.section.setPlaceholderText("e.g., Section A, Einstein")
+
+        form_layout.addRow("Full Name:", self.student_name)
+        form_layout.addRow("Grade Level:", self.grade_level)
+        form_layout.addRow("Section:", self.section)
+
+        self.tab_widget.addTab(tab, "Student")
+
+    def _setup_teacher_tab(self):
+        """Setup the Teacher tab."""
+        tab = QWidget()
+        form_layout = QFormLayout(tab)
+        form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.teacher_name = QLineEdit()
+        self.teacher_name.setPlaceholderText("Enter teacher's full name")
+
+        self.department = QLineEdit()
+        self.department.setPlaceholderText("e.g., Science, Mathematics")
+
+        form_layout.addRow("Full Name:", self.teacher_name)
+        form_layout.addRow("Department:", self.department)
+
+        self.tab_widget.addTab(tab, "Teacher")
+
+    def _setup_faculty_tab(self):
+        """Setup the Faculty tab."""
+        tab = QWidget()
+        form_layout = QFormLayout(tab)
+        form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.faculty_name = QLineEdit()
+        self.faculty_name.setPlaceholderText("Enter faculty name")
+
+        form_layout.addRow("Full Name:", self.faculty_name)
+
+        self.tab_widget.addTab(tab, "Faculty")
+
+    def _update_tab_positions(self):
+        """Ensure tabs are positioned at the top for minimal height."""
+        self.tab_widget.setTabPosition(QTabWidget.TabPosition.North)
+
+    def _get_current_type(self) -> str:
+        """Get the current requester type based on selected tab."""
+        current_index = self.tab_widget.currentIndex()
+        if current_index == 0:
+            return "student"
+        elif current_index == 1:
+            return "teacher"
+        else:
+            return "faculty"
+
+    def _get_current_name_field(self) -> QLineEdit:
+        """Get the name field for the current tab."""
+        current_index = self.tab_widget.currentIndex()
+        if current_index == 0:
+            return self.student_name
+        elif current_index == 1:
+            return self.teacher_name
+        else:
+            return self.faculty_name
+
+    def _switch_to_tab(self, requester_type: str):
+        """Switch to the appropriate tab based on requester type."""
+        if requester_type == "student":
+            self.tab_widget.setCurrentIndex(0)
+        elif requester_type == "teacher":
+            self.tab_widget.setCurrentIndex(1)
+        else:
+            self.tab_widget.setCurrentIndex(2)
 
     def load_requester_data(self):
         """Load existing requester data for editing."""
@@ -100,9 +169,18 @@ class RequesterEditor(QDialog):
             return
 
         try:
-            self.name_input.setText(self.existing_requester.name)
-            self.affiliation_input.setText(self.existing_requester.affiliation)
-            self.group_input.setText(self.existing_requester.group_name)
+            req_type = self.existing_requester.requester_type or "teacher"
+            self._switch_to_tab(req_type)
+
+            if req_type == "student":
+                self.student_name.setText(self.existing_requester.name or "")
+                self.grade_level.setText(self.existing_requester.grade_level or "")
+                self.section.setText(self.existing_requester.section or "")
+            elif req_type == "teacher":
+                self.teacher_name.setText(self.existing_requester.name or "")
+                self.department.setText(self.existing_requester.department or "")
+            else:
+                self.faculty_name.setText(self.existing_requester.name or "")
 
             logger.debug(f"Loaded data for requester {self.requester_id}")
 
@@ -110,52 +188,51 @@ class RequesterEditor(QDialog):
             logger.error(f"Failed to load requester data: {e}")
             QMessageBox.warning(self, "Data Load Error", "Failed to load requester information.")
 
-    def validate_input(self) -> bool:
-        """Validate user input."""
-        # Check required fields
-        if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Requester name is required.")
-            self.name_input.setFocus()
-            return False
+    def validate_input(self) -> tuple[bool, str]:
+        """Validate user input.
 
-        if not self.affiliation_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Affiliation is required.")
-            self.affiliation_input.setFocus()
-            return False
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        req_type = self._get_current_type()
+        name_field = self._get_current_name_field()
 
-        if not self.group_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Group name is required.")
-            self.group_input.setFocus()
-            return False
+        if not name_field.text().strip():
+            return False, "Name is required."
 
         if not self.editor_input.text().strip():
-            QMessageBox.warning(self, "Validation Error", "Editor name is required (Spec #14).")
-            self.editor_input.setFocus()
-            return False
+            return False, "Editor name is required."
 
-        return True
+        if req_type == "student":
+            if not self.grade_level.text().strip():
+                return False, "Grade level is required."
+            if not self.section.text().strip():
+                return False, "Section is required."
+        elif req_type == "teacher":
+            if not self.department.text().strip():
+                return False, "Department is required."
+
+        return True, ""
 
     def save_requester(self):
         """Save the requester data."""
         try:
-            # Validate input
-            if not self.validate_input():
+            is_valid, error_msg = self.validate_input()
+            if not is_valid:
+                QMessageBox.warning(self, "Validation Error", error_msg)
                 return
 
-            # Check for duplicate requester (same name, affiliation, group)
-            name = self.name_input.text().strip()
-            affiliation = self.affiliation_input.text().strip()
-            group_name = self.group_input.text().strip()
+            req_type = self._get_current_type()
+            name_field = self._get_current_name_field()
+            name = name_field.text().strip()
 
-            # Look for existing requester with same details
-            existing_check = self._find_existing_requester(name, affiliation, group_name)
+            existing_check = self._find_existing_requester(name, req_type)
             if existing_check and (not self.existing_requester or existing_check.id != self.existing_requester.id):
                 reply = QMessageBox.question(
                     self, "Duplicate Requester",
-                    f"A requester with the same name, affiliation, and group already exists.\n\n"
+                    f"A requester with the same name and type already exists.\n\n"
                     f"Name: {existing_check.name}\n"
-                    f"Affiliation: {existing_check.affiliation}\n"
-                    f"Group: {existing_check.group_name}\n\n"
+                    f"Type: {existing_check.requester_type.capitalize()}\n\n"
                     "Do you want to continue creating this duplicate?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No
@@ -163,24 +240,33 @@ class RequesterEditor(QDialog):
                 if reply == QMessageBox.StandardButton.No:
                     return
 
-            # Create or update requester
             if self.existing_requester:
                 requester = self.existing_requester
             else:
                 requester = Requester()
 
             requester.name = name
-            requester.affiliation = affiliation
-            requester.group_name = group_name
+            requester.requester_type = req_type
 
-            # Save requester
+            if req_type == "student":
+                requester.grade_level = self.grade_level.text().strip()
+                requester.section = self.section.text().strip()
+                requester.department = None
+            elif req_type == "teacher":
+                requester.grade_level = None
+                requester.section = None
+                requester.department = self.department.text().strip()
+            else:
+                requester.grade_level = None
+                requester.section = None
+                requester.department = None
+
             success = requester.save()
 
             if success:
                 action = "updated" if self.existing_requester else "created"
                 logger.info(f"Successfully {action} requester: {requester.name}")
 
-                # Log activity
                 editor_name = self.editor_input.text().strip()
                 if self.existing_requester:
                     requesters_activity_manager.log_requester_updated(
@@ -202,16 +288,16 @@ class RequesterEditor(QDialog):
             logger.error(f"Error saving requester: {e}")
             QMessageBox.critical(self, "Error", f"Failed to save requester: {str(e)}")
 
-    def _find_existing_requester(self, name: str, affiliation: str, group_name: str) -> Optional[Requester]:
-        """Find existing requester with same details."""
+    def _find_existing_requester(self, name: str, requester_type: str) -> Optional[Requester]:
+        """Find existing requester with same name and type."""
         try:
             from inventory_app.database.connection import db
 
             query = """
             SELECT * FROM Requesters
-            WHERE name = ? AND affiliation = ? AND group_name = ?
+            WHERE name = ? AND requester_type = ?
             """
-            rows = db.execute_query(query, (name, affiliation, group_name))
+            rows = db.execute_query(query, (name, requester_type))
             if rows:
                 return Requester(**dict(rows[0]))
 
@@ -233,8 +319,6 @@ class RequesterEditor(QDialog):
             if requester_id:
                 return Requester.get_by_id(requester_id)
             else:
-                # For new requesters, we need to find the one we just created
-                # This is a simplified approach - in practice, you'd return the created object
                 return None
 
         return None

@@ -17,7 +17,6 @@ class RequisitionRow:
     """Data structure for displaying requisition information in tables."""
     id: Optional[int] = None
     requester_name: str = ""
-    requester_affiliation: str = ""
     requester_group: str = ""
     expected_request: Optional[datetime] = None
     expected_return: Optional[datetime] = None
@@ -27,7 +26,7 @@ class RequisitionRow:
     num_groups: Optional[int] = None
     total_items: int = 0
     status: str = ""
-    items_list: str = ""  # Comma-separated list of items for display
+    items_list: str = ""
 
 
 class RequisitionsModel:
@@ -95,11 +94,19 @@ class RequisitionsModel:
                 if summary.requisition.lab_activity_date:
                     lab_activity_date_copy = summary.requisition.lab_activity_date  # date objects are immutable
 
+                # Build requester_group string from type-specific fields
+                req = summary.requester
+                if req.grade_level and req.section:
+                    requester_group = f"{req.grade_level} - {req.section}"
+                elif req.department:
+                    requester_group = req.department
+                else:
+                    requester_group = ""
+
                 row = RequisitionRow(
                     id=summary.requisition.id,
                     requester_name=summary.requester.name,
-                    requester_affiliation=summary.requester.affiliation,
-                    requester_group=summary.requester.group_name,
+                    requester_group=requester_group,
                     expected_request=expected_request_copy,
                     expected_return=expected_return_copy,
                     lab_activity_name=summary.requisition.lab_activity_name,
@@ -292,16 +299,16 @@ class RequisitionsModel:
         filtered = []
 
         for req in requisitions:
-            # Search in requester information
             if search_term in req.requester.name.lower():
                 filtered.append(req)
                 continue
 
-            if search_term in req.requester.affiliation.lower():
-                filtered.append(req)
-                continue
-
-            if search_term in req.requester.group_name.lower():
+            req_group = ""
+            if req.requester.grade_level and req.requester.section:
+                req_group = f"{req.requester.grade_level} - {req.requester.section}".lower()
+            elif req.requester.department:
+                req_group = req.requester.department.lower()
+            if search_term in req_group:
                 filtered.append(req)
                 continue
 

@@ -707,6 +707,9 @@ class RequisitionsPage(QWidget):
         req = req_summary.requisition
         requester = req_summary.requester
 
+        # Check if individual request
+        is_individual = getattr(req_summary, "is_individual", 0) == 1
+
         # Format dates
         expected_request_str = ""
         if req.expected_request:
@@ -821,6 +824,65 @@ class RequisitionsPage(QWidget):
         }
         status_color = status_colors.get(req.status, "#374151")
 
+        if is_individual:
+            requester_info_html = f"""
+            <span class="info-label">Name:</span>
+            <span>{getattr(req_summary, "individual_name", "N/A") or "N/A"}</span>
+            """
+            if getattr(req_summary, "individual_contact", None):
+                requester_info_html += f"""
+                <span class="info-label">Contact:</span>
+                <span>{req_summary.individual_contact}</span>
+                """
+            if getattr(req_summary, "individual_purpose", None):
+                requester_info_html += f"""
+                <span class="info-label">Purpose:</span>
+                <span>{req_summary.individual_purpose}</span>
+                """
+            requester_info_html += """
+            <span class="info-label">Type:</span>
+            <span>Individual Request</span>
+            """
+            activity_section_html = ""
+        else:
+            requester = req_summary.requester
+            req_type = getattr(requester, 'requester_type', None) or 'faculty'
+            requester_info_html = f"""
+            <span class="info-label">Name:</span>
+            <span>{requester.name}</span>
+            <span class="info-label">Type:</span>
+            <span>{req_type.title()}</span>
+            """
+            if req_type == 'student':
+                if requester.grade_level and requester.section:
+                    requester_info_html += f"""
+                    <span class="info-label">Grade/Section:</span>
+                    <span>{requester.grade_level} - {requester.section}</span>
+                    """
+            elif req_type == 'teacher':
+                if requester.department:
+                    requester_info_html += f"""
+                    <span class="info-label">Department:</span>
+                    <span>{requester.department}</span>
+                    """
+            elif req_type == 'faculty':
+                pass
+            activity_section_html = f"""
+    <div class="section">
+        <h2>Activity Details</h2>
+        <div class="info-grid">
+            <span class="info-label">Activity:</span>
+            <span>{req.lab_activity_name}</span>
+            <span class="info-label">Activity Date:</span>
+            <span>{activity_date_str}</span>
+            <span class="info-label">Students:</span>
+            <span>{req.num_students or "N/A"}</span>
+            <span class="info-label">Groups:</span>
+            <span>{req.num_groups or "N/A"}</span>
+        </div>
+    </div>
+    """
+
         html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -929,15 +991,39 @@ class RequisitionsPage(QWidget):
     </div>
     
     <div class="section">
-        <h2>👤 Requester Information</h2>
+        <h2>Requester Information</h2>
         <div class="info-grid">
-            <span class="info-label">Name:</span>
-            <span>{requester.name}</span>
-            <span class="info-label">Affiliation:</span>
-            <span>{requester.affiliation}</span>
-            <span class="info-label">Group:</span>
-            <span>{requester.group_name}</span>
+            {requester_info_html}
         </div>
+    </div>
+    
+    <div class="section">
+        <h2>Timeline</h2>
+        <div class="info-grid">
+            <span class="info-label">Expected Request:</span>
+            <span>{expected_request_str}</span>
+            <span class="info-label">Expected Return:</span>
+            <span>{expected_return_str}</span>
+        </div>
+    </div>
+    
+    {activity_section_html}
+    
+    <div class="section">
+        <h2>Requested Items ({req_summary.total_items})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Item Name</th>
+                    <th style="width: 100px;">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+    </div>
     </div>
     
     <div class="section">

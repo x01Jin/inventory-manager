@@ -79,6 +79,7 @@ Generates a time-series usage report for any custom date range with automatic gr
   - Custom date range selection via DateRangeSelector
   - Preset date ranges for quick access
   - Category filter (All Categories or specific)
+  - **Individual Requests Filter**: "Show only individual requests" checkbox to filter for ad-hoc/unaffiliated requisitions
   - Consumable items checkbox (enabled by default)
 
 ## Detailed Implementation
@@ -220,6 +221,20 @@ Common Reports
 - **Update History Report** - Shows history of edits to inventory items including editor name, timestamp, and reason
 - **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them
 - **Defective Items Report** - Shows defective/broken items returned with condition type, notes, reporter, and date
+- **Usage by Grade Level Report** - Shows item usage grouped by grade level and section, with optional filter for individual requests only
+
+## Usage by Grade Level Report
+
+The Usage by Grade Level Report tracks item consumption across educational groups:
+
+- **Columns**: Item Name, Category, Grade Level, Section, Quantity Used, Lab Activity, Activity Date
+- **Filtering**:
+  - By date range
+  - By category
+  - By grade level (All Grades or specific)
+  - By section (All Sections or specific)
+  - **Individual Requests Only**: Checkbox to show only ad-hoc/unaffiliated requisitions (grade/section filters disabled when this is checked)
+- **Source**: Requisitions with Requesters joined to get grade/section data
 
 ## Defective Items Report
 

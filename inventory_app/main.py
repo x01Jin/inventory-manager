@@ -57,6 +57,42 @@ def initialize_laboratory_database() -> bool:
         return False
 
 
+def run_migrations_with_splash(app) -> bool:
+    """Run pending migrations with splash screen.
+
+    Args:
+        app: QApplication instance needed for splash screen
+
+    Returns:
+        bool: True if all migrations succeeded, False on failure
+    """
+    from inventory_app.database.migrations import migration_manager
+    from inventory_app.gui.splash_screen import SplashScreen
+
+    pending = migration_manager.get_pending_migrations()
+    if not pending:
+        return True
+
+    splash = SplashScreen()
+    splash.show()
+    app.processEvents()
+
+    try:
+        migration_manager.run_pending_migrations(
+            progress_callback=lambda status, percent: (
+                splash.update_progress(status, percent),
+                app.processEvents(),
+                None,
+            )[-1]
+        )
+        splash.close()
+        return True
+    except Exception:
+        logger.exception("Migration failed")
+        splash.close()
+        return False
+
+
 def verify_components() -> bool:
     """Quick sanity checks for critical services used by the application.
 
@@ -84,6 +120,23 @@ def main() -> int:
             logger.error("Application startup failed: database initialization error")
             return 1
 
+        # Import GUI components and create application early for splash screen
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from inventory_app.gui.main_window import main as gui_main
+        except ImportError:
+            logger.exception(
+                "Failed to import GUI components. Confirm PyQt6 and GUI packages are installed."
+            )
+            return 1
+
+        app = QApplication(sys.argv)
+
+        # Run migrations with splash if needed
+        if not run_migrations_with_splash(app):
+            logger.error("Application startup failed: migration error")
+            return 1
+
         if not verify_components():
             logger.warning(
                 "One or more components failed verification; continuing startup"
@@ -104,15 +157,6 @@ def main() -> int:
             logger.warning(
                 f"Summary tables service unavailable: {e}; continuing without summary tables"
             )
-
-        # Import GUI components only after database initialization succeeds
-        try:
-            from inventory_app.gui.main_window import main as gui_main  # Local import
-        except ImportError:
-            logger.exception(
-                "Failed to import GUI components. Confirm PyQt6 and GUI packages are installed."
-            )
-            return 1
 
         logger.info("Launching GUI")
         gui_exit_code = gui_main()

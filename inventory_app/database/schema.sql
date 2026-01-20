@@ -157,21 +157,26 @@ BEGIN
     END;
 END;
 
--- 8. Requesters: Requester information
--- NOTE: grade_level and section are used for usage tracking per beta test requirements
--- affiliation is the borrower's general affiliation (e.g., teacher, student)
--- group_name is used for class/group identification
+-- 8. Requesters: Requester information with type-specific fields
+-- requester_type: 'student', 'teacher', or 'faculty'
+-- Students require grade_level and section
+-- Teachers require department
+-- Faculty are simplified (name + requester_type only)
 CREATE TABLE Requesters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    affiliation TEXT NOT NULL,
-    group_name TEXT NOT NULL,
-    grade_level TEXT,          -- Grade level (e.g., 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10')
-    section TEXT,              -- Section name (e.g., 'Section A', 'Einstein')
+    requester_type TEXT NOT NULL DEFAULT 'teacher',
+    -- Student-specific fields
+    grade_level TEXT,             -- Grade level (e.g., 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10')
+    section TEXT,                 -- Section name (e.g., 'Section A', 'Einstein')
+    -- Teacher/Faculty fields
+    department TEXT,              -- Department (for teachers)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 9. Requisitions: Requesting records with reservation support
+-- Individual requests (is_individual=1) store requester info directly
+-- and skip the activity section entirely
 CREATE TABLE Requisitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requester_id INTEGER NOT NULL,
@@ -183,6 +188,11 @@ CREATE TABLE Requisitions (
     lab_activity_date DATE NOT NULL,
     num_students INTEGER,
     num_groups INTEGER,
+    -- Individual request fields
+    is_individual INTEGER NOT NULL DEFAULT 0,
+    individual_name TEXT,
+    individual_contact TEXT,
+    individual_purpose TEXT,
     FOREIGN KEY (requester_id) REFERENCES Requesters(id)
 );
 
@@ -354,10 +364,12 @@ CREATE TABLE IF NOT EXISTS Stock_Summary (
 );
 
 -- Requisition Summary Table: Denormalized requisition data for fast loading
+-- Includes individual request fields for quick display
 CREATE TABLE IF NOT EXISTS Requisition_Summary (
     requisition_id INTEGER PRIMARY KEY,
     requester_name TEXT NOT NULL,
-    requester_group TEXT NOT NULL,
+    requester_type TEXT,              -- Requester type: student, teacher, faculty
+    requester_group TEXT,             -- Can be NULL if requester has no group (deprecated, use grade_level/section)
     grade_level TEXT,
     section TEXT,
     status TEXT NOT NULL,
@@ -369,6 +381,9 @@ CREATE TABLE IF NOT EXISTS Requisition_Summary (
     total_quantity_requested INTEGER DEFAULT 0,
     num_students INTEGER,
     num_groups INTEGER,
+    -- Individual request display fields
+    is_individual INTEGER DEFAULT 0,
+    individual_name TEXT,
     last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
 );
@@ -394,6 +409,16 @@ CREATE TABLE IF NOT EXISTS Statistics_Aggregate (
 
 -- Initialize Statistics_Aggregate with default row
 INSERT OR IGNORE INTO Statistics_Aggregate (id) VALUES (1);
+
+-- Schema version tracking for migrations
+CREATE TABLE IF NOT EXISTS Schema_Versions (
+    migration_id TEXT PRIMARY KEY,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
+);
+
+-- Index for fast lookup
+CREATE INDEX IF NOT EXISTS idx_schema_versions_id ON Schema_Versions(migration_id);
 
 -- Indexes for summary tables
 CREATE INDEX IF NOT EXISTS idx_stock_summary_stock ON Stock_Summary(total_stock);
@@ -472,14 +497,15 @@ CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_insert
 AFTER INSERT ON Requisitions
 BEGIN
     INSERT INTO Requisition_Summary (
-        requisition_id, requester_name, requester_group, grade_level, section,
+        requisition_id, requester_name, requester_type, requester_group, grade_level, section,
         status, lab_activity_name, lab_activity_date, expected_return,
-        num_students, num_groups
+        num_students, num_groups, is_individual, individual_name
     )
     SELECT
-        NEW.id, r.name, r.group_name, r.grade_level, r.section,
+        NEW.id, r.name, r.requester_type, r.grade_level, r.grade_level, r.section,
         NEW.status, NEW.lab_activity_name, NEW.lab_activity_date, NEW.expected_return,
-        NEW.num_students, NEW.num_groups
+        NEW.num_students, NEW.num_groups,
+        NEW.is_individual, NEW.individual_name
     FROM Requesters r WHERE r.id = NEW.requester_id;
 END;
 
@@ -493,6 +519,8 @@ BEGIN
         expected_return = NEW.expected_return,
         num_students = NEW.num_students,
         num_groups = NEW.num_groups,
+        is_individual = NEW.is_individual,
+        individual_name = NEW.individual_name,
         last_updated = CURRENT_TIMESTAMP
     WHERE requisition_id = NEW.id;
 END;
@@ -512,7 +540,8 @@ AFTER UPDATE ON Requesters
 BEGIN
     UPDATE Requisition_Summary SET
         requester_name = NEW.name,
-        requester_group = NEW.group_name,
+        requester_type = NEW.requester_type,
+        requester_group = NEW.grade_level,
         grade_level = NEW.grade_level,
         section = NEW.section,
         last_updated = CURRENT_TIMESTAMP
