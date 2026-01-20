@@ -3,7 +3,8 @@ Requisitions management page - Complete laboratory requesting system.
 Provides full CRUD operations for requisitions with requester management.
 
 Uses background threading via QThreadPool for data loading to prevent
-UI freezes on slower hardware.
+UI freezes on slower hardware. Supports parallel data loading for improved
+performance.
 """
 
 from typing import Optional
@@ -35,7 +36,14 @@ from inventory_app.gui.requisitions.requisition_management import (
     ItemReturnDialog,
     status_watcher,
 )
-from inventory_app.gui.utils.worker import run_in_background, Worker
+from inventory_app.gui.utils.worker import Worker
+from inventory_app.gui.utils.parallel_loader import (
+    ParallelDataLoader,
+    LoadTask,
+    LoadProgress,
+    parallel_load_manager,
+    LoadPriority,
+)
 from inventory_app.utils.logger import logger
 
 
@@ -61,6 +69,7 @@ class RequisitionsPage(QWidget):
 
         # Track current worker for cancellation
         self._current_worker: Optional[Worker] = None
+        self._parallel_loader: Optional[ParallelDataLoader] = None
         self._is_loading = False
 
         # Setup connections between components
@@ -196,55 +205,81 @@ class RequisitionsPage(QWidget):
         self.filters.clear_filters_requested.connect(self._on_filters_cleared)
 
     def refresh_data(self):
-        """Refresh all requisition data asynchronously."""
+        """Refresh all requisition data asynchronously using parallel loading."""
         if self._is_loading:
             logger.debug("Load already in progress, skipping")
             return
 
-        # Cancel any existing worker
+        # Cancel any existing workers
         if self._current_worker:
             self._current_worker.cancel()
+        if self._parallel_loader:
+            self._parallel_loader.cancel()
 
         self._is_loading = True
         self._set_loading_state(True)
 
-        logger.info("Starting async requisition data refresh...")
+        logger.info("Starting parallel requisition data refresh...")
 
-        # Run data loading in background thread
-        self._current_worker = run_in_background(
-            self._load_data_background,
-            on_result=self._on_data_loaded,
-            on_error=self._on_load_error,
-            on_finished=self._on_load_finished,
+        # Create load tasks for parallel execution
+        def load_requisition_data():
+            """Load requisition data from database."""
+            success = self.model.load_data()
+            if not success:
+                raise Exception("Failed to load requisition data from database")
+            return {
+                "success": success,
+                "all_requisitions": self.model.all_requisitions,
+            }
+
+        def load_requester_options():
+            """Load requester filter options."""
+            self.filters._load_requester_options()
+            return True
+
+        # Use parallel loader for concurrent loading
+        self._parallel_loader = parallel_load_manager.load_page_data(
+            tasks=[
+                LoadTask(
+                    "requisitions",
+                    load_requisition_data,
+                    weight=0.8,
+                    priority=LoadPriority.NORMAL,
+                ),
+                LoadTask(
+                    "requesters",
+                    load_requester_options,
+                    weight=0.2,
+                    priority=LoadPriority.NORMAL,
+                ),
+            ],
+            on_progress=self._on_parallel_progress,
+            on_complete=self._on_parallel_complete,
+            on_error=self._on_parallel_error,
         )
 
-    def _load_data_background(self) -> dict:
-        """
-        Load requisition data in background thread.
+    def _on_parallel_progress(self, progress: LoadProgress):
+        """Handle progress update from parallel loader."""
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(int(progress.total_progress))
+        self.progress_bar.setFormat(
+            f"Loading requisitions... {int(progress.total_progress)}%"
+        )
 
-        Returns dict with all needed data for UI update.
-        This method runs off the main thread.
-        """
-        # Load initial data from model
-        success = self.model.load_data()
-        if not success:
-            raise Exception("Failed to load requisition data from database")
-
-        return {
-            "success": True,
-            "all_requisitions": self.model.all_requisitions,
-        }
-
-    def _on_data_loaded(self, result: dict):
-        """Handle data loaded from background thread (runs on main thread)."""
+    def _on_parallel_complete(self, results: dict):
+        """Handle completion of parallel loading."""
         try:
-            if not result.get("success"):
+            req_result = results.get("requisitions", {})
+            if not req_result.get("success"):
                 logger.error("Data load returned failure")
                 QMessageBox.warning(
                     self,
                     "Data Load Error",
                     "Failed to load requisition data from database.",
                 )
+                self._is_loading = False
+                self._parallel_loader = None
+                self._set_loading_state(False)
                 return
 
             # Update all requisition statuses using the status watcher
@@ -255,9 +290,6 @@ class RequisitionsPage(QWidget):
                 )
                 # Reload data to get updated statuses
                 self.model.load_data()
-
-            # Reload requester options (in case new requesters have requisitions)
-            self.filters._load_requester_options()
 
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
@@ -280,15 +312,23 @@ class RequisitionsPage(QWidget):
                 f"Returned: {stats['returned_requisitions']}"
             )
 
+            # Hide progress and re-enable buttons
+            self._is_loading = False
+            self._parallel_loader = None
+            self._set_loading_state(False)
+
             logger.info(
                 f"Refreshed requisition data: {total_count} requisitions loaded"
             )
 
         except Exception as e:
-            logger.error(f"Error processing loaded data: {e}")
-            QMessageBox.critical(
-                self, "Error", f"Failed to process requisition data: {str(e)}"
-            )
+            logger.error(f"Error processing parallel load results: {e}")
+            self._on_load_error((type(e), e, str(e)))
+
+    def _on_parallel_error(self, name: str, error: Exception, traceback_str: str):
+        """Handle error from parallel loader."""
+        logger.error(f"Parallel load task '{name}' failed: {error}")
+        self._on_load_error((type(error), error, traceback_str))
 
     def _populate_table_batched(self, rows: list):
         """Populate table in batches to prevent UI freeze."""
@@ -371,6 +411,9 @@ class RequisitionsPage(QWidget):
 
     def _on_load_error(self, error_tuple: tuple):
         """Handle load error (runs on main thread)."""
+        self._is_loading = False
+        self._parallel_loader = None
+        self._set_loading_state(False)
         exctype, value, tb = error_tuple
         logger.error(f"Failed to refresh data: {value}\n{tb}")
         QMessageBox.critical(
@@ -381,6 +424,7 @@ class RequisitionsPage(QWidget):
         """Handle load finished (runs on main thread)."""
         self._is_loading = False
         self._current_worker = None
+        self._parallel_loader = None
         self._set_loading_state(False)
 
     def _set_loading_state(self, is_loading: bool):

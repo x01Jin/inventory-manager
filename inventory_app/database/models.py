@@ -13,6 +13,13 @@ from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
 
 
+def _to_iso(value: Optional[date | datetime]) -> Optional[str]:
+    """Return ISO string for date/datetime or None if value is None."""
+    if value is None:
+        return None
+    return value.isoformat()
+
+
 def check_case_insensitive_duplicate(
     table: str, name: str, exclude_id: Optional[int] = None
 ) -> Tuple[bool, Optional[str]]:
@@ -409,16 +416,10 @@ class Item:
                         self.other_specifications,
                         self.po_number,
                         self.supplier_id,
-                        self.expiration_date.isoformat()
-                        if self.expiration_date
-                        else None,
-                        self.calibration_date.isoformat()
-                        if self.calibration_date
-                        else None,
+                        _to_iso(self.expiration_date),
+                        _to_iso(self.calibration_date),
                         self.is_consumable,
-                        self.acquisition_date.isoformat()
-                        if self.acquisition_date
-                        else None,
+                        _to_iso(self.acquisition_date),
                         current_time.isoformat(),
                         self.id,
                     )
@@ -447,16 +448,10 @@ class Item:
                         self.other_specifications,
                         self.po_number,
                         self.supplier_id,
-                        self.expiration_date.isoformat()
-                        if self.expiration_date
-                        else None,
-                        self.calibration_date.isoformat()
-                        if self.calibration_date
-                        else None,
+                        _to_iso(self.expiration_date),
+                        _to_iso(self.calibration_date),
                         self.is_consumable,
-                        self.acquisition_date.isoformat()
-                        if self.acquisition_date
-                        else None,
+                        _to_iso(self.acquisition_date),
                         current_time.isoformat(),
                     )
                     result = db.execute_update(query, params, return_last_id=True)
@@ -1076,4 +1071,334 @@ class RequisitionItem:
             return [cls(**dict(row)) for row in rows]
         except Exception as e:
             logger.error(f"Failed to get requisition items for {requisition_id}: {e}")
+            return []
+
+    @classmethod
+    def bulk_create(
+        cls, requisition_id: int, items_data: List[dict]
+    ) -> List["RequisitionItem"]:
+        """Bulk create requisition items in a single transaction.
+
+        Args:
+            requisition_id: The requisition to attach items to
+            items_data: List of dicts with item_id and quantity_requested
+
+        Returns:
+            List of created RequisitionItem objects
+        """
+        if not items_data:
+            return []
+
+        created_items = []
+        query = "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)"
+
+        try:
+            with db.transaction():
+                ids = db.execute_many_return_ids(
+                    query,
+                    [
+                        (requisition_id, item["item_id"], item["quantity_requested"])
+                        for item in items_data
+                    ],
+                )
+
+                for i, item_data in enumerate(items_data):
+                    ri = cls(
+                        id=ids[i] if i < len(ids) else None,
+                        requisition_id=requisition_id,
+                        item_id=item_data["item_id"],
+                        quantity_requested=item_data["quantity_requested"],
+                    )
+                    created_items.append(ri)
+
+            return created_items
+        except Exception as e:
+            logger.error(f"Failed to bulk create requisition items: {e}")
+            return []
+
+
+@dataclass
+class ItemBulkCreator:
+    """Bulk operations for Items - use as standalone functions, not mixed in."""
+
+    @classmethod
+    def bulk_create(
+        cls, items_data: List[dict], editor_name: str = "bulk"
+    ) -> List["Item"]:
+        """Bulk create items with their initial batches.
+
+        Args:
+            items_data: List of dicts containing item fields and optional 'batch_quantity'
+            editor_name: Name of the admin user creating items
+
+        Returns:
+            List of created Item objects
+        """
+        if not items_data:
+            return []
+
+        current_time = datetime.now()
+        created_items = []
+
+        try:
+            with db.transaction():
+                item_query = """
+                INSERT INTO Items (name, category_id, size, brand, other_specifications,
+                po_number, supplier_id, expiration_date, calibration_date, is_consumable,
+                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                item_params = []
+                for item in items_data:
+                    item_params.append(
+                        (
+                            item.get("name"),
+                            item.get("category_id"),
+                            item.get("size"),
+                            item.get("brand"),
+                            item.get("other_specifications"),
+                            item.get("po_number"),
+                            item.get("supplier_id"),
+                            _to_iso(item.get("expiration_date")),
+                            _to_iso(item.get("calibration_date")),
+                            item.get("is_consumable", 0),
+                            _to_iso(item.get("acquisition_date")),
+                            current_time.isoformat(),
+                        )
+                    )
+
+                item_ids = db.execute_many_return_ids(item_query, item_params)
+
+                batch_query = """
+                INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received)
+                VALUES (?, ?, ?, ?)
+                """
+                batch_params = []
+                for i, item in enumerate(items_data):
+                    if item.get("batch_quantity", 0) > 0:
+                        batch_params.append(
+                            (
+                                item_ids[i],
+                                1,
+                                current_time.date().isoformat(),
+                                item["batch_quantity"],
+                            )
+                        )
+
+                if batch_params:
+                    db.execute_many(batch_query, batch_params)
+
+                for i, item_data in enumerate(items_data):
+                    item = Item(
+                        id=item_ids[i],
+                        name=item_data.get("name", ""),
+                        category_id=item_data.get("category_id", 0),
+                        size=item_data.get("size"),
+                        brand=item_data.get("brand"),
+                        other_specifications=item_data.get("other_specifications"),
+                        po_number=item_data.get("po_number"),
+                        supplier_id=item_data.get("supplier_id"),
+                        expiration_date=item_data.get("expiration_date"),
+                        calibration_date=item_data.get("calibration_date"),
+                        is_consumable=item_data.get("is_consumable", 0),
+                        acquisition_date=item_data.get("acquisition_date"),
+                        last_modified=current_time,
+                    )
+                    created_items.append(item)
+
+                for item in created_items:
+                    activity_logger.log_activity(
+                        activity_logger.ITEM_ADDED,
+                        f"Added new item: {item.name}",
+                        item.id,
+                        "item",
+                        editor_name,
+                    )
+
+            return created_items
+        except Exception as e:
+            logger.error(f"Failed to bulk create items: {e}")
+            return []
+
+
+@dataclass
+class RequesterBulkCreator:
+    """Bulk operations for Requesters."""
+
+    @classmethod
+    def bulk_create(cls, requesters_data: List[dict]) -> List["Requester"]:
+        """Bulk create requesters.
+
+        Args:
+            requesters_data: List of dicts containing requester fields
+
+        Returns:
+            List of created Requester objects
+        """
+        if not requesters_data:
+            return []
+
+        current_time = datetime.now()
+        created_requesters = []
+
+        try:
+            with db.transaction():
+                query = """
+                INSERT INTO Requesters (name, affiliation, group_name,
+                grade_level, section, created_at) VALUES (?, ?, ?, ?, ?, ?)
+                """
+                params = []
+                for req in requesters_data:
+                    params.append(
+                        (
+                            req.get("name"),
+                            req.get("affiliation"),
+                            req.get("group_name"),
+                            req.get("grade_level"),
+                            req.get("section"),
+                            current_time.isoformat(),
+                        )
+                    )
+
+                ids = db.execute_many_return_ids(query, params)
+
+                for i, req_data in enumerate(requesters_data):
+                    req = Requester(
+                        name=req_data.get("name", ""),
+                        affiliation=req_data.get("affiliation", ""),
+                        group_name=req_data.get("group_name", ""),
+                        grade_level=req_data.get("grade_level"),
+                        section=req_data.get("section"),
+                        created_at=current_time,
+                    )
+                    req.id = ids[i]
+                    created_requesters.append(req)
+
+            return created_requesters
+        except Exception as e:
+            logger.error(f"Failed to bulk create requesters: {e}")
+            return []
+
+
+@dataclass
+class RequisitionBulkCreator:
+    """Bulk operations for Requisitions."""
+
+    @classmethod
+    def bulk_create(
+        cls, requisitions_data: List[dict], editor_name: str = "bulk"
+    ) -> List["Requisition"]:
+        """Bulk create requisitions.
+
+        Args:
+            requisitions_data: List of dicts containing requisition fields
+            editor_name: Name of the admin user
+
+        Returns:
+            List of created Requisition objects
+        """
+        if not requisitions_data:
+            return []
+
+        created_requisitions = []
+
+        try:
+            with db.transaction():
+                query = """
+                INSERT INTO Requisitions (requester_id, expected_request,
+                expected_return, status, lab_activity_name, lab_activity_description, lab_activity_date,
+                num_students, num_groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                params = []
+                for req in requisitions_data:
+                    params.append(
+                        (
+                            req.get("requester_id"),
+                            _to_iso(req.get("expected_request"))
+                            or datetime.now().isoformat(),
+                            _to_iso(req.get("expected_return"))
+                            or datetime.now().isoformat(),
+                            req.get("status", "returned"),
+                            req.get("lab_activity_name", ""),
+                            req.get("lab_activity_description"),
+                            _to_iso(req.get("lab_activity_date"))
+                            or date.today().isoformat(),
+                            req.get("num_students"),
+                            req.get("num_groups"),
+                        )
+                    )
+
+                ids = db.execute_many_return_ids(query, params)
+
+                for i, req_data in enumerate(requisitions_data):
+                    req = Requisition(
+                        requester_id=req_data.get("requester_id", 0),
+                        expected_request=req_data.get(
+                            "expected_request", datetime.now()
+                        ),
+                        expected_return=req_data.get("expected_return", datetime.now()),
+                        status=req_data.get("status", "returned"),
+                        lab_activity_name=req_data.get("lab_activity_name", ""),
+                        lab_activity_description=req_data.get(
+                            "lab_activity_description"
+                        ),
+                        lab_activity_date=req_data.get(
+                            "lab_activity_date", date.today()
+                        ),
+                        num_students=req_data.get("num_students"),
+                        num_groups=req_data.get("num_groups"),
+                    )
+                    req.id = ids[i]
+                    created_requisitions.append(req)
+
+            return created_requisitions
+        except Exception as e:
+            logger.error(f"Failed to bulk create requisitions: {e}")
+            return []
+
+
+@dataclass
+class RequisitionItemBulkCreator:
+    """Bulk operations for RequisitionItems."""
+
+    @classmethod
+    def bulk_create(
+        cls, requisition_id: int, items_data: List[dict]
+    ) -> List["RequisitionItem"]:
+        """Bulk create requisition items.
+
+        Args:
+            requisition_id: The requisition to attach items to
+            items_data: List of dicts with item_id and quantity_requested
+
+        Returns:
+            List of created RequisitionItem objects
+        """
+        if not items_data:
+            return []
+
+        created_items = []
+        query = "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)"
+
+        try:
+            with db.transaction():
+                ids = db.execute_many_return_ids(
+                    query,
+                    [
+                        (requisition_id, item["item_id"], item["quantity_requested"])
+                        for item in items_data
+                    ],
+                )
+
+                for i, item_data in enumerate(items_data):
+                    ri = RequisitionItem(
+                        id=ids[i] if i < len(ids) else None,
+                        requisition_id=requisition_id,
+                        item_id=item_data["item_id"],
+                        quantity_requested=item_data["quantity_requested"],
+                    )
+                    created_items.append(ri)
+
+            return created_items
+        except Exception as e:
+            logger.error(f"Failed to bulk create requisition items: {e}")
             return []

@@ -333,3 +333,195 @@ JOIN Items i ON i.id = di.item_id
 JOIN Categories c ON c.id = i.category_id
 JOIN Requisitions r ON r.id = di.requisition_id
 JOIN Requesters req ON req.id = r.requester_id;
+
+-- Stock Summary Table: Pre-computed stock data per item
+-- Updated via triggers and periodic refresh
+CREATE TABLE IF NOT EXISTS Stock_Summary (
+    item_id INTEGER PRIMARY KEY,
+    item_name TEXT NOT NULL,
+    category_name TEXT NOT NULL,
+    total_batches INTEGER DEFAULT 0,
+    original_stock INTEGER DEFAULT 0,
+    consumed_qty INTEGER DEFAULT 0,
+    disposed_qty INTEGER DEFAULT 0,
+    returned_qty INTEGER DEFAULT 0,
+    total_stock INTEGER DEFAULT 0,
+    low_stock_threshold INTEGER DEFAULT 10,
+    is_low_stock INTEGER DEFAULT 0,
+    is_out_of_stock INTEGER DEFAULT 0,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
+);
+
+-- Requisition Summary Table: Denormalized requisition data for fast loading
+CREATE TABLE IF NOT EXISTS Requisition_Summary (
+    requisition_id INTEGER PRIMARY KEY,
+    requester_name TEXT NOT NULL,
+    requester_group TEXT NOT NULL,
+    grade_level TEXT,
+    section TEXT,
+    status TEXT NOT NULL,
+    lab_activity_name TEXT NOT NULL,
+    lab_activity_date TEXT,
+    expected_return TEXT,
+    item_count INTEGER DEFAULT 0,
+    item_summary_json TEXT DEFAULT '[]',
+    total_quantity_requested INTEGER DEFAULT 0,
+    num_students INTEGER,
+    num_groups INTEGER,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
+);
+
+-- Statistics Aggregate Table: Single-row aggregate for dashboard
+CREATE TABLE IF NOT EXISTS Statistics_Aggregate (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    total_items INTEGER DEFAULT 0,
+    total_batches INTEGER DEFAULT 0,
+    total_original_stock INTEGER DEFAULT 0,
+    total_consumed INTEGER DEFAULT 0,
+    total_disposed INTEGER DEFAULT 0,
+    total_returned INTEGER DEFAULT 0,
+    total_stock INTEGER DEFAULT 0,
+    low_stock_count INTEGER DEFAULT 0,
+    out_of_stock_count INTEGER DEFAULT 0,
+    active_requisitions INTEGER DEFAULT 0,
+    overdue_requisitions INTEGER DEFAULT 0,
+    expiring_soon_count INTEGER DEFAULT 0,
+    calibration_due_count INTEGER DEFAULT 0,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Initialize Statistics_Aggregate with default row
+INSERT OR IGNORE INTO Statistics_Aggregate (id) VALUES (1);
+
+-- Indexes for summary tables
+CREATE INDEX IF NOT EXISTS idx_stock_summary_stock ON Stock_Summary(total_stock);
+CREATE INDEX IF NOT EXISTS idx_stock_summary_low_stock ON Stock_Summary(is_low_stock);
+CREATE INDEX IF NOT EXISTS idx_stock_summary_out_of_stock ON Stock_Summary(is_out_of_stock);
+CREATE INDEX IF NOT EXISTS idx_requisition_summary_status ON Requisition_Summary(status);
+CREATE INDEX IF NOT EXISTS idx_requisition_summary_date ON Requisition_Summary(lab_activity_date);
+
+-- TRIGGERS FOR SUMMARY TABLES (Auto-update)
+
+-- Stock Summary Triggers
+CREATE TRIGGER IF NOT EXISTS trg_stock_summary_after_item_insert
+AFTER INSERT ON Items
+BEGIN
+    INSERT INTO Stock_Summary (item_id, item_name, category_name)
+    VALUES (NEW.id, NEW.name, (SELECT name FROM Categories WHERE id = NEW.category_id));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_stock_summary_after_item_update
+AFTER UPDATE ON Items
+BEGIN
+    UPDATE Stock_Summary SET
+        item_name = NEW.name,
+        category_name = (SELECT name FROM Categories WHERE id = NEW.category_id),
+        last_updated = CURRENT_TIMESTAMP
+    WHERE item_id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_stock_summary_after_batch
+AFTER INSERT ON Item_Batches
+BEGIN
+    UPDATE Stock_Summary SET
+        total_batches = total_batches + 1,
+        original_stock = original_stock + NEW.quantity_received,
+        total_stock = total_stock + NEW.quantity_received,
+        is_low_stock = CASE
+            WHEN (total_stock + NEW.quantity_received) BETWEEN 1 AND low_stock_threshold THEN 1
+            ELSE 0
+        END,
+        is_out_of_stock = CASE
+            WHEN (total_stock + NEW.quantity_received) <= 0 THEN 1
+            ELSE 0
+        END,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE item_id = NEW.item_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_stock_summary_after_movement
+AFTER INSERT ON Stock_Movements
+BEGIN
+    UPDATE Stock_Summary SET
+        consumed_qty = consumed_qty + CASE WHEN NEW.movement_type = 'CONSUMPTION' THEN NEW.quantity ELSE 0 END,
+        disposed_qty = disposed_qty + CASE WHEN NEW.movement_type = 'DISPOSAL' THEN NEW.quantity ELSE 0 END,
+        returned_qty = returned_qty + CASE WHEN NEW.movement_type = 'RETURN' THEN NEW.quantity ELSE 0 END,
+        total_stock = total_stock
+            - CASE WHEN NEW.movement_type IN ('CONSUMPTION', 'DISPOSAL', 'RESERVATION') THEN NEW.quantity ELSE 0 END
+            + CASE WHEN NEW.movement_type = 'RETURN' THEN NEW.quantity ELSE 0 END,
+        is_low_stock = CASE
+            WHEN (total_stock
+                - CASE WHEN NEW.movement_type IN ('CONSUMPTION', 'DISPOSAL', 'RESERVATION') THEN NEW.quantity ELSE 0 END
+                + CASE WHEN NEW.movement_type = 'RETURN' THEN NEW.quantity ELSE 0 END) BETWEEN 1 AND low_stock_threshold THEN 1
+            ELSE 0
+        END,
+        is_out_of_stock = CASE
+            WHEN (total_stock
+                - CASE WHEN NEW.movement_type IN ('CONSUMPTION', 'DISPOSAL', 'RESERVATION') THEN NEW.quantity ELSE 0 END
+                + CASE WHEN NEW.movement_type = 'RETURN' THEN NEW.quantity ELSE 0 END) <= 0 THEN 1
+            ELSE 0
+        END,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE item_id = NEW.item_id;
+END;
+
+-- Requisition Summary Triggers
+CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_insert
+AFTER INSERT ON Requisitions
+BEGIN
+    INSERT INTO Requisition_Summary (
+        requisition_id, requester_name, requester_group, grade_level, section,
+        status, lab_activity_name, lab_activity_date, expected_return,
+        num_students, num_groups
+    )
+    SELECT
+        NEW.id, r.name, r.group_name, r.grade_level, r.section,
+        NEW.status, NEW.lab_activity_name, NEW.lab_activity_date, NEW.expected_return,
+        NEW.num_students, NEW.num_groups
+    FROM Requesters r WHERE r.id = NEW.requester_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_update
+AFTER UPDATE ON Requisitions
+BEGIN
+    UPDATE Requisition_Summary SET
+        status = NEW.status,
+        lab_activity_name = NEW.lab_activity_name,
+        lab_activity_date = NEW.lab_activity_date,
+        expected_return = NEW.expected_return,
+        num_students = NEW.num_students,
+        num_groups = NEW.num_groups,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE requisition_id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_item
+AFTER INSERT ON Requisition_Items
+BEGIN
+    UPDATE Requisition_Summary SET
+        item_count = item_count + 1,
+        total_quantity_requested = total_quantity_requested + NEW.quantity_requested,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE requisition_id = NEW.requisition_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_req_update
+AFTER UPDATE ON Requesters
+BEGIN
+    UPDATE Requisition_Summary SET
+        requester_name = NEW.name,
+        requester_group = NEW.group_name,
+        grade_level = NEW.grade_level,
+        section = NEW.section,
+        last_updated = CURRENT_TIMESTAMP
+    WHERE requisition_id IN (SELECT id FROM Requisitions WHERE requester_id = NEW.id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_requisition_summary_after_req_delete
+AFTER DELETE ON Requisitions
+BEGIN
+    DELETE FROM Requisition_Summary WHERE requisition_id = OLD.id;
+END;
+

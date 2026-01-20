@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
+import atexit
 
 # Prefer package-relative imports — this will work when the module is executed
 # as a package with `python -m inventory_app.main`. If the module is executed
@@ -20,6 +21,7 @@ try:
     from .database.connection import db
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
+    from .services.summary_tables import summary_tables_service
 except Exception:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
@@ -28,6 +30,7 @@ except Exception:
     from inventory_app.database.connection import db
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
+    from inventory_app.services.summary_tables import summary_tables_service
 
 
 def initialize_laboratory_database() -> bool:
@@ -84,6 +87,22 @@ def main() -> int:
         if not verify_components():
             logger.warning(
                 "One or more components failed verification; continuing startup"
+            )
+
+        # Initialize summary tables service (Chunk 8)
+        try:
+            if summary_tables_service.initialize():
+                logger.info("Summary tables service initialized")
+                # Backfill summaries if this is a new database
+                summary_tables_service.backfill_summaries()
+                atexit.register(summary_tables_service.shutdown)
+            else:
+                logger.warning(
+                    "Summary tables service initialization failed; continuing without summary tables"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Summary tables service unavailable: {e}; continuing without summary tables"
             )
 
         # Import GUI components only after database initialization succeeds

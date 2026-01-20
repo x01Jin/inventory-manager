@@ -42,9 +42,76 @@ class ItemStatusService:
     Handles both consumables and non-consumables with appropriate alert periods.
     """
 
+    # SQLite parameter limit (safety margin)
+    SQLITE_PARAM_LIMIT = 900
+
     def __init__(self):
         """Initialize the item status service."""
         logger.info("Item status service initialized")
+
+    def get_statuses_for_items(
+        self, item_ids: List[int]
+    ) -> Dict[int, Optional[ItemStatus]]:
+        """
+        Get status for multiple items in optimized batch queries.
+
+        Handles SQLite's 999 parameter limit by chunking large ID lists.
+        Transforms from O(N) queries to O(1) or O(chunk_count) queries.
+
+        Args:
+            item_ids: List of item IDs to fetch statuses for
+
+        Returns:
+            Dictionary mapping item_id to ItemStatus (or None if not found)
+        """
+        if not item_ids:
+            return {}
+
+        # Remove duplicates and None values
+        unique_ids = list(set(id for id in item_ids if id is not None))
+        if not unique_ids:
+            return {}
+
+        # Chunk IDs to respect SQLite parameter limit
+        chunks = [
+            unique_ids[i : i + self.SQLITE_PARAM_LIMIT]
+            for i in range(0, len(unique_ids), self.SQLITE_PARAM_LIMIT)
+        ]
+
+        result: Dict[int, Optional[ItemStatus]] = {}
+
+        try:
+            # Build a single query that fetches all needed data
+            # Use parameterized query with chunked IDs
+            query = """
+            SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
+                   i.acquisition_date, c.name as category_name
+            FROM Items i
+            LEFT JOIN Categories c ON i.category_id = c.id
+            WHERE i.id IN ({})
+            """.format(",".join("?" * len(unique_ids)))
+
+            # Execute for each chunk and merge results
+            all_rows = []
+            for chunk in chunks:
+                rows = db.execute_query(query, tuple(chunk))
+                all_rows.extend(rows)
+
+            # Calculate status for each item
+            for item_data in all_rows:
+                status = self._calculate_status(item_data)
+                if status:
+                    result[status.item_id] = status
+
+            logger.debug(
+                f"Batch-fetched status for {len(result)} items (chunks: {len(chunks)})"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to batch-fetch statuses: {e}")
+            # Fallback: return empty dict (caller will handle per-item)
+            return {}
 
     def get_item_status(self, item_id: int) -> Optional[ItemStatus]:
         """
