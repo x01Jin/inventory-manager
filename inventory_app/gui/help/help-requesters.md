@@ -1,86 +1,123 @@
 # Requesters Help
 
-The Requesters page is where you add, edit, and manage the people (or groups) who may create requisitions and request inventory. It provides a simple, searchable list of registered requesters and the tools you need to keep requester records accurate and audit-ready.
+The Requesters page is where you add, edit, and manage the people who can request inventory items. Requesters are organized into three tabs based on their type: **Students**, **Teachers**, and **Faculty/Individuals**. Each tab shows only the fields relevant to that requester type.
 
 ## **Top controls (header)**
 
-- **➕ Add Requester:** Opens the Add Requester dialog. Required fields: **Full Name**, **Affiliation**, **Group**, and **Your Name/Initials** (editor). New requesters are immediately available when creating requisitions.
-- **✏️ Edit Requester:** Enabled when a requester row is selected (or double-click a row). Edit their name, affiliation, or group; you must provide your editor name when saving so the change is recorded for audit.
-- **🗑️ Delete Requester:** Permanently deletes the selected requester. Deletion is disabled when the requester has any associated requisitions (to protect data integrity). Deleting requires confirmation and your editor name; this action cannot be undone.
-- **🔄 Refresh:** Reloads requester data from the database and updates the status line.
+- **Tabs Bar:** Switch between Students, Teachers, and Faculty/Individuals. Each tab shows only requesters of that type with appropriate columns.
+- **➕ Add Requester:** Opens the Add Requester dialog. Choose the correct tab (Student/Teacher/Faculty) and fill in the required fields. Your editor name is required for audit tracking.
+- **✏️ Edit Requester:** Edit the selected requester. Works within the current tab. You must provide your editor name to save changes.
+- **🗑️ Delete Requester:** Permanently deletes the selected requester. Disabled if the requester has any associated requisitions. Requires confirmation and your editor name.
+- **🔄 Refresh:** Reloads all requester data and updates counts.
 
 ## **Search & Filters**
 
-- **🔍 Search box:** Type any text to filter requesters by **name**, **affiliation**, or **group** (case-insensitive substring match). Results update immediately as you type.
-- **Clear:** Clears the search and shows all requesters again.
+- **🔍 Search box:** Type to filter requesters in the current tab only. Search behavior varies by tab:
+  - **Students:** Searches name, grade level, and section
+  - **Teachers:** Searches name and department
+  - **Faculty/Individuals:** Searches name only
+- **Clear:** Clears the search and shows all requesters in the current tab.
 
-## **Requesters Table (columns & meanings)**
+## **Requesters Tables**
 
-- **Requisitions:** Number of requisitions recorded for this requester. If >0, deletion is disabled.
-- **Name:** Requester full name. Double-click to edit.
-- **Affiliation:** Department / grade / section / organizational unit.
-- **Group:** Class group, team, or other grouping for the requester.
-- **Created:** When the requester record was created (date and time).
+The page has three separate tables, one for each requester type:
 
-Notes:
+### Students Tab
 
-- Click any column header to sort by that column (sorts are preserved until you change them).
-- Selecting a row enables **Edit**; selecting a row with zero requisitions enables **Delete**. The table supports single-selection and shows alternating row colors for readability.
+- Requisitions: Number of requisitions for this student
+- Name: Student full name
+- Grade Level: Educational level (e.g., Grade 7, Grade 10)
+- Section: Class section or group identifier
+- Created: Date and time when the record was created
+
+### Teachers Tab
+
+- Requisitions: Number of requisitions for this teacher
+- Name: Teacher full name
+- Department: Department or organizational unit
+- Created: Date and time when the record was created
+
+### Faculty/Individuals Tab
+
+- Requisitions: Number of requisitions for this person
+- Name: Full name
+- Created: Date and time when the record was created
+
+**Notes:**
+
+- Click any column header to sort by that column (sorts are preserved until changed).
+- Selecting a row enables Edit; selecting a row with zero requisitions enables Delete.
+- The table shows alternating row colors for readability.
 
 ## **Adding a Requester — Step-by-step**
 
 1. Click **➕ Add Requester**.
-2. Fill **Full Name** (required), **Affiliation** (required), **Group** (required), **Grade Level** (optional), and **Section** (optional).
-   - **Grade Level:** Educational level (e.g., Grade 7, Grade 10) or department level. Used for filtering usage reports by grade level.
-   - **Section:** Class section or organizational section identifier. Also used in "Usage by Grade Level" reports.
-3. Enter **Your Name/Initials** in the **Editor Information** section (this is required and recorded for audit).
-4. Click **Save Requester**. If a requester with the same name, affiliation and group already exists you will be warned and asked if you want to continue.
-5. On success the requester is added, the list refreshes, and the requester becomes available in requisition selectors.
+2. Select the appropriate tab for the requester type:
+   - **Student Tab:** Requires Name. Grade Level and Section are optional.
+   - **Teacher Tab:** Requires Name and Department.
+   - **Faculty/Individual Tab:** Requires Name only.
+3. Fill in the fields for the selected type.
+4. Enter **Your Name/Initials** in the Editor Information section (required for audit).
+5. Click **Save Requester**.
+6. If a requester with the same name and type already exists, you will be warned. You can continue or cancel to avoid duplicates.
+7. On success, the requester is added, the list refreshes, and the requester becomes available in requisition selectors.
 
 ## **Editing a Requester**
 
-- Select a requester row and click **✏️ Edit Requester** (or double-click the row).
-- Update any of the fields. You must enter **Your Name/Initials** to save changes.
-- Duplicate detection: if an identical requester (same name/affiliation/group) exists you will be warned before saving.
+- Select a requester row in the appropriate tab and click **✏️ Edit Requester** (or double-click the row).
+- You can only edit fields for the requester's original type (e.g., cannot add a department to a student).
+- Update any editable fields and enter your editor name to save.
+- If an identical requester exists, you will be warned before saving.
 
 ## **Deleting a Requester**
 
-- Deletion is only allowed for requesters that have no associated requisitions. If a requester has any requisitions recorded, the **Delete** button is disabled and hovering shows a tooltip explaining why.
-- To delete: select a requester (with zero requisitions), click **🗑️ Delete Requester**, confirm the action, and provide your **Name/Initials** when prompted. Deletion is permanent and will remove the requester record.
+- Deletion is only allowed for requesters with no associated requisitions. If a requester has requisitions, the **Delete** button is disabled.
+- To delete: select a requester (with zero requisitions), click **🗑️ Delete Requester**, confirm the action, and provide your editor name. Deletion is permanent.
 
 ## **Validation & common warnings**
 
-- **Required fields:** Full Name, Affiliation, Group, and Editor name for save/delete.
-- **Duplicate requester:** Creating a requester with the same name/affiliation/group will prompt a duplicate warning; you may cancel to avoid duplicates.
-- **Cannot delete with requisitions:** If delete fails, check whether the requester has associated requisitions — deletion will be blocked to preserve historical data.
-- **Data Load Error:** If the page cannot load data, use **🔄 Refresh**; if the error persists, contact your administrator with the error details and time.
+- **Required fields vary by type:** Students need a name; Teachers need a name and department; Faculty/Individuals need only a name.
+- **Editor name required:** You must enter your name/initials to save or delete any requester.
+- **Duplicate detection:** Creating a requester with the same name and type prompts a warning; you may cancel to avoid duplicates.
+- **Cannot delete with requisitions:** If deletion fails, check whether the requester has associated requisitions — deletion is blocked to preserve historical data.
+- **Cannot change requester type:** Once created, a requester's type cannot be changed. To reassign a requester to a different type, delete and re-create them.
 
 ## **Status & statistics**
 
-- The status line at the bottom shows the total number of requesters currently displayed (reflects any active search/filtering).
-- Use the **Affiliation** grouping in the statistics to get a quick sense of requester distribution by department or grade.
+- The status line shows the total number of requesters in the current tab.
+- Tab counts are displayed on the tab labels, so you can quickly see how many students, teachers, and faculty/individuals are registered.
+- Use the search box to filter the current tab; the status line updates to show filtered results.
 
 ## **How Requesters are used**
 
-- Requesters are referenced when creating requisitions — the requisition dialog lists registered requesters and shows their affiliation/group to help you pick the correct person.
-- Requester records are part of the audit trail: creations, edits, and deletions are recorded in the activity log with the editor name you supply.
+- When creating a requisition, you select a requester from a searchable list organized by type.
+- Requester records are part of the audit trail: creations, edits, and deletions are recorded with the editor name you supply.
+- Choose the correct requester type when adding new people — this determines which fields are tracked and how they appear in reports.
 
 ## **Common tasks / quick recipes**
 
-- **Add a requester:** Click **➕ Add Requester** → fill required fields → Save.
-- **Edit requester details:** Select row → **✏️ Edit Requester** → change fields → Save.
-- **Delete a requester:** Select row (must have 0 requisitions) → **🗑️ Delete Requester** → confirm and enter editor name → Delete.
-- **Find a requester:** Use **🔍 Search** with name, affiliation, or group to quickly narrow the list.
+- **Add a student:** Click **➕ Add Requester** → Select **Student** tab → Enter name (optional grade/section) → Save.
+- **Add a teacher:** Click **➕ Add Requester** → Select **Teacher** tab → Enter name and department → Save.
+- **Add a faculty/individual:** Click **➕ Add Requester** → Select **Faculty/Individual** tab → Enter name → Save.
+- **Edit a requester:** Select row in appropriate tab → **✏️ Edit Requester** → Change fields → Save.
+- **Delete a requester:** Select row (must have 0 requisitions) in appropriate tab → **🗑️ Delete Requester** → Confirm and enter editor name → Delete.
+- **Find a requester:** Switch to the appropriate tab → Use **🔍 Search** with relevant fields → Select from filtered results.
 
 ## **Limitations & notes**
 
-- Requester records are not a user authentication system — they are simply person/group records used to label requisitions.
-- Deleting requesters with associated requisitions is blocked to maintain data integrity — if you need to correct historical data, contact your administrator.
-- Created timestamps are recorded and shown in the table for auditing when records were added.
+- Requester records are not a user authentication system — they are person records used to label requisitions.
+- Deleting requesters with associated requisitions is blocked to maintain data integrity.
+- Requester type cannot be changed after creation — delete and re-create if needed.
+- Created timestamps are recorded and shown for audit purposes.
+- Each tab operates independently — actions in one tab do not affect others.
 
 ## **Troubleshooting & support**
 
-- If you cannot save a requester, ensure all required fields (including editor name) are filled correctly.
-- If deletion is blocked unexpectedly, check for hidden requisitions or cached data, then **🔄 Refresh** the page. If problems persist, include the action time and any on-screen error messages when contacting support.
+- **Cannot save a requester:** Ensure all required fields for the selected type are filled, including editor name.
+- **Delete button is disabled:** The requester has associated requisitions. This is intentional to protect data integrity.
+- **Cannot find a requester:** Use the search box in the correct tab. Students are only in the Students tab, teachers only in Teachers tab.
+- **Data load errors:** Use **🔄 Refresh** to reload. If errors persist, contact support with the error details and timestamp.
 
--- End of Requesters Help --
+---
+
+End of Requesters Help
