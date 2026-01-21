@@ -207,24 +207,26 @@ class RequisitionPreview(QWidget):
             name_label.setWordWrap(True)
             layout.addWidget(name_label)
 
-            req_type = getattr(requester, 'requester_type', None) or 'faculty'
+            req_type = getattr(requester, "requester_type", None) or "faculty"
             type_label = QLabel(f"Type: {req_type.title()}")
             type_label.setStyleSheet(
                 f"font-style: italic; color: {DarkTheme.TEXT_MUTED};"
             )
             layout.addWidget(type_label)
 
-            if req_type == 'student':
+            if req_type == "student":
                 if requester.grade_level and requester.section:
-                    group_label = QLabel(f"Grade/Section: {requester.grade_level} - {requester.section}")
+                    group_label = QLabel(
+                        f"Grade/Section: {requester.grade_level} - {requester.section}"
+                    )
                     group_label.setWordWrap(True)
                     layout.addWidget(group_label)
-            elif req_type == 'teacher':
+            elif req_type == "teacher":
                 if requester.department:
                     group_label = QLabel(f"Department: {requester.department}")
                     group_label.setWordWrap(True)
                     layout.addWidget(group_label)
-            elif req_type == 'faculty':
+            elif req_type == "faculty":
                 pass
 
         return group
@@ -272,7 +274,8 @@ class RequisitionPreview(QWidget):
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        activity_label = QLabel(f"• Activity: {req.lab_activity_name}")
+        activity_name = getattr(req, "lab_activity_name", None) or "Unknown"
+        activity_label = QLabel(f"• Activity: {activity_name}")
         activity_label.setStyleSheet(
             f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
         )

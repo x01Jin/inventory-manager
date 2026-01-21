@@ -98,13 +98,20 @@ class RequisitionsController:
                 if req_id not in requisition_groups:
                     # Create requisition object with proper date conversion
                     # Handle invalid date formats gracefully
+                    # Parse lab_activity_date safely and include lab activity name
+                    lab_activity_name = row.get("lab_activity_name") or ""
                     try:
                         if row["lab_activity_date"]:
-                            date.fromisoformat(row["lab_activity_date"])
+                            lab_activity_date = date.fromisoformat(
+                                row["lab_activity_date"]
+                            )
+                        else:
+                            lab_activity_date = date.today()
                     except (ValueError, TypeError):
                         logger.warning(
                             f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}"
                         )
+                        lab_activity_date = date.today()
 
                     try:
                         expected_request = (
@@ -137,6 +144,8 @@ class RequisitionsController:
                         "num_students": row["num_students"],
                         "num_groups": row["num_groups"],
                         "status": row["req_status"],
+                        "lab_activity_name": lab_activity_name,
+                        "lab_activity_date": lab_activity_date,
                         "is_individual": row["is_individual"] or 0,
                         "individual_name": row["individual_name"],
                     }
