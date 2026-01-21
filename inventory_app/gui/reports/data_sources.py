@@ -694,7 +694,7 @@ def get_item_usage_details(item_name: str) -> List[Dict]:
                 r.lab_activity_date AS "Activity Date",
                 r.expected_request AS "Request Date",
                 r.expected_return AS "Return Date",
-                r.notes AS "Notes"
+                r.lab_activity_description AS "Notes"
             FROM Requisition_Items ri
             JOIN Requisitions r ON r.id = ri.requisition_id
             JOIN Items i ON i.id = ri.item_id
