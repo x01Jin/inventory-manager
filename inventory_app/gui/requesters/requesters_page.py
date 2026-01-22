@@ -18,14 +18,13 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QInputDialog,
     QProgressBar,
-    QTabWidget,
+    QTabWidget
 )
 from PyQt6.QtCore import pyqtSignal
-
 from inventory_app.gui.requesters.requester_model import RequesterModel
 from inventory_app.gui.requesters.requester_table import RequesterTable
 from inventory_app.gui.requesters.requester_editor import RequesterEditor
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.gui.utils.worker import run_in_background, Worker
 from inventory_app.utils.logger import logger
 
@@ -63,12 +62,13 @@ class RequestersPage(QWidget):
     def setup_ui(self):
         """Setup the main user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
+        Theme = get_current_theme()
         title = QLabel("👥 Laboratory Requesters")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -143,7 +143,7 @@ class RequestersPage(QWidget):
         layout.addWidget(self.tabs)
 
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; font-size: 10pt;")
+        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(self.status_label)
 
     def _setup_connections(self):
@@ -420,9 +420,10 @@ class RequestersPage(QWidget):
             self.faculty_table.populate_table(faculty)
 
             has_filter = bool(self.search_input.text().strip())
+            Theme = get_current_theme()
             if has_filter:
                 self.search_input.setStyleSheet(
-                    f"background-color: {DarkTheme.PRIMARY_DARK}; border: 1px solid {DarkTheme.ACCENT_COLOR};"
+                    f"border: 1px solid {Theme.ACCENT_COLOR};"
                 )
             else:
                 self.search_input.setStyleSheet("")

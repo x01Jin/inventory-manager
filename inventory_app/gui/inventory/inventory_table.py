@@ -146,7 +146,7 @@ class InventoryTable(QTableWidget):
 
         v_header = self.verticalHeader()
         if v_header:
-            v_header.setDefaultSectionSize(25)
+            v_header.setDefaultSectionSize(22)
             v_header.setVisible(False)
 
     class SortableTableItem(QTableWidgetItem):

@@ -17,7 +17,7 @@ class NavigationPanel(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(220)
+        self.setFixedWidth(200)
 
         # Get current theme
         Theme = get_current_theme()
@@ -102,7 +102,7 @@ class NavigationPanel(QWidget):
             QPushButton:checked {{
                 background-color: {Theme.ACCENT_COLOR};
                 color: {Theme.TEXT_PRIMARY};
-                border-left: 3px solid {Theme.SUCCESS_COLOR};
+                border-left: 4px solid {Theme.ACCENT_HOVER};
             }}
         """)
 

@@ -53,18 +53,21 @@ class ItemEditor(QDialog):
     def setup_ui(self):
         """Setup the dialog UI with a responsive two-column layout."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # Left column will contain Basic Information and Dates & Status stacked vertically.
         # Right column will contain Specifications and Editor Information.
         main_h_layout = QHBoxLayout()
+        main_h_layout.setSpacing(8)
 
         # Basic Information Group (left column)
         basic_group = QGroupBox("Basic Information")
         basic_layout = QVBoxLayout(basic_group)
+        basic_layout.setSpacing(8)
 
         # Name
         name_layout = QHBoxLayout()
+        name_layout.setSpacing(8)
         name_layout.addWidget(QLabel("Name:"))
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Enter item name...")
@@ -99,6 +102,7 @@ class ItemEditor(QDialog):
         grid_layout.addWidget(self.brand_combo, 1, 3)
 
         # Set column stretches so input columns expand
+        grid_layout.setSpacing(8)
         grid_layout.setColumnStretch(1, 1)
         grid_layout.setColumnStretch(3, 1)
 
@@ -107,9 +111,11 @@ class ItemEditor(QDialog):
         # Dates and Status Group (left column, below basic info)
         dates_group = QGroupBox("Dates and Status")
         dates_layout = QVBoxLayout(dates_group)
+        dates_layout.setSpacing(8)
 
         # Dates Grid (4x2: labels on the left, inputs on the right)
         dates_grid_layout = QGridLayout()
+        dates_grid_layout.setSpacing(8)
 
         # Row 0: Item Type
         dates_grid_layout.addWidget(QLabel("Item Type:"), 0, 0)
@@ -165,6 +171,7 @@ class ItemEditor(QDialog):
         # Specifications Group (right column)
         spec_group = QGroupBox("Specifications")
         spec_layout = QVBoxLayout(spec_group)
+        spec_layout.setSpacing(8)
 
         # PO Number
         po_layout = QHBoxLayout()
@@ -198,6 +205,7 @@ class ItemEditor(QDialog):
         # Editor Information (required) sits under specifications in right column
         editor_group = QGroupBox("Editor Information (Required)")
         editor_layout = QVBoxLayout(editor_group)
+        editor_layout.setSpacing(8)
         editor_layout.addWidget(QLabel("Editor Name/Initials:"))
         self.editor_input = QLineEdit()
         self.editor_input.setPlaceholderText("Enter your name or initials...")

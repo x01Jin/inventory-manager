@@ -46,11 +46,13 @@ class RequisitionsFilters(QWidget):
     def setup_ui(self):
         """Setup the filter UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # Search section
         search_group = QGroupBox("Search & Filter")
         search_layout = QVBoxLayout(search_group)
+        search_layout.setContentsMargins(8, 8, 8, 8)
+        search_layout.setSpacing(8)
 
         # Search by text
         search_row = QHBoxLayout()

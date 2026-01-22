@@ -37,11 +37,11 @@ class InventoryFilters(QWidget):
         # Search group
         search_group = QGroupBox("Search & Filters")
         search_layout = QVBoxLayout(search_group)
-        search_layout.setContentsMargins(10, 10, 10, 10)
+        search_layout.setContentsMargins(8, 8, 8, 8)
 
         # Search row
         search_row = QHBoxLayout()
-        search_row.setSpacing(10)
+        search_row.setSpacing(8)
 
         # Search input
         search_label = QLabel("🔍 Search:")
@@ -58,7 +58,7 @@ class InventoryFilters(QWidget):
 
         # Filters row
         filters_row = QHBoxLayout()
-        filters_row.setSpacing(15)
+        filters_row.setSpacing(10)
 
         # Category filter
         category_label = QLabel("📂 Category:")

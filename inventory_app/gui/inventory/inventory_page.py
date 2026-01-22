@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.utils.logger import logger
 from inventory_app.gui.utils.worker import Worker
 from inventory_app.gui.utils.parallel_loader import (
@@ -91,13 +92,14 @@ class InventoryPage(QWidget):
     def setup_ui(self):
         """Setup the main UI layout."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
         # Header with title and action buttons
         header_layout = QHBoxLayout()
+        Theme = get_current_theme()
         title = QLabel("📦 Inventory")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 

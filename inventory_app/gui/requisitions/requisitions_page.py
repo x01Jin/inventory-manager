@@ -30,6 +30,7 @@ from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
 from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
 from inventory_app.gui.requisitions.requisition_preview import RequisitionPreview
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.gui.requisitions.requisition_management import (
     NewRequisitionDialog,
     EditRequisitionDialog,
@@ -86,13 +87,14 @@ class RequisitionsPage(QWidget):
     def setup_ui(self):
         """Setup the main user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
         # Header with title and refresh button
         header_layout = QHBoxLayout()
+        Theme = get_current_theme()
         title = QLabel("📋 Laboratory Requisitions")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -160,6 +162,8 @@ class RequisitionsPage(QWidget):
         # Filters section
         self.filters.set_model(self.model)
         left_layout.addWidget(self.filters)
+        left_layout.setSpacing(10)
+
 
         # Table section
         table_group = QGroupBox("Laboratory Requisitions")
@@ -187,8 +191,9 @@ class RequisitionsPage(QWidget):
         layout.addWidget(main_splitter)
 
         # Status bar
+        Theme = get_current_theme()
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; font-size: 10pt;")
+        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(self.status_label)
 
     def _setup_connections(self):

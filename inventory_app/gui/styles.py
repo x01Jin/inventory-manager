@@ -208,7 +208,7 @@ class DarkTheme:
                 background-color: {DarkTheme.SECONDARY_DARK};
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
                 font-weight: 500;
             }}
@@ -256,8 +256,8 @@ class DarkTheme:
             }}
 
             QTableWidget::item {{
-                padding: 8px;
-                border-bottom: 1px solid {DarkTheme.BORDER_COLOR};
+                padding: 4px 8px;
+                border_bottom: 1px solid {DarkTheme.BORDER_COLOR};
             }}
 
             QTableWidget::item:selected {{
@@ -282,7 +282,7 @@ class DarkTheme:
             QHeaderView::section {{
                 background-color: {DarkTheme.SECONDARY_DARK};
                 color: {DarkTheme.TEXT_PRIMARY};
-                padding: 4px;
+                padding: 2px 4px;
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 font-weight: bold;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
@@ -429,7 +429,7 @@ class DarkTheme:
                 color: {DarkTheme.TEXT_PRIMARY};
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
                 min-width: 100px;
             }}
@@ -465,7 +465,7 @@ class DarkTheme:
                 color: {DarkTheme.TEXT_PRIMARY};
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
                 min-width: 140px;
             }}
@@ -636,7 +636,7 @@ class DarkTheme:
                 color: {DarkTheme.TEXT_PRIMARY};
                 border: 1px solid {DarkTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
             }}
 
@@ -669,12 +669,14 @@ class DarkTheme:
             }}
 
             QComboBox QAbstractItemView::item {{
-                padding: 8px;
+                padding: 4px 8px;
+                color: {DarkTheme.TEXT_PRIMARY};
                 border-bottom: 1px solid {DarkTheme.BORDER_COLOR};
             }}
 
             QComboBox QAbstractItemView::item:hover {{
                 background-color: {DarkTheme.ACCENT_HOVER};
+                color: {DarkTheme.TEXT_PRIMARY};
             }}
 
             /* Text areas */
@@ -728,6 +730,30 @@ class DarkTheme:
                 padding: 8px;
                 font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;
                 font-family: {DarkTheme.FONT_FAMILY};
+            }}
+
+            /* List widgets */
+            QListWidget {{
+                background-color: {DarkTheme.SECONDARY_DARK};
+                color: {DarkTheme.TEXT_PRIMARY};
+                border: 1px solid {DarkTheme.BORDER_COLOR};
+                border-radius: 6px;
+            }}
+
+            QListWidget::item {{
+                padding: 4px 8px;
+                color: {DarkTheme.TEXT_PRIMARY};
+                border_bottom: 1px solid {DarkTheme.BORDER_COLOR};
+            }}
+
+            QListWidget::item:selected {{
+                background-color: {DarkTheme.ACCENT_COLOR};
+                color: {DarkTheme.TEXT_PRIMARY};
+            }}
+
+            QListWidget::item:hover {{
+                background-color: {DarkTheme.ACCENT_HOVER};
+                color: {DarkTheme.TEXT_PRIMARY};
             }}
         """
 
@@ -835,7 +861,7 @@ class LightTheme:
                 background-color: {LightTheme.SECONDARY_DARK};
                 border: 1px solid {LightTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 font-size: {LightTheme.FONT_SIZE_NORMAL}pt;
                 font-weight: 500;
             }}
@@ -886,8 +912,8 @@ class LightTheme:
             }}
 
             QTableWidget::item {{
-                padding: 8px;
-                border-bottom: 1px solid {LightTheme.BORDER_COLOR};
+                padding: 4px 8px;
+                border_bottom: 1px solid {LightTheme.BORDER_COLOR};
             }}
 
             QTableWidget::item:selected {{
@@ -913,7 +939,7 @@ class LightTheme:
             QHeaderView::section {{
                 background-color: {LightTheme.SECONDARY_DARK};
                 color: {LightTheme.TEXT_PRIMARY};
-                padding: 4px;
+                padding: 2px 4px;
                 border: 1px solid {LightTheme.BORDER_COLOR};
                 font-weight: bold;
                 font-size: {LightTheme.FONT_SIZE_NORMAL}pt;
@@ -1060,7 +1086,7 @@ class LightTheme:
                 color: {LightTheme.TEXT_PRIMARY};
                 border: 1px solid {LightTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {LightTheme.FONT_SIZE_NORMAL}pt;
                 min-width: 100px;
             }}
@@ -1096,7 +1122,7 @@ class LightTheme:
                 color: {LightTheme.TEXT_PRIMARY};
                 border: 1px solid {LightTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {LightTheme.FONT_SIZE_NORMAL}pt;
                 min-width: 140px;
             }}
@@ -1267,7 +1293,7 @@ class LightTheme:
                 color: {LightTheme.TEXT_PRIMARY};
                 border: 1px solid {LightTheme.BORDER_COLOR};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {LightTheme.FONT_SIZE_NORMAL}pt;
             }}
 
@@ -1300,7 +1326,8 @@ class LightTheme:
             }}
 
             QComboBox QAbstractItemView::item {{
-                padding: 8px;
+                padding: 4px 8px;
+                color: {LightTheme.TEXT_PRIMARY};
                 border-bottom: 1px solid {LightTheme.BORDER_COLOR};
             }}
 
@@ -1371,7 +1398,8 @@ class LightTheme:
             }}
 
             QListWidget::item {{
-                padding: 8px;
+                padding: 4px 8px;
+                color: {LightTheme.TEXT_PRIMARY};
                 border-bottom: 1px solid {LightTheme.BORDER_COLOR};
             }}
 

@@ -34,12 +34,12 @@ class DashboardPage(QWidget):
         Theme = get_current_theme()
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
         header = QLabel("📊 Lab Inventory Dashboard")
         header.setStyleSheet(
-            f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {Theme.TEXT_PRIMARY}; margin-bottom: 5px;"
+            f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold; color: {Theme.TEXT_PRIMARY}; margin-bottom: 2px;"
         )
         layout.addWidget(header)
 
@@ -54,7 +54,7 @@ class DashboardPage(QWidget):
         self.schedule_placeholder = self.schedule_manager.create_schedule_chart_widget()
 
         grid_layout = QGridLayout()
-        grid_layout.setSpacing(10)
+        grid_layout.setSpacing(8)
 
         metrics_group = QGroupBox("📊 Key Metrics")
         metrics_layout = QVBoxLayout(metrics_group)
