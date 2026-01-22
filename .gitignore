@@ -17,3 +17,10 @@ scripts/
 *.db
 AGENTS.md
 GEMINI.md
+
+# pytest-cov generated files
+.coverage
+.coverage.*
+.cache
+htmlcov/
+coverage.xml

@@ -17,6 +17,7 @@ from .summary_tables import (
     RequisitionSummary,
     StatisticsAggregate,
 )
+from .requisition_service import RequisitionService
 from .requisition_activity import (
     RequisitionActivityManager,
     requisition_activity_manager,
@@ -33,6 +34,7 @@ __all__ = [
     "StockSummary",
     "RequisitionSummary",
     "StatisticsAggregate",
+    "RequisitionService",
     "RequisitionActivityManager",
     "requisition_activity_manager",
 ]

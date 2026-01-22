@@ -13,7 +13,8 @@ Services
 - `inventory_app.services.movement_types.MovementType` — the canonical enum of movement types (CONSUMPTION, RESERVATION, RETURN, DISPOSAL, REQUEST). Services, GUI and models should use this enum to avoid divergent string values and the DB schema enforces valid values via a `CHECK` constraint.
 - `inventory_app.services.stock_movement_service` — creates/updates `Stock_Movements` records and reconciles item quantities.
 - `inventory_app.services.requesters_activity` — logs and manages requester activities and audit trail.
-- `inventory_app.services.requisition_activity` — handles requisition lifecycle (request, active, return) and related stock reservations.
+- `inventory_app.services.requisition_service` — centralizes business logic for the requisition lifecycle (creation, status updates, and return processing).
+- `inventory_app.services.requisition_activity` — handles logging and audit trails for requisition events.
 - `inventory_app.services.alert_engine` — computes expiration, low stock, and calibration alerts for dashboard viewing.
 
 GUI Interfaces
