@@ -7,6 +7,7 @@ def test_usage_filter_visibility_and_items(qtbot):
     """
     page = ReportsPage()
     qtbot.addWidget(page)
+    page.show()
 
     # First combo should include the explicit All option
     assert page.usage_filter_type_combo.itemText(0) == "All Grades & Sections"

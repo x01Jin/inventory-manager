@@ -126,14 +126,18 @@ def test_smart_granularity_thresholds():
     # More than 2 months -> monthly
     assert date_formatter.get_smart_granularity(start, date(2023, 3, 2)) == "monthly"
 
-    # Exactly 2 quarters (6 months) boundary -> monthly
+    # Exactly 6 months boundary -> monthly
     assert date_formatter.get_smart_granularity(start, date(2023, 7, 1)) == "monthly"
 
-    # More than 6 months -> quarterly
-    assert date_formatter.get_smart_granularity(start, date(2023, 7, 2)) == "quarterly"
+    # More than 6 months (up to 1 year) -> monthly
+    assert date_formatter.get_smart_granularity(start, date(2023, 7, 2)) == "monthly"
 
-    # Exactly 2 years boundary -> quarterly
-    assert date_formatter.get_smart_granularity(start, date(2025, 1, 1)) == "quarterly"
+    # Exactly 1 year -> monthly
+    assert date_formatter.get_smart_granularity(start, date(2023, 12, 31)) == "monthly"
+
+    # More than 1 year (actually covered by yearly range in config, which is 366-730 days)
+    # 2 years boundary -> yearly
+    assert date_formatter.get_smart_granularity(start, date(2025, 1, 1)) == "yearly"
 
     # More than 2 years -> yearly
     assert date_formatter.get_smart_granularity(start, date(2025, 1, 2)) == "yearly"

@@ -56,7 +56,7 @@ class ReportGenerator:
             end_date (datetime.date): End date of the reporting period
 
         Returns:
-            str: Granularity level ('daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'multi_year')
+            str: Granularity level ('daily', 'weekly', 'monthly', 'yearly', 'multi_year')
         """
         return date_formatter.get_smart_granularity(start_date, end_date)
 
@@ -389,7 +389,7 @@ class ReportGenerator:
 
         Args:
             start_date, end_date: Date range
-                granularity: daily/weekly/monthly/quarterly or 'auto' (default: auto)
+                granularity: daily/weekly/monthly/yearly or 'auto' (default: auto)
             group_by: 'item' or 'category'
             top_n: Limit to top N rows by total quantity (None for all)
             include_consumables: whether to include consumable items

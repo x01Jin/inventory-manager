@@ -25,16 +25,15 @@ class ReportDateFormatter:
             end_date: End date of the period
 
         Returns:
-            Granularity level: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'multi_year'
+            Granularity level: 'daily', 'weekly', 'monthly', 'yearly', 'multi_year'
         """
         # Use explicit, human-friendly thresholds based on the user's
         # requirement: granularity should switch after more than 2 units of
         # the smaller magnitude. In plain terms:
         # - <= 2 weeks -> daily
         # - > 2 weeks and <= 2 months -> weekly
-        # - > 2 months and <= 2 quarters (6 months) -> monthly
-        # - > 2 quarters and <= 2 years -> quarterly
-        # - > 2 years -> yearly
+        # - > 2 months and <= 1 year -> monthly
+        # - > 1 year -> yearly
         days_diff = (end_date - start_date).days + 1
 
         # helper to add months safely
@@ -55,15 +54,11 @@ class ReportDateFormatter:
         if end_date <= _add_months(start_date, 2):
             return "weekly"
 
-        # more than 2 months -> monthly until (and including) 2 quarters (6 months)
-        if end_date <= _add_months(start_date, 6):
+        # more than 2 months -> monthly until (and including) 1 year
+        if end_date <= _add_months(start_date, 12):
             return "monthly"
 
-        # more than 2 quarters (6 months) -> quarterly until (and including) 2 years
-        if end_date <= _add_months(start_date, 24):
-            return "quarterly"
-
-        # more than 2 years -> yearly
+        # more than 1 year -> yearly
         return "yearly"
 
     @staticmethod
@@ -92,16 +87,6 @@ class ReportDateFormatter:
             # Format: (Jan/2020)
             month_name = get_month_name(date_obj.month)
             return f"({month_name}/{date_obj.year})"
-        elif granularity == "quarterly":
-            # Format: (Jan-Mar/2020)
-            quarter = ((date_obj.month - 1) // 3) + 1
-            # Calculate quarter start and end months
-            quarter_start_month = (quarter - 1) * 3 + 1
-            quarter_end_month = quarter * 3
-
-            start_month_name = get_month_name(quarter_start_month)
-            end_month_name = get_month_name(quarter_end_month)
-            return f"({start_month_name}-{end_month_name}/{date_obj.year})"
         elif granularity in ["yearly", "multi_year"]:
             # Format: (2020)
             return f"({date_obj.year})"
@@ -142,12 +127,6 @@ class ReportDateFormatter:
             # Monthly: Include excess days + main months + excess days
             period_keys.extend(
                 ReportDateFormatter._get_monthly_period_keys(start_date, end_date)
-            )
-
-        elif granularity == "quarterly":
-            # Quarterly: Include excess days + main quarters + excess days
-            period_keys.extend(
-                ReportDateFormatter._get_quarterly_period_keys(start_date, end_date)
             )
 
         elif granularity in ["yearly", "multi_year"]:
@@ -285,82 +264,6 @@ class ReportDateFormatter:
                     f"{current_month.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
                 )
             break
-
-        return list(dict.fromkeys(period_keys))  # Remove duplicates
-
-    @staticmethod
-    def _get_quarterly_period_keys(start_date: date, end_date: date) -> List[str]:
-        """Generate quarterly period keys with excess handling."""
-        period_keys = []
-        # Find quarter start
-        quarter_start_month = ((start_date.month - 1) // 3) * 3 + 1
-        quarter_start = start_date.replace(month=quarter_start_month, day=1)
-
-        # If the whole range is within the same quarter, return a single partial range
-        quarter_end_month = quarter_start_month + 2
-        if quarter_end_month > 12:
-            quarter_end = date(quarter_start.year + 1, 1, 1) - timedelta(days=1)
-        else:
-            quarter_end = date(
-                quarter_start.year, quarter_end_month + 1, 1
-            ) - timedelta(days=1)
-        if start_date >= quarter_start and end_date <= quarter_end:
-            period_keys.append(
-                f"{start_date.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
-            )
-            return period_keys
-
-        # If range starts mid-quarter, add the first partial (start_date -> end_of_quarter)
-        if start_date > quarter_start:
-            period_keys.append(
-                f"{start_date.strftime('%Y-%m-%d')}to{quarter_end.strftime('%Y-%m-%d')}"
-            )
-            # Start main quarters from the next quarter
-            # Determine next quarter start
-            next_month = quarter_start.month + 3
-            if next_month > 12:
-                current_quarter_start = quarter_start.replace(
-                    year=quarter_start.year + 1, month=1, day=1
-                )
-            else:
-                current_quarter_start = quarter_start.replace(month=next_month, day=1)
-        else:
-            current_quarter_start = quarter_start
-        while current_quarter_start <= end_date:
-            # Determine next quarter start and current quarter end
-            next_month = current_quarter_start.month + 3
-            if next_month > 12:
-                next_quarter_start = current_quarter_start.replace(
-                    year=current_quarter_start.year + 1, month=1, day=1
-                )
-            else:
-                next_quarter_start = current_quarter_start.replace(
-                    month=next_month, day=1
-                )
-
-            quarter_end = next_quarter_start - timedelta(days=1)
-
-            # If the full quarter ends within the requested range, add as main quarter
-            if quarter_end <= end_date:
-                quarter = ((current_quarter_start.month - 1) // 3) + 1
-                period_keys.append(f"{current_quarter_start.year}-Q{quarter}")
-                # Move to next quarter
-                current_quarter_start = next_quarter_start
-                continue
-
-            # If we reach here, the current quarter is partial at the end of the range.
-            # Add the partial (post-excess) range from the quarter start to the report end.
-            if current_quarter_start <= end_date:
-                excess_start = current_quarter_start
-                excess_end = end_date
-                if excess_start <= excess_end:
-                    period_keys.append(
-                        f"{excess_start.strftime('%Y-%m-%d')}to{excess_end.strftime('%Y-%m-%d')}"
-                    )
-            # We've handled the tail, so exit the loop
-            break
-
-        # No extra tail handling needed because the loop covers partial quarters
 
         return list(dict.fromkeys(period_keys))  # Remove duplicates
 

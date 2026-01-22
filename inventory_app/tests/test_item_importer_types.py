@@ -1,12 +1,33 @@
-import openpyxl
+import pytest
 from openpyxl import Workbook
 from inventory_app.services.item_importer import import_items_from_excel
 from inventory_app.database.connection import db
 
 
+@pytest.fixture
+def temp_db(tmp_path):
+    """Create a temporary database for each test."""
+    tmp_db_path = tmp_path / "test_inventory.db"
+    if tmp_db_path.exists():
+        tmp_db_path.unlink()
+    # Save original path to restore later
+    old_path = db.db_path
+    db.db_path = tmp_db_path
+    db.create_database()
+    yield tmp_db_path
+    # Restore original path
+    db.db_path = old_path
+    if tmp_db_path.exists():
+        try:
+            tmp_db_path.unlink()
+        except PermissionError:
+            pass
+
+
 def _write_workbook(path):
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.append(["name", "stocks", "item type"])  # header
     ws.append(["Item A", "1", "Consumables"])
     ws.append(["Item B", "2", "TA, non consumable"])
@@ -14,7 +35,7 @@ def _write_workbook(path):
     wb.save(path)
 
 
-def test_importer_item_type_variants(tmp_path):
+def test_importer_item_type_variants(tmp_path, temp_db):
     p = tmp_path / "types.xlsx"
     _write_workbook(str(p))
 

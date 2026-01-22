@@ -71,8 +71,6 @@ class ReportsPage(QWidget):
 
         # Main content with splitter
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_splitter.setCollapsible(0, False)
-        main_splitter.setCollapsible(1, False)
 
         # Left panel - Report Configuration
         config_panel = self.create_config_panel()
@@ -81,6 +79,9 @@ class ReportsPage(QWidget):
         # Right panel - Status and Results
         status_panel = self.create_status_panel()
         main_splitter.addWidget(status_panel)
+
+        main_splitter.setCollapsible(0, False)
+        main_splitter.setCollapsible(1, False)
 
         main_splitter.setSizes([500, 500])
         layout.addWidget(
@@ -322,7 +323,9 @@ class ReportsPage(QWidget):
         grade_section_layout.addWidget(QLabel("Filter by:"))
         self.usage_filter_type_combo = QComboBox()
         # Provide an explicit 'All' option and choices for Grade Level or Section
-        self.usage_filter_type_combo.addItems(["All Grades & Sections", "Grade Level", "Section"])
+        self.usage_filter_type_combo.addItems(
+            ["All Grades & Sections", "Grade Level", "Section"]
+        )
         self.usage_filter_type_combo.setCurrentIndex(0)
         self.usage_filter_type_combo.currentIndexChanged.connect(
             self.on_usage_filter_type_changed
@@ -354,7 +357,7 @@ class ReportsPage(QWidget):
         date_range_info_text.setPlainText(
             "Date Range Usage Report generates an Excel file with:\n"
             "• Time-series analysis for any date range\n"
-            "• Automatic granularity selection (Daily, Weekly, Monthly, Quarterly, Yearly)\n"
+            "• Automatic granularity selection (Daily, Weekly, Monthly, Yearly)\n"
             "• Filterable by category\n"
             "• Includes or excludes consumable items based on selection"
         )
@@ -481,7 +484,7 @@ class ReportsPage(QWidget):
         gran_layout.setContentsMargins(8, 8, 8, 8)
         self.trends_granularity = QComboBox()
         self.trends_granularity.addItems(
-            ["Auto", "Daily", "Weekly", "Monthly", "Quarterly"]
+            ["Auto", "Daily", "Weekly", "Monthly", "Yearly"]
         )
         from inventory_app.gui.reports.report_config import ReportConfig
 

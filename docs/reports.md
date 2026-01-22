@@ -66,10 +66,10 @@ Generates a detailed monthly report in the format specified in beta test require
 Generates a time-series usage report for any custom date range with automatic granularity selection:
 
 - **Format**: Excel file with dynamic period columns and time-series analysis
-- **Granularity**: Automatically selected based on date range (Daily, Weekly, Monthly, Quarterly, Yearly) via `ReportDateFormatter.get_smart_granularity`
+- **Granularity**: Automatically selected based on date range (Daily, Weekly, Monthly, Yearly) via `ReportDateFormatter.get_smart_granularity`
 - **Features**:
   - Dynamic period columns with CASE/WHEN aggregation for each period
-  - Period keys include "excess" ranges for partial weeks/months/quarters
+  - Period keys include "excess" ranges for partial weeks/months
   - Parameterized SQL queries to prevent injection
   - Filterable by category
   - Optional consumable item inclusion
@@ -88,7 +88,7 @@ Generates a time-series usage report for any custom date range with automatic gr
   - `ReportsPage` (inventory_app/gui/reports/reports_page.py): The main UI page with merged Usage Reports tab providing both monthly and date range report types via a dropdown selector. Each report type maintains its own separate UI.
   - `report_generator` (inventory_app/gui/reports/report_generator.py): The central class responsible for generating Excel-based reports. It determines granularity, fetches data using `ReportQueryBuilder`, and writes Excel files using `openpyxl`.
   - `ReportQueryBuilder` (inventory_app/gui/reports/query_builder.py): Builds optimized SQL queries with dynamic period columns and parameterized placeholders to avoid SQL injection. It uses `date_formatter` to generate period keys and converts them to parameterized SQL ranges.
-  - `ReportDateFormatter` (inventory_app/gui/reports/report_utils.py): Provides date utilities used across the report system. It determines smart granularity, generates period keys (including "excess" ranges for partial weeks/months/quarters), and formats period headers for Excel.
+  - `ReportDateFormatter` (inventory_app/gui/reports/report_utils.py): Provides date utilities used across the report system. It determines smart granularity, generates period keys (including "excess" ranges for partial weeks/months), and formats period headers for Excel.
   - `ReportWorker` (inventory_app/gui/reports/report_worker.py): A `QThread` worker to perform background report generation without blocking the UI. It emits `progress`, `finished`, and `error` signals consumed by the GUI.
   - `MovementType` enum (inventory_app/services/movement_types.py): Enumerates stock movement types used in some inventory reports (e.g., consumption and disposal). This centralizes values used in inventory SQL.
   - `data_sources` (inventory_app/gui/reports/data_sources.py): Programmatic data retrieval and pivoting. Primary functions:
@@ -117,7 +117,7 @@ Generates a time-series usage report for any custom date range with automatic gr
 
 - Excel export details:
   - Uses `openpyxl.Workbook` to construct reports.
-  - Headers are formatted via `_format_excel_headers` and period keys are turned into human-readable labels (daily/weekly/monthly/quarterly/yearly) with `ReportDateFormatter` helpers.
+  - Headers are formatted via `_format_excel_headers` and period keys are turned into human-readable labels (daily/weekly/monthly/yearly) with `ReportDateFormatter` helpers.
   - Applies basic styling: bold headers, colored header background, cell borders, centered alignment, and automatic column width adjustments.
   - UX: freeze header panes (`A5` so title and header remain visible), auto-filter enabled on header row for quick data filtering, and numeric formatting for quantity/stock/total columns with right-alignment and thousands grouping where applicable.
   - Merged cells are handled defensively to avoid type errors.
@@ -142,7 +142,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 
 - The generator computes the smart granularity via `date_formatter.get_smart_granularity`.
 - It invokes `ReportQueryBuilder.build_dynamic_report_query(...)` which:
-  - Generates period keys (daily/weekly/monthly/quarterly/yearly) with `date_formatter.get_period_keys()` — including "excess" ranges when the date range partially covers a period.
+  - Generates period keys (daily/weekly/monthly/yearly) with `date_formatter.get_period_keys()` — including "excess" ranges when the date range partially covers a period.
   - Produces a dynamic SQL select with a CASE/WHEN aggregated column for each period key, using parameter placeholders (`?`) for the start and exclusive end of each period column.
   - Validates period key strings used as column aliases with a conservative regex to block malicious alias values.
   - Adds global, half-open WHERE bounds for `r.expected_request >= ? AND r.expected_request < ?` (where the end bound is `end_date + 1 day`).
@@ -177,7 +177,7 @@ Limitations & Notes
 
 - Usage statistics are still available programmatically via `ReportGenerator.get_usage_statistics(start_date, end_date)`.
 - The optimized dynamic query builds one CASE WHEN per period. For very large date ranges and extremely small granularity (e.g., daily over many years), the SQL can be large and slow — the `date_formatter.get_smart_granularity` aims to keep queries performant by automatically selecting a coarser granularity when a wide range is requested.
-- The query builder includes logic to add "excess" ranges (partial weeks/months/quarters) to ensure coverage and correctness for dates that don't start on period boundaries.
+- The query builder includes logic to add "excess" ranges (partial weeks/months) to ensure coverage and correctness for dates that don't start on period boundaries.
 
 Testing
 

@@ -24,11 +24,7 @@ class ReportConfig:
     GRANULARITY_RANGES = {
         "daily": {"max_days": 7, "description": "≤7 days: Daily breakdown"},
         "weekly": {"max_days": 30, "description": "8-30 days: Weekly breakdown"},
-        "monthly": {"max_days": 180, "description": "31-180 days: Monthly breakdown"},
-        "quarterly": {
-            "max_days": 365,
-            "description": "181-365 days: Quarterly breakdown",
-        },
+        "monthly": {"max_days": 365, "description": "31-365 days: Monthly breakdown"},
         "yearly": {"max_days": 730, "description": "366-730 days: Yearly breakdown"},
         "multi_year": {
             "max_days": float("inf"),

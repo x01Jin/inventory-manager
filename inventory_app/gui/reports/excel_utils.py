@@ -1,15 +1,41 @@
-from typing import List, Dict, cast, Optional
+from typing import List, Dict, Optional, cast
 from datetime import date
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.cell import MergedCell
 from openpyxl.cell.cell import Cell
 
 from inventory_app.gui.reports.header_utils import format_excel_headers
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
+
+
+# Category display order matching sample reports
+CATEGORY_ORDER = [
+    "Apparatus",
+    "Equipment",
+    "Lab Models",
+    "Chemicals-Solid",
+    "Chemicals-Liquid",
+    "Prepared Slides",
+    "Consumables",
+    "Others",
+    "Uncategorized",
+]
+
+# Category display names for report headers
+CATEGORY_DISPLAY_NAMES = {
+    "Apparatus": "APPARATUSES",
+    "Equipment": "EQUIPMENT",
+    "Lab Models": "LAB MODELS",
+    "Chemicals-Solid": "CHEMICALS - SOLID",
+    "Chemicals-Liquid": "CHEMICALS - LIQUID",
+    "Prepared Slides": "PREPARED SLIDES",
+    "Consumables": "CONSUMABLES",
+    "Others": "OTHERS",
+    "Uncategorized": "UNCATEGORIZED",
+}
 
 
 def create_excel_report(
@@ -21,14 +47,7 @@ def create_excel_report(
     granularity: Optional[str] = None,
 ) -> None:
     """
-    Create Excel file with report data.
-
-    Args:
-        data: Report data rows
-        output_path: Output file path
-        title: Report title
-        start_date: Report start date
-        end_date: Report end date
+    Create Excel file with report data in the standardized styled format.
     """
     try:
         wb = Workbook()
@@ -38,154 +57,226 @@ def create_excel_report(
 
         ws.title = "Report"
 
-        # Define styles
-        header_font = Font(bold=True, color="FFFFFF")
+        # Styles
+        title_font = Font(bold=True, size=11)
+        header_font = Font(bold=True, color="FFFFFF", size=10)
         header_fill = PatternFill(
-            start_color="366092", end_color="366092", fill_type="solid"
-        )
+            start_color="C65911", end_color="C65911", fill_type="solid"
+        )  # Orange/brown header
+
+        category_header_font = Font(bold=True, size=11)
+        category_header_fill = PatternFill(
+            start_color="FFD966", end_color="FFD966", fill_type="solid"
+        )  # Gold
+        data_font = Font(size=10)
         border = Border(
             left=Side(style="thin"),
             right=Side(style="thin"),
             top=Side(style="thin"),
             bottom=Side(style="thin"),
         )
-        center_align = Alignment(horizontal="center")
+        center_align = Alignment(horizontal="center", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
 
-        # Add title
-        ws["A1"] = title
-        ws["A1"].font = Font(bold=True, size=16)
+        if not data:
+            ws["A1"] = "No data found for the specified period."
+            wb.save(output_path)
+            return
 
-        # Use enhanced date formatting for period display
-        period_description = date_formatter.get_date_range_description(
-            start_date, end_date
+        # Prepare headers
+        raw_headers = list(data[0].keys())
+        formatted_headers = format_excel_headers(
+            raw_headers, start_date, end_date, granularity
         )
-        ws["A2"] = f"Period: {period_description}"
-        ws["A2"].font = Font(italic=True)
 
-        # Add headers
-        numeric_columns = set()
-        formatted_headers: List[str] = []
-        if data:
-            headers = list(data[0].keys())
-            formatted_headers = format_excel_headers(
-                headers, start_date, end_date, granularity
+        # === ROW 1: Empty ===
+
+        # === ROW 2: Title Header ===
+        period_desc = date_formatter.get_date_range_description(start_date, end_date)
+        full_title = f"{title.upper()}\nPERIOD: {period_desc.upper()}"
+
+        # Determine title merge range (centered over first few columns)
+        merge_end_col = min(7, len(formatted_headers))
+        title_cell = cast(Cell, ws.cell(row=2, column=1))
+        title_cell.value = full_title
+        title_cell.font = title_font
+        title_cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+        ws.row_dimensions[2].height = 40
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=merge_end_col)
+
+        # === ROW 3: Empty ===
+
+        # === ROW 4: Headers ===
+        for col_num, header_text in enumerate(formatted_headers, 1):
+            cell = cast(Cell, ws.cell(row=4, column=col_num))
+            cell.value = header_text
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_align
+            cell.border = border
+
+            # Set column width
+            column_letter = get_column_letter(col_num)
+            ws.column_dimensions[column_letter].width = max(
+                len(str(header_text)) + 4, 15
             )
 
-            # Detect numeric columns (e.g., quantities, totals, stock)
-            for idx, head in enumerate(formatted_headers, 1):
-                low = str(head).lower() if head else ""
-                if (
-                    "quantity" in low
-                    or "stock" in low
-                    or "total" in low
-                    or low.endswith("qty")
-                ):
-                    numeric_columns.add(idx)
+        # Auto-filter across headers and data
+        try:
+            last_col_letter = get_column_letter(len(formatted_headers))
+            ws.auto_filter.ref = (
+                f"A4:{last_col_letter}{4 + len(data) + 10}"  # +10 for categories
+            )
+        except Exception:
+            pass
 
-            for col_num, header_text in enumerate(formatted_headers, 1):
-                cell = ws.cell(row=4, column=col_num)
+        # Group data by category if CATEGORIES column exists
+        category_col_key = None
+        for key in ["CATEGORIES", "Category", "category"]:
+            if key in data[0]:
+                category_col_key = key
+                break
 
-                if not isinstance(cell, MergedCell):
-                    cell.value = header_text
-                    cell.font = header_font
-                    cell.fill = header_fill
-                    cell.alignment = center_align
+        current_row = 5
+        if category_col_key:
+            from collections import defaultdict
+
+            grouped_data = defaultdict(list)
+            for row in data:
+                cat = row.get(category_col_key, "Uncategorized")
+                grouped_data[cat].append(row)
+
+            # Sort categories by defined order
+            sorted_categories = []
+            for cat in CATEGORY_ORDER:
+                if cat in grouped_data:
+                    sorted_categories.append(cat)
+
+            # Add any other categories not in CATEGORY_ORDER
+            for cat in grouped_data.keys():
+                if cat not in CATEGORY_ORDER:
+                    sorted_categories.append(cat)
+
+            for category in sorted_categories:
+                items = grouped_data[category]
+
+                # Category Header Row
+                display_name = CATEGORY_DISPLAY_NAMES.get(
+                    category, str(category).upper()
+                )
+                cat_cell = cast(Cell, ws.cell(row=current_row, column=1))
+                cat_cell.value = display_name
+                cat_cell.font = category_header_font
+                cat_cell.fill = category_header_fill
+                cat_cell.border = border
+
+                for col in range(2, len(formatted_headers) + 1):
+                    cell = ws.cell(row=current_row, column=col)
+                    cell.fill = category_header_fill
                     cell.border = border
 
-                # Auto-adjust column width (slightly wider to accommodate sort drop-down)
-                column_letter = get_column_letter(col_num)
-                # increase header padding to prevent sort/filter button overlap
-                ws.column_dimensions[column_letter].width = max(
-                    len(str(header_text)) + 6, 12
+                ws.merge_cells(
+                    start_row=current_row,
+                    start_column=1,
+                    end_row=current_row,
+                    end_column=len(formatted_headers),
                 )
+                current_row += 1
 
-            # Freeze panes so title/headers remain visible
-            try:
-                ws.freeze_panes = ws["A5"]
-            except Exception:
-                pass
-
-            # Auto-filter across headers and data
-            try:
-                last_col_letter = get_column_letter(len(formatted_headers))
-                ws.auto_filter.ref = f"A4:{last_col_letter}{4 + len(data)}"
-            except Exception:
-                pass
-
-        # Add data rows
-        for row_num, row_data in enumerate(data, 5):
-            for col_num, value in enumerate(row_data.values(), 1):
-                try:
-                    cell = ws.cell(row=row_num, column=col_num)
-
-                    if not isinstance(cell, MergedCell):
+                # Data Rows
+                for row_data in items:
+                    for col_num, value in enumerate(row_data.values(), 1):
+                        cell = cast(Cell, ws.cell(row=current_row, column=col_num))
                         cell.value = value
+                        cell.font = data_font
                         cell.border = border
-                        # Apply numeric formatting if this column is numeric
-                        if col_num in numeric_columns:
-                            try:
-                                cell.number_format = "#,##0"
-                                cell.alignment = Alignment(horizontal="right")
-                            except Exception:
-                                pass
 
-                    # Auto-adjust column width based on content - never reduce width
-                    column_letter = get_column_letter(col_num)
-                    content_length = len(str(value)) + 2
-                    current_width = ws.column_dimensions[column_letter].width or 12
-                    ws.column_dimensions[column_letter].width = max(
-                        current_width, content_length
-                    )
-                except Exception as e:
-                    logger.debug(
-                        f"Skipping cell at row {row_num}, column {col_num}: {e}"
-                    )
+                        # Right-align numbers and apply formatting
+                        if isinstance(value, (int, float)):
+                            cell.alignment = Alignment(horizontal="right")
+                            cell.number_format = "#,##0"
+                        else:
+                            cell.alignment = left_align
+                    current_row += 1
+        else:
+            # Just write data sequentially if no category grouping
+            for row_data in data:
+                for col_num, value in enumerate(row_data.values(), 1):
+                    cell = cast(Cell, ws.cell(row=current_row, column=col_num))
+                    cell.value = value
+                    cell.font = data_font
+                    cell.border = border
+                    if isinstance(value, (int, float)):
+                        cell.alignment = Alignment(horizontal="right")
+                        cell.number_format = "#,##0"
+                    else:
+                        cell.alignment = left_align
+                current_row += 1
 
-        # Add totals row for numeric columns
+        # Add grand total row
         try:
-            if data and numeric_columns:
-                totals_row = 5 + len(data)
+            # Determine numeric columns
+            numeric_indices = set()
+            for idx, head in enumerate(formatted_headers, 1):
+                low = str(head).lower() if head else ""
+                if any(
+                    x in low for x in ["quantity", "stock", "total"]
+                ) or low.endswith("qty"):
+                    numeric_indices.add(idx)
+
+            if numeric_indices:
+                total_row = current_row
                 total_font = Font(bold=True)
-                label_cell = cast(Cell, ws.cell(row=totals_row, column=1))
+
+                label_cell = cast(Cell, ws.cell(row=total_row, column=1))
                 label_cell.value = "Total"
                 label_cell.font = total_font
-                label_cell.alignment = Alignment(horizontal="left")
-                # Compute sums per numeric column using original header keys
-                headers = list(data[0].keys())
-                for col_num in sorted(numeric_columns):
-                    header_key = headers[col_num - 1]
-                    total_value = 0
-                    for r in data:
-                        v = 0
+                label_cell.border = border
+
+                # Apply borders to the whole total row
+                for col in range(2, len(formatted_headers) + 1):
+                    ws.cell(row=total_row, column=col).border = border
+
+                # Sum columns
+                for col_idx in numeric_indices:
+                    header_key = raw_headers[col_idx - 1]
+                    total_val = 0
+                    for item in data:
                         try:
-                            v = r.get(header_key, 0) or 0
-                            total_value += int(v)
-                        except Exception:
-                            try:
-                                total_value += int(float(v))
-                            except Exception:
-                                total_value += 0
+                            val = item.get(header_key, 0) or 0
+                            total_val += float(val)
+                        except (ValueError, TypeError):
+                            pass
 
-                    cell = ws.cell(row=totals_row, column=col_num)
-                    typed_cell = cast(Cell, cell)
-                    typed_cell.value = total_value
-                    typed_cell.font = total_font
-                    typed_cell.number_format = "#,##0"
-                    typed_cell.alignment = Alignment(horizontal="right")
-                    typed_cell.border = border
+                    cell = cast(Cell, ws.cell(row=total_row, column=col_idx))
+                    cell.value = total_val
+                    cell.font = total_font
+                    cell.number_format = "#,##0"
+                    cell.alignment = Alignment(horizontal="right")
+                    cell.border = border
 
-                # Extend auto-filter to include totals row
-                try:
-                    last_col_letter = get_column_letter(len(formatted_headers))
-                    ws.auto_filter.ref = f"A4:{last_col_letter}{4 + len(data) + 1}"
-                except Exception:
-                    pass
+                current_row += 1
         except Exception as e:
-            logger.debug(f"Failed to write totals row: {e}")
+            logger.debug(f"Failed to add totals row: {e}")
 
-        # Save the workbook
+        # Freeze panes at row 5
+        ws.freeze_panes = "A5"
+
+        # Final column width adjustment
+        for col_num in range(1, len(formatted_headers) + 1):
+            column_letter = get_column_letter(col_num)
+            max_len = ws.column_dimensions[column_letter].width
+            # Scan a few rows for content length
+            for r in range(5, min(current_row, 25)):
+                val = ws.cell(row=r, column=col_num).value
+                if val:
+                    max_len = max(max_len, len(str(val)) + 2)
+            ws.column_dimensions[column_letter].width = min(max_len, 50)
+
         wb.save(output_path)
-        logger.debug(f"Excel file saved to {output_path}")
+        logger.info(f"Report saved to {output_path}")
 
     except Exception as e:
         logger.error(f"Failed to create Excel report: {e}")

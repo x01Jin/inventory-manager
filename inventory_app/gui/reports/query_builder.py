@@ -336,28 +336,6 @@ class ReportQueryBuilder:
                         month_end = date(year, month + 1, 1)
                     return month_start.isoformat(), month_end.isoformat()
 
-            elif granularity == "quarterly":
-                if "to" in period_key:
-                    # Excess period: '2023-01-01to2023-03-15'
-                    start_str, end_str = period_key.split("to")
-                    start_date = date.fromisoformat(start_str)
-                    end_date = date.fromisoformat(end_str)
-                    return start_date.isoformat(), (
-                        end_date + timedelta(days=1)
-                    ).isoformat()
-                else:
-                    # Main quarter: '2023-Q1'
-                    year_str, quarter_str = period_key.split("-Q")
-                    year, quarter = int(year_str), int(quarter_str)
-                    quarter_start_month = (quarter - 1) * 3 + 1
-                    quarter_start = date(year, quarter_start_month, 1)
-                    quarter_end_month = quarter * 3 + 1
-                    if quarter_end_month > 12:
-                        quarter_end = date(year + 1, 1, 1)
-                    else:
-                        quarter_end = date(year, quarter_end_month, 1)
-                    return quarter_start.isoformat(), quarter_end.isoformat()
-
             elif granularity in ["yearly", "multi_year"]:
                 # Year: handle both full-year labels and partial ranges
                 if "to" in period_key:

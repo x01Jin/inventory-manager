@@ -12,9 +12,9 @@ The Reports page is where you generate, inspect, and export detailed, Excel-comp
 
 There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trends Reports**. Choose the tab that matches your need, configure options, and click **Generate Report**.
 
-- **Usage Reports:** Time-bucketed usage of items across the selected date range. Use the **Report Type** dropdown to choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/quarterly granularity). Monthly Usage supports category filtering and is the default selection. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
+- **Usage Reports:** Time-bucketed usage of items across the selected date range. Use the **Report Type** dropdown to choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/yearly granularity). Monthly Usage supports category filtering and is the default selection. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
 - **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, **Calibration Due Report**, **Update History Report**, **Disposal History Report**, **Usage by Grade Level**, and **Defective Items Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows). Others show current or historical state.
-- **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Quarterly), and an optional **Top N** filter (Top 10/20/50/All).
+- **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Yearly), and an optional **Top N** filter (Top 10/20/50/All).
 
 ## **Filters & Options**
 
@@ -38,7 +38,7 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
 - **Usage by Grade Level:** Usage breakdown by requester grade level and section, showing lab activity name and date. Useful for tracking material usage across different educational groups.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.
-- **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, etc.) depending on granularity.
+- **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, yearly) depending on granularity.
 
 ## **File output & naming**
 

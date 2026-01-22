@@ -143,32 +143,6 @@ def test_weekly_precise_partial_pre_and_post_excess():
     assert parsed_ends_exclusive[-1] == (end + timedelta(days=1))
 
 
-def test_quarterly_precise_partial_pre_and_post_excess():
-    from inventory_app.gui.reports.report_utils import date_formatter
-
-    builder = ReportQueryBuilder()
-    start = date(2025, 3, 12)
-    end = date(2025, 7, 12)
-
-    keys = date_formatter.get_period_keys(start, end, "quarterly")
-
-    # Expect first entry to be the partial Q1 tail (Mar 12-31), include Q2, and tail Q3 (Jul 1-12)
-    assert keys[0] == "2025-03-12to2025-03-31"
-    assert "2025-Q2" in keys
-    assert any(k.startswith("2025-07-01to2025-07-12") for k in keys)
-
-    parsed_ranges = [
-        builder._parse_period_key_to_dates(k, start, end, "quarterly") for k in keys
-    ]
-    parsed_starts = [date.fromisoformat(s) for s, e in parsed_ranges]
-    parsed_ends_exclusive = [date.fromisoformat(e) for s, e in parsed_ranges]
-
-    from datetime import timedelta
-
-    assert parsed_starts[0] == start
-    assert parsed_ends_exclusive[-1] == (end + timedelta(days=1))
-
-
 def test_yearly_precise_partial_ranges_across_years():
     from inventory_app.gui.reports.report_utils import date_formatter
 
@@ -224,31 +198,6 @@ def test_weekly_excess_ranges_are_included_and_params_expand():
         assert f'"{k}"' in query or f'"{k.replace('"', '""')}"' in query
 
 
-def test_quarterly_includes_post_and_pre_excess():
-    from inventory_app.gui.reports.report_utils import date_formatter
-
-    builder = ReportQueryBuilder()
-    start = date(2025, 1, 12)
-    end = date(2025, 7, 12)
-
-    keys = date_formatter.get_period_keys(start, end, "quarterly")
-
-    # Expect initial partial range (start to quarter end), main full quarters, and post-excess tail
-    assert any(k.startswith("2025-01-12to2025-03-31") for k in keys)
-    assert "2025-Q2" in keys
-    # Post-excess should be a partial Q3 from 2025-07-01 to 2025-07-12
-    assert any(k.startswith("2025-07-01to2025-07-12") for k in keys)
-
-    query, params = builder.build_dynamic_report_query(start, end, "quarterly")
-    # Verify params include the expected period param count (2 per period + global bounds)
-    period_params = params[: 2 * len(keys)]
-    assert len(period_params) == 2 * len(keys)
-
-    # Ensure the SQL contains the period aliases generated
-    for k in keys:
-        assert f'"{k}"' in query or f'"{k.replace('"', '""')}"' in query
-
-
 def test_weekly_precise_partial_ranges_match_monthly_semantics():
     from inventory_app.gui.reports.report_utils import date_formatter
 
@@ -272,32 +221,6 @@ def test_weekly_precise_partial_ranges_match_monthly_semantics():
 
     assert parsed_starts[0] == start
     assert parsed_ends_exclusive[-1] == end + __import__("datetime").timedelta(days=1)
-
-
-def test_quarterly_precise_partial_ranges_match_monthly_semantics():
-    from inventory_app.gui.reports.report_utils import date_formatter
-
-    builder = ReportQueryBuilder()
-    start = date(2025, 3, 12)
-    end = date(2025, 7, 12)
-
-    keys = date_formatter.get_period_keys(start, end, "quarterly")
-
-    # Initial partial quarter is from start to quarter end
-    assert any(k.startswith("2025-03-12to2025-03-31") for k in keys)
-    # Next should include full Q2
-    assert "2025-Q2" in keys
-    # Tail should be a partial Q3 from 2025-07-01 to 2025-07-12
-    assert any(k.startswith("2025-07-01to2025-07-12") for k in keys)
-
-    parsed_ranges = [
-        builder._parse_period_key_to_dates(k, start, end, "quarterly") for k in keys
-    ]
-    parsed_starts = [date.fromisoformat(s) for s, e in parsed_ranges]
-    parsed_ends_exclusive = [date.fromisoformat(e) for s, e in parsed_ranges]
-
-    assert parsed_starts[0] == start
-    assert parsed_ends_exclusive[-1] == (end + __import__("datetime").timedelta(days=1))
 
 
 def test_monthly_partial_ranges_within_date_range():
