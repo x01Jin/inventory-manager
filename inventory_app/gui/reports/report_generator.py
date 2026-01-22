@@ -642,6 +642,74 @@ class ReportGenerator:
             logger.error(f"Failed to get defective items data: {e}")
             return []
 
+    def generate_usage_by_grade_level_report(
+        self,
+        start_date: date,
+        end_date: date,
+        category_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
+        output_path: Optional[str] = None,
+        structured: bool = False,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Generate Usage by Grade Level report.
+
+        Args:
+            start_date: Start date for the report period
+            end_date: End date for the report period
+            category_filter: Optional category filter
+            grade_filter: Optional grade level filter
+            section_filter: Optional section filter
+            show_individual_only: Whether to show only individual requests
+            output_path: Optional output file path
+            structured: Return structured dict instead of string path
+
+        Returns:
+            Path to generated Excel file or error string
+        """
+        try:
+            logger.info(
+                f"Generating Usage by Grade Level report from {start_date} to {end_date}"
+            )
+
+            report_data = self._get_usage_by_grade_level_data(
+                start_date,
+                end_date,
+                category_filter,
+                grade_filter,
+                section_filter,
+                show_individual_only,
+            )
+
+            if not report_data:
+                error_msg = "Failed to generate Usage by Grade Level report\nReason: No data found for the specified criteria"
+                logger.warning("No data found for Usage by Grade Level report")
+                if structured:
+                    return {"success": False, "error": error_msg}
+                return error_msg
+
+            if not output_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = f"usage_by_grade_level_{timestamp}.xlsx"
+
+            output_path_obj = Path(output_path)
+            self._create_excel_report(
+                report_data, output_path_obj, "Usage by Grade Level Report", start_date, end_date
+            )
+
+            logger.info(f"Usage by Grade Level report generated: {output_path}")
+            if structured:
+                return {"success": True, "path": str(output_path)}
+            return str(output_path)
+
+        except Exception as e:
+            logger.error(f"Failed to generate Usage by Grade Level report: {e}")
+            if structured:
+                return {"success": False, "error": str(e)}
+            return f"Failed to generate Usage by Grade Level report: {e}"
+
 
 # Global report generator instance
 report_generator = ReportGenerator()

@@ -26,6 +26,8 @@ class ReportWorker(QThread):
         self.supplier_filter = kwargs.get("supplier_filter", "")
         self.include_consumables = kwargs.get("include_consumables", True)
         self.show_individual_only = kwargs.get("show_individual_only", False)
+        # Usage report specific parameters
+        self.usage_report_type = kwargs.get("usage_report_type", "date_range")
         # Inventory report specific parameters
         self.inventory_report_type = kwargs.get(
             "inventory_report_type", "Stock Levels Report"
@@ -89,6 +91,15 @@ class ReportWorker(QThread):
 
     def _generate_usage_report(self):
         """Generate usage report using existing functionality."""
+        if self.usage_report_type == "grade_level":
+            return report_generator.generate_usage_by_grade_level_report(
+                self.start_date,
+                self.end_date,
+                category_filter=self.category_filter,
+                grade_filter=self.grade_filter,
+                section_filter=self.section_filter,
+                show_individual_only=self.show_individual_only,
+            )
         return report_generator.generate_report(
             self.start_date,
             self.end_date,

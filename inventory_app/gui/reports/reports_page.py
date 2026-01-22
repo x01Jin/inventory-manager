@@ -44,8 +44,6 @@ class ReportsPage(QWidget):
         self.current_report_type = "usage"
         self.apply_theme()
         self.setup_ui()
-        self.load_grade_levels()
-        self.load_sections()
 
     def apply_theme(self):
         """Apply current theme to the reports page."""
@@ -165,6 +163,7 @@ class ReportsPage(QWidget):
         self.usage_report_type = QComboBox()
         self.usage_report_type.addItem("Monthly Usage Report", "monthly")
         self.usage_report_type.addItem("Date Range Usage Report", "date_range")
+        self.usage_report_type.addItem("Usage by Grade Level", "grade_level")
         self.usage_report_type.setCurrentIndex(0)  # Default to Monthly
         self.usage_report_type.currentIndexChanged.connect(
             self.on_usage_report_type_changed
@@ -314,6 +313,30 @@ class ReportsPage(QWidget):
         self.show_individual_only_check = QCheckBox("Show only individual requests")
         filters_layout.addWidget(self.show_individual_only_check)
 
+        # Grade/Section simplified filter (for Usage by Grade Level report)
+        self.usage_grade_section_widget = QWidget()
+        grade_section_layout = QHBoxLayout(self.usage_grade_section_widget)
+        grade_section_layout.setSpacing(4)
+        grade_section_layout.setContentsMargins(0, 0, 0, 0)
+
+        grade_section_layout.addWidget(QLabel("Filter by:"))
+        self.usage_filter_type_combo = QComboBox()
+        # Provide an explicit 'All' option and choices for Grade Level or Section
+        self.usage_filter_type_combo.addItems(["All Grades & Sections", "Grade Level", "Section"])
+        self.usage_filter_type_combo.setCurrentIndex(0)
+        self.usage_filter_type_combo.currentIndexChanged.connect(
+            self.on_usage_filter_type_changed
+        )
+        grade_section_layout.addWidget(self.usage_filter_type_combo)
+
+        self.usage_filter_value_combo = QComboBox()
+        # Hidden by default; appears when Grade Level or Section is selected
+        self.usage_filter_value_combo.setVisible(False)
+        grade_section_layout.addWidget(self.usage_filter_value_combo)
+
+        self.usage_grade_section_widget.setVisible(False)
+        filters_layout.addWidget(self.usage_grade_section_widget)
+
         # Consumable filter
         self.consumable_check = QCheckBox("Include consumable items")
         self.consumable_check.setChecked(True)
@@ -369,7 +392,6 @@ class ReportsPage(QWidget):
                 "Defective Items Report",
                 "Low Stock Alert",
                 "Acquisition History",
-                "Usage by Grade Level",
                 "Item Usage Details",
                 "Batch Summary",
             ]
@@ -430,34 +452,6 @@ class ReportsPage(QWidget):
         item_name_layout.addWidget(self.item_name_filter)
         self.item_name_widget.setVisible(False)
         filters_layout.addWidget(self.item_name_widget)
-
-        # Grade and Section filter container (for Usage by Grade Level)
-        self.grade_section_widget = QWidget()
-        grade_section_layout = QHBoxLayout(self.grade_section_widget)
-        grade_section_layout.setSpacing(4)
-        grade_section_layout.setContentsMargins(0, 0, 0, 0)
-
-        grade_section_layout.addWidget(QLabel("Grade Level:"))
-        self.grade_filter = QComboBox()
-        self.grade_filter.addItem("All Grades")
-        grade_section_layout.addWidget(self.grade_filter)
-
-        grade_section_layout.addWidget(QLabel("Section:"))
-        self.section_filter = QComboBox()
-        self.section_filter.addItem("All Sections")
-        grade_section_layout.addWidget(self.section_filter)
-
-        self.grade_section_widget.setVisible(False)
-        filters_layout.addWidget(self.grade_section_widget)
-
-        # Individual requests filter container (for Usage by Grade Level)
-        self.individual_filter_widget = QWidget()
-        individual_layout = QVBoxLayout(self.individual_filter_widget)
-        individual_layout.setContentsMargins(0, 0, 0, 0)
-        self.inv_show_individual_only_check = QCheckBox("Show only individual requests")
-        individual_layout.addWidget(self.inv_show_individual_only_check)
-        self.individual_filter_widget.setVisible(False)
-        filters_layout.addWidget(self.individual_filter_widget)
 
         layout.addWidget(filters_group)
 
@@ -592,45 +586,33 @@ class ReportsPage(QWidget):
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
 
-    def load_grade_levels(self):
-        """Load grade levels from database for Usage by Grade Level report."""
+    def load_grade_levels_combo(self, combo: QComboBox):
+        """Load grade levels from database into a given combo box."""
         try:
             from inventory_app.database.connection import db
 
             grades = db.execute_query(
                 "SELECT DISTINCT grade_level FROM Requesters WHERE grade_level IS NOT NULL AND grade_level != '' ORDER BY grade_level"
             )
-            self.grade_filter.clear()
-            self.grade_filter.addItem("All Grades")
             if grades:
                 for row in grades:
-                    self.grade_filter.addItem(row["grade_level"])
-                self.grade_filter.setEnabled(True)
-            else:
-                self.grade_filter.setEnabled(False)
+                    combo.addItem(row["grade_level"])
         except Exception as e:
             logger.error(f"Failed to load grade levels: {e}")
-            self.grade_filter.setEnabled(False)
 
-    def load_sections(self):
-        """Load sections from database for Usage by Grade Level report."""
+    def load_sections_combo(self, combo: QComboBox):
+        """Load sections from database into a given combo box."""
         try:
             from inventory_app.database.connection import db
 
             sections = db.execute_query(
                 "SELECT DISTINCT section FROM Requesters WHERE section IS NOT NULL AND section != '' ORDER BY section"
             )
-            self.section_filter.clear()
-            self.section_filter.addItem("All Sections")
             if sections:
                 for row in sections:
-                    self.section_filter.addItem(row["section"])
-                self.section_filter.setEnabled(True)
-            else:
-                self.section_filter.setEnabled(False)
+                    combo.addItem(row["section"])
         except Exception as e:
             logger.error(f"Failed to load sections: {e}")
-            self.section_filter.setEnabled(False)
 
     def _on_inventory_report_type_changed(self, report_type: str):
         """Handle inventory report type dropdown changes to show/hide appropriate inputs."""
@@ -639,9 +621,6 @@ class ReportsPage(QWidget):
         self.item_name_widget.setVisible(
             report_type in {"Item Usage Details", "Batch Summary"}
         )
-
-        self.grade_section_widget.setVisible(report_type == "Usage by Grade Level")
-        self.individual_filter_widget.setVisible(report_type == "Usage by Grade Level")
 
         self.inv_category_combo.setEnabled(
             report_type
@@ -673,9 +652,34 @@ class ReportsPage(QWidget):
         if report_type == "monthly":
             self.monthly_config_widget.setVisible(True)
             self.date_range_config_widget.setVisible(False)
+            self.usage_grade_section_widget.setVisible(False)
+        elif report_type == "grade_level":
+            self.monthly_config_widget.setVisible(False)
+            self.date_range_config_widget.setVisible(True)
+            self.usage_grade_section_widget.setVisible(True)
         else:  # date_range
             self.monthly_config_widget.setVisible(False)
             self.date_range_config_widget.setVisible(True)
+            self.usage_grade_section_widget.setVisible(False)
+
+    def on_usage_filter_type_changed(self):
+        """Handle filter type selection changes (Grade Level/Section or All)."""
+        filter_type = self.usage_filter_type_combo.currentText()
+        self.usage_filter_value_combo.clear()
+        if filter_type == "Grade Level":
+            self.usage_filter_value_combo.addItem("All Grades")
+            self.load_grade_levels_combo(self.usage_filter_value_combo)
+            self.usage_filter_value_combo.setVisible(True)
+            self.usage_filter_value_combo.setEnabled(True)
+        elif filter_type == "Section":
+            self.usage_filter_value_combo.addItem("All Sections")
+            self.load_sections_combo(self.usage_filter_value_combo)
+            self.usage_filter_value_combo.setVisible(True)
+            self.usage_filter_value_combo.setEnabled(True)
+        else:
+            # 'All Grades & Sections' selected - hide the detail selector
+            self.usage_filter_value_combo.setVisible(False)
+            self.usage_filter_value_combo.setEnabled(False)
 
     def on_preset_changed(self, preset):
         """Handle preset date range selection."""
@@ -749,6 +753,8 @@ class ReportsPage(QWidget):
                 usage_type = self.usage_report_type.currentData()
                 if usage_type == "monthly":
                     self.generate_monthly_usage_report()
+                elif usage_type == "grade_level":
+                    self.generate_usage_by_grade_level_report()
                 else:  # date_range
                     self.generate_usage_report()
             elif self.current_report_type == "inventory":
@@ -847,6 +853,52 @@ class ReportsPage(QWidget):
         self.worker.error.connect(self.on_report_error)
         self.worker.start()
 
+    def generate_usage_by_grade_level_report(self):
+        """Generate usage by grade level report with current configuration."""
+        start_date, end_date = self.date_range_selector.to_py_dates()
+
+        if start_date > end_date:
+            QMessageBox.warning(
+                self, "Invalid Date Range", "Start date cannot be after end date."
+            )
+            self.reset_ui()
+            return
+
+        category_filter = self.category_combo.currentText()
+        if category_filter == "All Categories":
+            category_filter = ""
+
+        filter_type = self.usage_filter_type_combo.currentText()
+        filter_value = ""
+        if filter_type == "Grade Level":
+            filter_value = self.usage_filter_value_combo.currentText()
+            if filter_value == "All Grades":
+                filter_value = ""
+        elif filter_type == "Section":
+            filter_value = self.usage_filter_value_combo.currentText()
+            if filter_value == "All Sections":
+                filter_value = ""
+
+        show_individual_only = self.show_individual_only_check.isChecked()
+
+        grade_filter = filter_value if filter_type == "Grade Level" else ""
+        section_filter = filter_value if filter_type == "Section" else ""
+
+        self.worker = ReportWorker(
+            "usage",
+            start_date,
+            end_date,
+            category_filter=category_filter,
+            usage_report_type="grade_level",
+            grade_filter=grade_filter,
+            section_filter=section_filter,
+            show_individual_only=show_individual_only,
+        )
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_report_finished)
+        self.worker.error.connect(self.on_report_error)
+        self.worker.start()
+
     def generate_inventory_report(self):
         """Generate inventory report."""
         start_date, end_date = self.inventory_date_selector.to_py_dates()
@@ -875,12 +927,6 @@ class ReportsPage(QWidget):
             kwargs["low_stock_threshold"] = self.low_stock_threshold.value()
         elif inventory_report_type in {"Item Usage Details", "Batch Summary"}:
             kwargs["item_name_filter"] = self.item_name_filter.text().strip()
-        elif inventory_report_type == "Usage by Grade Level":
-            kwargs["grade_filter"] = self.grade_filter.currentText()
-            kwargs["section_filter"] = self.section_filter.currentText()
-            kwargs["show_individual_only"] = (
-                self.inv_show_individual_only_check.isChecked()
-            )
 
         # Only pass category filter for reports that use it
         if inventory_report_type not in {
