@@ -50,7 +50,7 @@ class AsyncTableModel(QObject):
         self._current_worker: Optional[DataLoadWorker] = None
         self._data: List[Dict[str, Any]] = []
         self._is_loading = False
-        self._batch_size = 50
+        self._batch_size = 100
 
     @property
     def is_loading(self) -> bool:

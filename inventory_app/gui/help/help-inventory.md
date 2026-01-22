@@ -77,15 +77,30 @@ Alert thresholds (how statuses are derived):
 Key fields and behaviors in the Add/Edit dialog:
 
 - **Name (required):** The visible name of the item.
-- **Category / Supplier / Size / Brand:** Select from existing entries; dropdowns are populated from the database.
+- **Category (required):** Select from predefined categories (Chemicals-Solid, Chemicals-Liquid, Prepared Slides, Consumables, Equipment, Apparatus, Lab Models, Others, or Uncategorized). **Changing the category automatically calculates the item type and expiration/calibration dates** based on the category's built-in thresholds. You can still manually adjust these dates afterward.
+- **Supplier / Size / Brand:** Select suppliers from existing entries; sizes and brands are free-form text.
 - **PO Number:** Optional purchase order number.
 - **Batch Quantity (Add only):** Number of units/batches to record for a new item. Must be a positive integer. Defaults to 1.
 - **Other Specifications:** Free-form text for details (materials, model numbers, notes).
-- **Acquisition Date:** Defaults to today; you may change it.
-- **Item Type:** Choose `Consumable` or `Non-Consumable`. This toggles the meaning of the date fields:
+- **Acquisition Date:** Defaults to today; you may change it. **Changing this date recalculates expiration/calibration dates** based on the category thresholds.
+- **Item Type:** Automatically set by category selection (Consumable or Non-Consumable). You can override this manually if needed. This toggles the meaning of the date fields:
   - If **Consumable**, the bottom-right date is **Expiration Date** (special value `No Expiration` allowed).
   - If **Non-Consumable**, the top-right date becomes **Disposal Date** and the bottom-right becomes **Calibration Date** (each can be left unset / special value to indicate None).
 - **Editor Name/Initials (required):** You must supply this for audit purposes when saving or deleting.
+
+**Auto-calculated dates explained:**
+
+When you select a category, dates are automatically calculated using industry standards:
+
+- **Chemicals (Solid/Liquid):** Expiration set to 24 months (2 years) from acquisition date; alerts appear 6 months before expiration
+- **Prepared Slides:** Expiration set to 36 months (3 years) from acquisition date
+- **Consumables:** Expiration set to 12 months (1 year) from acquisition date
+- **Equipment:** Disposal set to 5 years from acquisition; Calibration set to 1 year from acquisition
+- **Apparatus / Glassware:** Disposal set to 3 years from acquisition; Calibration set to 1 year from acquisition (if applicable)
+- **Lab Models / Others:** Disposal set to 5 years from acquisition
+- **Uncategorized:** No automatic date calculation
+
+You can always edit these dates manually if the calculated values don't match your laboratory's specific requirements.
 
 Validation & messages:
 

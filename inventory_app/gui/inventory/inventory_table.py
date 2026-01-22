@@ -1,9 +1,14 @@
 """
 Inventory table widget for displaying inventory items.
 Provides table display with sorting, and styling.
+
+Optimized for instant population with progressive styling (Chunk 3 of performance plan):
+- Phase 1: Instant Population (0-50ms) - data only, no styling
+- Phase 2: Essential Styling (50-200ms) - visible rows, critical status colors only
+- Phase 3: Full Styling (200ms-2s, progressively) - remaining rows with all styling
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Callable
 from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
@@ -21,8 +26,17 @@ from inventory_app.gui.inventory.row_styling_service import row_styling_service
 from inventory_app.gui.styles import ThemeManager
 from inventory_app.utils.logger import logger
 
-# Pylance may not expose Qt.ItemDataRole.SortRole in type stubs; use fallback.
 SORT_ROLE = getattr(Qt.ItemDataRole, "SortRole", int(Qt.ItemDataRole.UserRole) + 1)
+
+STYLING_PHASE_DATA = "data"
+STYLING_PHASE_ESSENTIAL = "essential"
+STYLING_PHASE_FULL = "full"
+STYLING_PHASE_COMPLETE = "complete"
+
+CRITICAL_STYLE_CLASSES = {"row-overdue"}
+
+STYLING_BATCH_SIZE = 50
+VISIBLE_ROWS_ESTIMATE = 30
 
 
 class RowColorDelegate(QStyledItemDelegate):
@@ -41,20 +55,14 @@ class RowColorDelegate(QStyledItemDelegate):
         if painter is None:
             return
 
-        # Check if this item has a custom background color
         bg_color = index.data(Qt.ItemDataRole.BackgroundRole)
 
         if bg_color is not None and isinstance(bg_color, QColor) and bg_color.isValid():
-            # Save painter state
             painter.save()
-            # Fill the background with our custom color
             painter.fillRect(option.rect, QBrush(bg_color))
             painter.restore()
-
-            # Modify option to not draw the default background
             option.backgroundBrush = QBrush(bg_color)
 
-        # Call the parent paint method to draw everything else
         super().paint(painter, option, index)
 
 
@@ -71,14 +79,12 @@ class AlertIndicator(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(4)
-
         layout.addStretch()
 
 
 class InventoryTable(QTableWidget):
-    """Table widget for displaying inventory items with styling."""
+    """Table widget for displaying inventory items with optimized progressive styling."""
 
-    # Column definitions
     COLUMNS = [
         "Stock/Available",
         "Name",
@@ -96,28 +102,29 @@ class InventoryTable(QTableWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_table()
+        self._prefetched_statuses: Optional[Dict[int, Any]] = None
 
-        # Set custom delegate to ensure row colors are painted over stylesheets
         self._row_color_delegate = RowColorDelegate(self)
         self.setItemDelegate(self._row_color_delegate)
 
+        self._styling_phase: str = STYLING_PHASE_COMPLETE
+        self._styling_in_progress: bool = False
+        self._styling_timer: Optional[QTimer] = None
+        self._styling_batch_start: int = 0
+        self._styling_callback: Optional[Callable[[], None]] = None
+        self._styled_rows: Set[int] = set()
+        self._row_status_cache: Dict[int, Any] = {}
+
     def setup_table(self):
         """Setup the table structure and styling."""
-        # Set column count and headers
         self.setColumnCount(len(self.COLUMNS))
         self.setHorizontalHeaderLabels(self.COLUMNS)
 
-        # Configure table properties
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSortingEnabled(True)
-
-        # Disable alternating row colors to allow custom row coloring
         self.setAlternatingRowColors(False)
-
-        # Disable cell editing on double-click
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
-        # Configure header
         header = self.horizontalHeader()
         if header:
             header.setSortIndicatorShown(False)
@@ -125,23 +132,21 @@ class InventoryTable(QTableWidget):
             header.setStretchLastSection(True)
             header.sectionClicked.connect(self._on_header_clicked)
 
-            # Set column widths
-            self.setColumnWidth(0, 140)  # Stock/Available (wider for label)
-            self.setColumnWidth(1, 200)  # Name
-            self.setColumnWidth(2, 80)  # Size
-            self.setColumnWidth(3, 100)  # Brand
-            self.setColumnWidth(4, 120)  # Other Specifications
-            self.setColumnWidth(5, 120)  # Supplier
-            self.setColumnWidth(6, 100)  # Calibration Date
-            self.setColumnWidth(7, 100)  # Expiry/Disposal Date
-            self.setColumnWidth(8, 80)  # Item Type
-            self.setColumnWidth(9, 100)  # Acquisition Date
-            self.setColumnWidth(10, 120)  # Last Modified
+            self.setColumnWidth(0, 140)
+            self.setColumnWidth(1, 200)
+            self.setColumnWidth(2, 80)
+            self.setColumnWidth(3, 100)
+            self.setColumnWidth(4, 120)
+            self.setColumnWidth(5, 120)
+            self.setColumnWidth(6, 100)
+            self.setColumnWidth(7, 100)
+            self.setColumnWidth(8, 80)
+            self.setColumnWidth(9, 100)
+            self.setColumnWidth(10, 120)
 
-        # Configure vertical header
         v_header = self.verticalHeader()
         if v_header:
-            v_header.setDefaultSectionSize(25)
+            v_header.setDefaultSectionSize(22)
             v_header.setVisible(False)
 
     class SortableTableItem(QTableWidgetItem):
@@ -155,64 +160,75 @@ class InventoryTable(QTableWidget):
                     return my < ot
             except Exception:
                 pass
-            # Fallback: numeric parts then case-insensitive text
             try:
                 return (self.text() or "").lower() < (other.text() or "").lower()
             except Exception:
                 return super().__lt__(other)
 
     def _on_header_clicked(self, section: int) -> None:
-        """Handle initial header clicks to choose sensible default sort for inventory columns.
-
-        First click on a column that is not currently sorted will set a sensible default
-        ordering (e.g., name A->Z, stock highest-first, dates recent-first). Subsequent
-        clicks will toggle the sort order automatically by the header.
-        """
+        """Handle header clicks with sensible default sort ordering."""
         header = self.horizontalHeader()
         current = header.sortIndicatorSection() if header is not None else -1
 
-        # Stock (col 0): default ascending so negative SortRole makes highest available show first
         if section == 0 and current != 0:
             self.sortItems(0, Qt.SortOrder.AscendingOrder)
             return
 
-        # Name (col 1): alphabetical A->Z
         if section == 1 and current != 1:
             self.sortItems(1, Qt.SortOrder.AscendingOrder)
             return
 
-        # Supplier (col 5): alphabetical A->Z
         if section == 5 and current != 5:
             self.sortItems(5, Qt.SortOrder.AscendingOrder)
             return
 
-        # Date columns (6,7,9,10): default recent->old (we store negative timestamps so ascending sorts newest first)
         if section in (6, 7, 9, 10) and current != section:
             self.sortItems(section, Qt.SortOrder.AscendingOrder)
             return
 
-    def populate_table(self, items: List[Dict[str, Any]]):
-        """Populate the table with inventory items."""
+    def populate_table(
+        self,
+        items: List[Dict[str, Any]],
+        statuses: Optional[Dict[int, Any]] = None,
+        skip_styling: bool = False,
+        on_styling_complete: Optional[Callable[[], None]] = None,
+    ):
+        """Populate the table with inventory items with optional progressive styling."""
         try:
-            # Disable sorting while repopulating to avoid visual/sorting glitches
             prev_sorting = self.isSortingEnabled()
             self.setSortingEnabled(False)
 
             self.setRowCount(len(items))
-            logger.debug(f"Populating table with {len(items)} items")
+            logger.debug(
+                f"Populating table with {len(items)} items (skip_styling={skip_styling})"
+            )
+
+            self._prefetched_statuses = statuses or {}
+            self._row_status_cache = {}
+            self._styled_rows = set()
 
             for row, item in enumerate(items):
-                self.populate_row(row, item)
+                self.populate_row(row, item, skip_styling=skip_styling)
+                if not skip_styling and item.get("total_stock", 0) > 0:
+                    item_id = item.get("id")
+                    if item_id:
+                        self._row_status_cache[row] = (
+                            statuses.get(item_id) if statuses else None
+                        )
 
-            # Resize columns to content
-            QTimer.singleShot(100, self.resize_columns)
+            self._prefetched_statuses = {}
 
-            # Restore sorting and set sensible default: Stock available (highest first)
+            self._styling_callback = on_styling_complete
+
+            if not skip_styling:
+                self._start_progressive_styling()
+            else:
+                QTimer.singleShot(100, self.resize_columns)
+
             self.setSortingEnabled(prev_sorting)
             if prev_sorting:
                 hdr = self.horizontalHeader()
                 if hdr is not None:
-                    # We use negative available stock as SortRole so ascending order shows highest stock first
                     hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
                     hdr.setSortIndicatorShown(False)
                     self.sortItems(0, Qt.SortOrder.AscendingOrder)
@@ -220,10 +236,9 @@ class InventoryTable(QTableWidget):
         except Exception as e:
             logger.error(f"Error populating table: {e}")
 
-    def populate_row(self, row: int, item: Dict[str, Any]):
+    def populate_row(self, row: int, item: Dict[str, Any], skip_styling: bool = False):
         """Populate a single row with item data."""
         try:
-            # Extract data from item dict
             item_id = item.get("id")
             name = item.get("name", "N/A")
             size = item.get("size", "")
@@ -236,44 +251,37 @@ class InventoryTable(QTableWidget):
             is_consumable = item.get("is_consumable", False)
             last_modified = self.format_datetime(item.get("last_modified"))
 
-            # Calculate stock/available format
             total_stock = item.get("total_stock", 0)
             available_stock = item.get("available_stock", 0)
             stock_display = f"{total_stock}/{available_stock}"
 
-            # Determine item type
             item_type = "Consumable" if is_consumable else "Non-Consumable"
 
-            # Get item status for coloring
             item_status = None
             if item_id:
-                item_status = item_status_service.get_item_status(item_id)
+                if self._prefetched_statuses is not None:
+                    item_status = self._prefetched_statuses.get(item_id)
+                else:
+                    item_status = item_status_service.get_item_status(item_id)
 
-            # Create table items
             stock_item = self.SortableTableItem(stock_display)
-            # Sort by available stock (show highest first by using negative value)
             try:
                 stock_item.setData(SORT_ROLE, -int(available_stock))
             except Exception:
                 stock_item.setData(SORT_ROLE, 0)
-            self.setItem(row, 0, stock_item)  # Stock/Available
+            self.setItem(row, 0, stock_item)
 
             name_item = self.SortableTableItem(name)
-            # Case-insensitive alphabetical sort for name
             name_item.setData(SORT_ROLE, (name or "").lower())
-            self.setItem(row, 1, name_item)  # Name
-            self.setItem(row, 2, QTableWidgetItem(size or "N/A"))  # Size
-            self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))  # Brand
-            self.setItem(
-                row, 4, QTableWidgetItem(other_specifications or "N/A")
-            )  # Other Specifications
+            self.setItem(row, 1, name_item)
+            self.setItem(row, 2, QTableWidgetItem(size or "N/A"))
+            self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))
+            self.setItem(row, 4, QTableWidgetItem(other_specifications or "N/A"))
             supplier_item = self.SortableTableItem(supplier_name or "N/A")
             supplier_item.setData(SORT_ROLE, (supplier_name or "").lower())
-            self.setItem(row, 5, supplier_item)  # Supplier
+            self.setItem(row, 5, supplier_item)
 
-            # Calibration Date with status-based coloring
             cal_date_item = self.SortableTableItem(calibration_date or "N/A")
-            # Parse original ISO date to set sortable value (recent first)
             try:
                 from datetime import datetime
 
@@ -285,9 +293,8 @@ class InventoryTable(QTableWidget):
                     cal_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 cal_date_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 6, cal_date_item)  # Calibration Date
+            self.setItem(row, 6, cal_date_item)
 
-            # Expiry/Disposal Date
             exp_date_item = self.SortableTableItem(expiration_date or "N/A")
             try:
                 from datetime import datetime
@@ -300,10 +307,9 @@ class InventoryTable(QTableWidget):
                     exp_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 exp_date_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 7, exp_date_item)  # Expiry/Disposal Date
+            self.setItem(row, 7, exp_date_item)
 
-            self.setItem(row, 8, QTableWidgetItem(item_type))  # Item Type
-            # Acquisition Date - sortable by timestamp (recent first)
+            self.setItem(row, 8, QTableWidgetItem(item_type))
             acq_item = self.SortableTableItem(acquisition_date)
             try:
                 from datetime import datetime
@@ -316,9 +322,8 @@ class InventoryTable(QTableWidget):
                     acq_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 acq_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 9, acq_item)  # Acquisition Date
+            self.setItem(row, 9, acq_item)
 
-            # Last Modified - sortable by timestamp (recent first)
             lm_item = self.SortableTableItem(last_modified)
             try:
                 from datetime import datetime
@@ -331,29 +336,99 @@ class InventoryTable(QTableWidget):
                     lm_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 lm_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 10, lm_item)  # Last Modified
+            self.setItem(row, 10, lm_item)
 
-            # Store item ID in row for later retrieval
             if item_id is not None:
                 name_item.setData(Qt.ItemDataRole.UserRole, item_id)
 
-            # Apply row-level styling based on item status
-            self._apply_row_styling(row, item_status)
+            if not skip_styling and total_stock > 0:
+                self._apply_row_styling(row, item_status)
+                self._styled_rows.add(row)
 
         except Exception as e:
             logger.error(f"Error populating row {row}: {e}")
 
+    def _start_progressive_styling(self):
+        """Start the multi-phase progressive styling process."""
+        if self._styling_timer:
+            self._styling_timer.stop()
+            self._styling_timer = None
+
+        self._styling_phase = STYLING_PHASE_DATA
+        self._styling_in_progress = True
+
+        QTimer.singleShot(0, self._apply_essential_styling)
+
+    def _apply_essential_styling(self):
+        """Phase 2: Apply styling only to critical items (expired, calibration due)."""
+        if self._styling_phase not in (STYLING_PHASE_DATA, STYLING_PHASE_ESSENTIAL):
+            return
+
+        self._styling_phase = STYLING_PHASE_ESSENTIAL
+
+        critical_rows = []
+        for row in range(self.rowCount()):
+            if row in self._styled_rows:
+                continue
+
+            status = self._row_status_cache.get(row)
+            style_class = row_styling_service.get_row_style_class(status)
+
+            if style_class in CRITICAL_STYLE_CLASSES:
+                critical_rows.append(row)
+                self._apply_row_styling(row, status)
+                self._styled_rows.add(row)
+
+        logger.debug(f"Phase 2 (Essential): Styled {len(critical_rows)} critical rows")
+
+        self._styling_batch_start = 0
+        QTimer.singleShot(0, self._apply_full_styling_batch)
+
+    def _apply_full_styling_batch(self):
+        """Phase 3: Apply full styling progressively in batches."""
+        if self._styling_phase == STYLING_PHASE_COMPLETE:
+            return
+
+        self._styling_phase = STYLING_PHASE_FULL
+
+        total_rows = self.rowCount()
+        batch_end = min(self._styling_batch_start + STYLING_BATCH_SIZE, total_rows)
+
+        for row in range(self._styling_batch_start, batch_end):
+            if row in self._styled_rows:
+                self._styling_batch_start += 1
+                continue
+
+            status = self._row_status_cache.get(row)
+            self._apply_row_styling(row, status)
+            self._styled_rows.add(row)
+            self._styling_batch_start += 1
+
+        if self._styling_batch_start < total_rows:
+            QTimer.singleShot(0, self._apply_full_styling_batch)
+        else:
+            self._finish_styling()
+
+    def _finish_styling(self):
+        """Complete the styling process."""
+        self._styling_phase = STYLING_PHASE_COMPLETE
+        self._styling_in_progress = False
+        self._row_status_cache = {}
+
+        if self._styling_callback:
+            self._styling_callback()
+            self._styling_callback = None
+
+        logger.debug("Phase 3 (Full): Styling complete")
+
     def showEvent(self, a0: Optional[QShowEvent]) -> None:
-        """Refresh layout and sort indicator on show (fixes visual glitches when switching tabs)."""
+        """Refresh layout and sort indicator on show."""
         super().showEvent(a0)
-        # Resize columns to contents to ensure proper layout when becoming visible
         QTimer.singleShot(0, self.resize_columns)
-        # Force a repaint/update to avoid lingering visual artifacts
         _vp = self.viewport()
         if _vp is not None:
             _vp.update()
         self.repaint()
-        # Reapply sort based on current header indicator to ensure ordering is consistent
         header = self.horizontalHeader()
         if header is not None and self.isSortingEnabled():
             sc = header.sortIndicatorSection()
@@ -366,7 +441,6 @@ class InventoryTable(QTableWidget):
         """Format date string for display."""
         if not date_str:
             return "N/A"
-
         try:
             from datetime import datetime
 
@@ -379,7 +453,6 @@ class InventoryTable(QTableWidget):
         """Format datetime string for display."""
         if not datetime_str:
             return "N/A"
-
         try:
             from datetime import datetime
 
@@ -393,7 +466,6 @@ class InventoryTable(QTableWidget):
         try:
             for col in range(self.columnCount()):
                 self.resizeColumnToContents(col)
-                # Set minimum and maximum widths
                 width = self.columnWidth(col)
                 self.setColumnWidth(col, max(80, min(width, 200)))
         except Exception as e:
@@ -403,7 +475,7 @@ class InventoryTable(QTableWidget):
         """Get the ID of the currently selected item."""
         current_row = self.currentRow()
         if current_row >= 0:
-            item = self.item(current_row, 1)  # Name is in column 1
+            item = self.item(current_row, 1)
             if item:
                 return item.data(Qt.ItemDataRole.UserRole)
         return None
@@ -411,6 +483,8 @@ class InventoryTable(QTableWidget):
     def clear_table(self):
         """Clear all items from the table."""
         self.setRowCount(0)
+        self._styled_rows.clear()
+        self._row_status_cache.clear()
         logger.debug("Table cleared")
 
     def get_row_count(self) -> int:
@@ -418,29 +492,15 @@ class InventoryTable(QTableWidget):
         return self.rowCount()
 
     def _apply_row_styling(self, row: int, item_status) -> None:
-        """
-        Apply background color styling to an entire row based on item status.
-
-        For items with multiple status parts (e.g., non-consumables with both
-        calibration and disposal warnings), the most critical status determines
-        the row color.
-
-        Args:
-            row: Row number to style
-            item_status: ItemStatus object or None
-        """
-        # Get the appropriate style class based on status
+        """Apply background color styling to an entire row based on item status."""
         style_class = row_styling_service.get_row_style_class(item_status)
 
         if not style_class:
-            # No special styling needed
             return
 
-        # Get current theme
         theme_manager = ThemeManager.instance()
         current_theme = theme_manager.current_theme
 
-        # Get colors for this style and theme
         bg_color, text_color = row_styling_service.get_row_colors(
             style_class, current_theme
         )
@@ -449,12 +509,17 @@ class InventoryTable(QTableWidget):
             bg_qcolor = QColor(bg_color)
             text_qcolor = QColor(text_color) if text_color else None
 
-            # Apply background color to all cells in the row using both methods
-            # to ensure it overrides any default styling
             for col in range(self.columnCount()):
                 cell_item = self.item(row, col)
                 if cell_item:
-                    # Set background using BackgroundRole for higher priority
                     cell_item.setData(Qt.ItemDataRole.BackgroundRole, bg_qcolor)
                     if text_qcolor:
                         cell_item.setData(Qt.ItemDataRole.ForegroundRole, text_qcolor)
+
+    def is_styling_complete(self) -> bool:
+        """Check if styling phase is complete."""
+        return self._styling_phase == STYLING_PHASE_COMPLETE
+
+    def get_styling_phase(self) -> str:
+        """Get current styling phase."""
+        return self._styling_phase

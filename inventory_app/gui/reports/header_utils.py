@@ -9,12 +9,14 @@ REPORT_HEADER_MAP = {
     "Item Name": "Item",
     "CATEGORIES": "Category",
     "Category": "Category",
+    "Original Stock": "Original Stock",
     "ACTUAL_INVENTORY": "Current Stock",
     "Current Stock": "Current Stock",
     "TOTAL QUANTITY": "Total Quantity",
     "Quantity Received": "Quantity Received",
     "OTHER SPECIFICATIONS": "Specifications",
     "OTHER SPEC": "Specifications",
+    "Specifications": "Specifications",
     "SIZE": "Size",
     "Size": "Size",
     "BRAND": "Brand",
@@ -116,15 +118,6 @@ def parse_and_format_period_key(period_key: str, granularity: str) -> str:
             month_date = date(year, month, 1)
 
             return date_formatter.format_period_header(month_date, "monthly")
-
-        elif granularity == "quarterly":
-            year_str, quarter_str = period_key.split("-Q")
-            year, quarter = int(year_str), int(quarter_str)
-
-            quarter_month = (quarter - 1) * 3 + 1
-            quarter_date = date(year, quarter_month, 1)
-
-            return date_formatter.format_period_header(quarter_date, "quarterly")
 
         elif granularity in ["yearly", "multi_year"]:
             year = int(period_key)

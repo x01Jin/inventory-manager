@@ -7,9 +7,8 @@ Uses composition pattern with DatabaseConnection.
 from typing import List, Dict, Optional
 from datetime import date, datetime
 from dataclasses import dataclass
-import time
 
-from inventory_app.database.connection import db
+import inventory_app.database.connection as conn
 from inventory_app.database.models import Requester, Requisition
 from inventory_app.services import ItemService
 from inventory_app.utils.logger import logger
@@ -21,9 +20,11 @@ class RequisitionSummary:
 
     requisition: Requisition
     requester: Requester
-    items: List[Dict]  # List of item details with quantities
+    items: List[Dict]
     total_items: int
-    status: str  # 'Active', 'Returned', 'Overdue'
+    status: str
+    is_individual: int = 0
+    individual_name: Optional[str] = None
 
 
 class RequisitionsController:
@@ -60,9 +61,13 @@ class RequisitionsController:
                 r.num_students,
                 r.num_groups,
                 r.status as req_status,
+                r.is_individual,
+                r.individual_name,
                 req.name as requester_name,
-                req.affiliation,
-                req.group_name,
+                req.requester_type,
+                req.grade_level,
+                req.section,
+                req.department,
                 ri.item_id,
                 ri.quantity_requested,
                 i.name as item_name,
@@ -80,7 +85,7 @@ class RequisitionsController:
             ORDER BY r.expected_request DESC, r.id, ri.item_id
             """
 
-            rows = db.execute_query(query)
+            rows = conn.db.execute_query(query)
             if not rows:
                 logger.info("No requisitions found")
                 return []
@@ -93,12 +98,15 @@ class RequisitionsController:
                 if req_id not in requisition_groups:
                     # Create requisition object with proper date conversion
                     # Handle invalid date formats gracefully
+                    # Parse lab_activity_date safely and include lab activity name
+                    lab_activity_name = row.get("lab_activity_name") or ""
                     try:
-                        lab_activity_date = (
-                            date.fromisoformat(row["lab_activity_date"])
-                            if row["lab_activity_date"]
-                            else date.today()
-                        )
+                        if row["lab_activity_date"]:
+                            lab_activity_date = date.fromisoformat(
+                                row["lab_activity_date"]
+                            )
+                        else:
+                            lab_activity_date = date.today()
                     except (ValueError, TypeError):
                         logger.warning(
                             f"Invalid lab_activity_date format for requisition {req_id}: {row['lab_activity_date']}"
@@ -131,23 +139,25 @@ class RequisitionsController:
 
                     req_dict = {
                         "id": req_id,
-                        "requester_id": row["requester_id"],
-                        "lab_activity_name": row["lab_activity_name"],
-                        "lab_activity_date": lab_activity_date,
                         "expected_request": expected_request,
                         "expected_return": expected_return,
                         "num_students": row["num_students"],
                         "num_groups": row["num_groups"],
                         "status": row["req_status"],
+                        "lab_activity_name": lab_activity_name,
+                        "lab_activity_date": lab_activity_date,
+                        "is_individual": row["is_individual"] or 0,
+                        "individual_name": row["individual_name"],
                     }
                     requisition = Requisition(**req_dict)
 
-                    # Create requester object
                     requester_dict = {
                         "id": row["requester_id"],
                         "name": row["requester_name"],
-                        "affiliation": row["affiliation"],
-                        "group_name": row["group_name"],
+                        "requester_type": row.get("requester_type", "teacher"),
+                        "grade_level": row.get("grade_level"),
+                        "section": row.get("section"),
+                        "department": row.get("department"),
                     }
                     requester = Requester(**requester_dict)
 
@@ -156,6 +166,8 @@ class RequisitionsController:
                         "requester": requester,
                         "items": [],
                         "status": row["req_status"] or "Active",
+                        "is_individual": row["is_individual"] or 0,
+                        "individual_name": row["individual_name"],
                     }
 
                 # Add item if it exists (some requisitions might have no items)
@@ -183,6 +195,8 @@ class RequisitionsController:
                         item["quantity_requested"] for item in req_data["items"]
                     ),
                     status=req_data["status"],
+                    is_individual=req_data["is_individual"],
+                    individual_name=req_data["individual_name"],
                 )
                 summaries.append(summary)
 
@@ -208,23 +222,23 @@ class RequisitionsController:
         """
         try:
             # Perform deletion in a single transaction to ensure atomicity
-            with db.transaction():
+            with conn.db.transaction():
                 # Step 1: Delete requisition history records first (simple DELETE)
                 self._delete_requisition_history(requisition_id)
 
                 # Step 2: Delete requisition items (removes FK references to requisition)
-                db.execute_update(
+                conn.db.execute_update(
                     "DELETE FROM Requisition_Items WHERE requisition_id = ?",
                     (requisition_id,),
                 )
 
                 # Step 3: Delete ALL stock movements for this requisition
-                db.execute_update(
+                conn.db.execute_update(
                     "DELETE FROM Stock_Movements WHERE source_id = ?", (requisition_id,)
                 )
 
                 # Step 4: Finally delete the requisition itself
-                success = db.execute_update(
+                success = conn.db.execute_update(
                     "DELETE FROM Requisitions WHERE id = ?", (requisition_id,)
                 )
 
@@ -266,7 +280,7 @@ class RequisitionsController:
             JOIN Requisitions r ON b.id = r.requester_id
             ORDER BY b.name
             """
-            rows = db.execute_query(query)
+            rows = conn.db.execute_query(query)
             requesters = []
             for row in rows:
                 requesters.append(Requester(**dict(row)))
@@ -280,7 +294,7 @@ class RequisitionsController:
         """Get a single requisition by ID."""
         try:
             query = "SELECT * FROM Requisitions WHERE id = ?"
-            rows = db.execute_query(query, (requisition_id,))
+            rows = conn.db.execute_query(query, (requisition_id,))
             if not rows:
                 return None
 
@@ -316,7 +330,7 @@ class RequisitionsController:
         """Delete all history records for a requisition."""
         try:
             query = "DELETE FROM Requisition_History WHERE requisition_id = ?"
-            db.execute_update(query, (requisition_id,))
+            conn.db.execute_update(query, (requisition_id,))
             logger.debug(f"Deleted history records for requisition {requisition_id}")
         except Exception as e:
             logger.error(
@@ -326,7 +340,7 @@ class RequisitionsController:
     def _clear_requisition_items(self, requisition_id: int) -> None:
         """Remove all items from a requisition."""
         try:
-            db.execute_update(
+            conn.db.execute_update(
                 "DELETE FROM Requisition_Items WHERE requisition_id = ?",
                 (requisition_id,),
             )

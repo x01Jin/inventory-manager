@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QDate
 from datetime import date
 from inventory_app.database.models import Item, Category, Supplier, Size, Brand
+from inventory_app.services.category_config import get_category_config
 from inventory_app.utils.logger import logger
 
 
@@ -52,18 +53,21 @@ class ItemEditor(QDialog):
     def setup_ui(self):
         """Setup the dialog UI with a responsive two-column layout."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # Left column will contain Basic Information and Dates & Status stacked vertically.
         # Right column will contain Specifications and Editor Information.
         main_h_layout = QHBoxLayout()
+        main_h_layout.setSpacing(8)
 
         # Basic Information Group (left column)
         basic_group = QGroupBox("Basic Information")
         basic_layout = QVBoxLayout(basic_group)
+        basic_layout.setSpacing(8)
 
         # Name
         name_layout = QHBoxLayout()
+        name_layout.setSpacing(8)
         name_layout.addWidget(QLabel("Name:"))
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Enter item name...")
@@ -77,6 +81,8 @@ class ItemEditor(QDialog):
         grid_layout.addWidget(QLabel("Category:"), 0, 0)
         self.category_combo = QComboBox()
         self.category_combo.addItem("Select Category", "")
+        # Connect category change to auto-update dates and item type
+        self.category_combo.currentIndexChanged.connect(self.on_category_changed)
         grid_layout.addWidget(self.category_combo, 0, 1)
 
         grid_layout.addWidget(QLabel("Supplier:"), 0, 2)
@@ -96,6 +102,7 @@ class ItemEditor(QDialog):
         grid_layout.addWidget(self.brand_combo, 1, 3)
 
         # Set column stretches so input columns expand
+        grid_layout.setSpacing(8)
         grid_layout.setColumnStretch(1, 1)
         grid_layout.setColumnStretch(3, 1)
 
@@ -104,9 +111,11 @@ class ItemEditor(QDialog):
         # Dates and Status Group (left column, below basic info)
         dates_group = QGroupBox("Dates and Status")
         dates_layout = QVBoxLayout(dates_group)
+        dates_layout.setSpacing(8)
 
         # Dates Grid (4x2: labels on the left, inputs on the right)
         dates_grid_layout = QGridLayout()
+        dates_grid_layout.setSpacing(8)
 
         # Row 0: Item Type
         dates_grid_layout.addWidget(QLabel("Item Type:"), 0, 0)
@@ -122,6 +131,8 @@ class ItemEditor(QDialog):
         self.acquisition_date = QDateEdit()
         self.acquisition_date.setDate(QDate.currentDate())
         self.acquisition_date.setCalendarPopup(True)
+        # Connect acquisition date change to recalculate expiration/disposal dates
+        self.acquisition_date.dateChanged.connect(self.on_acquisition_date_changed)
         dates_grid_layout.addWidget(self.acquisition_date, 1, 1)
 
         # Row 2: Expiration / Calibration (variable)
@@ -160,6 +171,7 @@ class ItemEditor(QDialog):
         # Specifications Group (right column)
         spec_group = QGroupBox("Specifications")
         spec_layout = QVBoxLayout(spec_group)
+        spec_layout.setSpacing(8)
 
         # PO Number
         po_layout = QHBoxLayout()
@@ -193,6 +205,7 @@ class ItemEditor(QDialog):
         # Editor Information (required) sits under specifications in right column
         editor_group = QGroupBox("Editor Information (Required)")
         editor_layout = QVBoxLayout(editor_group)
+        editor_layout.setSpacing(8)
         editor_layout.addWidget(QLabel("Editor Name/Initials:"))
         self.editor_input = QLineEdit()
         self.editor_input.setPlaceholderText("Enter your name or initials...")
@@ -304,6 +317,79 @@ class ItemEditor(QDialog):
                 # Default dates for new items
                 self.variable_input.setDate(QDate.currentDate())
                 self.disposal_date.setDate(QDate.currentDate())
+
+    def on_category_changed(self):
+        """Update item type and auto-calculate dates based on selected category.
+
+        When a category is selected:
+        1. Set item type (consumable/non-consumable) based on category config
+        2. Calculate expiration/disposal dates based on category thresholds
+        3. Set calibration date if category requires calibration
+
+        Dates are pre-filled but remain editable by the user.
+        """
+        category_name = self.category_combo.currentText()
+        if not category_name or category_name == "Select Category":
+            return
+
+        # Get category configuration
+        cat_config = get_category_config(category_name)
+        if not cat_config:
+            return
+
+        # Get acquisition date for calculations
+        acq_qdate = self.acquisition_date.date()
+        acquisition_date = date(acq_qdate.year(), acq_qdate.month(), acq_qdate.day())
+
+        # Set item type based on category
+        if cat_config.is_consumable:
+            # Find and select "Consumable"
+            for i in range(self.item_type_combo.count()):
+                if self.item_type_combo.itemData(i) == "consumable":
+                    self.item_type_combo.setCurrentIndex(i)
+                    break
+        else:
+            # Find and select "Non-Consumable"
+            for i in range(self.item_type_combo.count()):
+                if self.item_type_combo.itemData(i) == "non_consumable":
+                    self.item_type_combo.setCurrentIndex(i)
+                    break
+
+        # Calculate and set dates based on category
+        # For consumables: set expiration date
+        # For non-consumables: set disposal date and calibration date
+
+        if cat_config.is_consumable:
+            # Calculate expiration date
+            exp_date = cat_config.calculate_expiration_date(acquisition_date)
+            if exp_date:
+                self.variable_input.setDate(
+                    QDate(exp_date.year, exp_date.month, exp_date.day)
+                )
+        else:
+            # Calculate disposal date
+            disposal_date = cat_config.calculate_expiration_date(acquisition_date)
+            if disposal_date:
+                self.disposal_date.setDate(
+                    QDate(disposal_date.year, disposal_date.month, disposal_date.day)
+                )
+
+            # Calculate calibration date if applicable
+            if cat_config.has_calibration:
+                cal_date = cat_config.calculate_calibration_date(acquisition_date)
+                if cal_date:
+                    self.variable_input.setDate(
+                        QDate(cal_date.year, cal_date.month, cal_date.day)
+                    )
+
+    def on_acquisition_date_changed(self):
+        """Recalculate expiration/disposal dates when acquisition date changes.
+
+        This keeps the dates in sync with the category thresholds when the user
+        changes the acquisition date.
+        """
+        # Trigger category change handler to recalculate dates
+        self.on_category_changed()
 
     def load_dropdown_data(self):
         """Load data for dropdown lists."""

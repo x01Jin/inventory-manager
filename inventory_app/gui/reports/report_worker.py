@@ -25,6 +25,9 @@ class ReportWorker(QThread):
         self.category_filter = kwargs.get("category_filter", "")
         self.supplier_filter = kwargs.get("supplier_filter", "")
         self.include_consumables = kwargs.get("include_consumables", True)
+        self.show_individual_only = kwargs.get("show_individual_only", False)
+        # Usage report specific parameters
+        self.usage_report_type = kwargs.get("usage_report_type", "date_range")
         # Inventory report specific parameters
         self.inventory_report_type = kwargs.get(
             "inventory_report_type", "Stock Levels Report"
@@ -33,6 +36,11 @@ class ReportWorker(QThread):
         self.low_stock_threshold = kwargs.get(
             "low_stock_threshold", ReportConfig.DEFAULT_LOW_STOCK_THRESHOLD
         )
+        # Item name filter (for Item Usage Details and Batch Summary)
+        self.item_name_filter = kwargs.get("item_name_filter", "")
+        # Grade and Section filters (for Usage by Grade Level)
+        self.grade_filter = kwargs.get("grade_filter", "")
+        self.section_filter = kwargs.get("section_filter", "")
         # Trends report params
         self.granularity = kwargs.get("granularity", None)
         self.group_by = kwargs.get("group_by", "item")
@@ -83,12 +91,22 @@ class ReportWorker(QThread):
 
     def _generate_usage_report(self):
         """Generate usage report using existing functionality."""
+        if self.usage_report_type == "grade_level":
+            return report_generator.generate_usage_by_grade_level_report(
+                self.start_date,
+                self.end_date,
+                category_filter=self.category_filter,
+                grade_filter=self.grade_filter,
+                section_filter=self.section_filter,
+                show_individual_only=self.show_individual_only,
+            )
         return report_generator.generate_report(
             self.start_date,
             self.end_date,
             category_filter=self.category_filter,
             supplier_filter=self.supplier_filter,
             include_consumables=self.include_consumables,
+            show_individual_only=self.show_individual_only,
         )
 
     def _generate_inventory_report(self):
@@ -99,6 +117,10 @@ class ReportWorker(QThread):
             self.end_date,
             category_filter=self.category_filter,
             low_stock_threshold=self.low_stock_threshold,
+            item_name_filter=self.item_name_filter,
+            grade_filter=self.grade_filter,
+            section_filter=self.section_filter,
+            show_individual_only=self.show_individual_only,
         )
 
     def _generate_trends_report(self):

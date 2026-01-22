@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Any, List, Dict, Union, overload, Tuple, Literal
 
 from inventory_app.utils.logger import logger
+from inventory_app.database.query_cache import QueryCache, QueryClassifier
 
 
 class DatabaseConnection:
@@ -25,8 +26,9 @@ class DatabaseConnection:
         """
         self.db_path = Path(db_path)
         self._connection: Optional[sqlite3.Connection] = None
-        # If a transaction is active, this holds the sqlite3.Connection
         self._transaction_conn: Optional[sqlite3.Connection] = None
+        self._query_cache = QueryCache(default_ttl=30.0)
+        self._query_classifier = QueryClassifier()
 
     def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
         """
@@ -175,17 +177,27 @@ class DatabaseConnection:
         """
         return self._transaction_conn is not None
 
-    def execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
+    def execute_query(
+        self, query: str, params: tuple = (), use_cache: bool = True
+    ) -> List[Dict[str, Any]]:
         """
         Execute a SELECT query and return results.
 
         Args:
             query: SQL query string
             params: Query parameters
+            use_cache: Whether to use query cache (default True)
 
         Returns:
             List of dictionaries representing rows
         """
+        # Check cache first if enabled
+        if use_cache and self._query_classifier.is_cacheable(query):
+            cached_result = self._query_cache.get(query, params)
+            if cached_result is not None:
+                logger.debug(f"Cache hit for query: {query[:50]}...")
+                return cached_result
+
         try:
             if self._transaction_conn is not None:
                 conn = self._transaction_conn
@@ -200,6 +212,10 @@ class DatabaseConnection:
             results = []
             for row in rows:
                 results.append(dict(row))
+
+            # Cache the result if caching is enabled
+            if use_cache:
+                self._query_cache.set(query, params, results)
 
             return results
 
@@ -233,7 +249,12 @@ class DatabaseConnection:
         Returns:
             Number of affected rows, or (affected_rows, last_insert_id) if return_last_id is True
         """
+        affected_tables: set = set()
+
         try:
+            # Extract affected tables for cache invalidation
+            affected_tables = self._query_classifier.extract_tables(query)
+
             # Use the active transaction connection if available; do not commit
             # while inside a transaction because the transaction manager will
             # handle commit/rollback at the end of the context.
@@ -261,8 +282,120 @@ class DatabaseConnection:
             logger.error(f"Query: {query}")
             logger.error(f"Params: {params}")
             raise
+        finally:
+            # Invalidate cache for affected tables after update
+            # This ensures fresh data is fetched on next query
+            if affected_tables:
+                self._query_cache.invalidate_multiple(list(affected_tables))
+
+    def execute_many(self, query: str, params_list: List[tuple]) -> int:
+        """
+        Execute INSERT/UPDATE/DELETE with multiple parameter sets.
+
+        Args:
+            query: SQL query string
+            params_list: List of parameter tuples
+
+        Returns:
+            Total number of affected rows
+        """
+        if not params_list:
+            return 0
+
+        affected_tables: set = set()
+        total_affected = 0
+
+        try:
+            affected_tables = self._query_classifier.extract_tables(query)
+
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
+                cursor = conn.executemany(query, params_list)
+                total_affected = (
+                    sum(1 for _ in cursor.fetchall()) if cursor.description else 0
+                )
+            else:
+                with self.get_connection() as conn:
+                    cursor = conn.executemany(query, params_list)
+                    conn.commit()
+                    total_affected = cursor.rowcount
+
+        except Exception as e:
+            logger.error(f"Bulk execution failed: {e}")
+            logger.error(f"Query: {query}")
+            raise
+        finally:
+            if affected_tables:
+                self._query_cache.invalidate_multiple(list(affected_tables))
+
+        return total_affected
+
+    def execute_many_return_ids(
+        self, query: str, params_list: List[tuple]
+    ) -> List[int]:
+        """
+        Execute bulk INSERT and return all inserted IDs.
+
+        Args:
+            query: SQL INSERT query
+            params_list: List of parameter tuples
+
+        Returns:
+            List of inserted row IDs
+        """
+        if not params_list:
+            return []
+
+        inserted_ids = []
+        affected_tables: set = set()
+
+        try:
+            affected_tables = self._query_classifier.extract_tables(query)
+
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
+                cursor = None
+                for params in params_list:
+                    cursor = conn.execute(query, params)
+                    inserted_ids.append(cursor.lastrowid)
+                conn.commit()
+            else:
+                with self.get_connection() as conn:
+                    cursor = None
+                    for params in params_list:
+                        cursor = conn.execute(query, params)
+                        inserted_ids.append(cursor.lastrowid)
+                    conn.commit()
+
+        except Exception as e:
+            logger.error(f"Bulk insert with IDs failed: {e}")
+            logger.error(f"Query: {query}")
+            raise
+        finally:
+            if affected_tables:
+                self._query_cache.invalidate_multiple(list(affected_tables))
+
+        return inserted_ids
 
     def execute_script(self, script: str) -> None:
+        """
+        Execute a script containing multiple SQL statements.
+
+        Args:
+            script: Multi-statement SQL script
+        """
+        try:
+            if self._transaction_conn is not None:
+                conn = self._transaction_conn
+                conn.executescript(script)
+            else:
+                with self.get_connection() as conn:
+                    conn.executescript(script)
+                    conn.commit()
+
+        except Exception as e:
+            logger.error(f"Script execution failed: {e}")
+            raise
         """
         Execute a script containing multiple SQL statements.
 
@@ -303,6 +436,61 @@ class DatabaseConnection:
         except Exception:
             return False
 
+    def clear_query_cache(self) -> None:
+        """Clear the query cache."""
+        self._query_cache.clear()
+
+    def invalidate_cache_for_table(self, table_name: str) -> int:
+        """
+        Invalidate cache entries related to a specific table.
+
+        Args:
+            table_name: Name of the table to invalidate cache for
+
+        Returns:
+            Number of entries invalidated
+        """
+        return self._query_cache.invalidate(table_name)
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics.
+
+        Returns:
+            Dictionary with cache statistics
+        """
+        return self._query_stats()
+
+    def _query_stats(self) -> Dict[str, Any]:
+        """
+        Get detailed query and cache statistics.
+
+        Returns:
+            Dictionary with query and cache statistics
+        """
+        return {
+            "cache": self._query_cache.stats(),
+        }
+
+    def cleanup_cache(self) -> int:
+        """
+        Remove expired entries from cache.
+
+        Returns:
+            Number of entries removed
+        """
+        return self._query_cache.cleanup_expired()
+
 
 # Global database instance
 db = DatabaseConnection()
+
+
+def get_db_connection():
+    """
+    Get a database connection context manager.
+
+    Returns:
+        Context manager that yields a sqlite3 connection
+    """
+    return db.get_connection()

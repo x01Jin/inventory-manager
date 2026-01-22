@@ -14,18 +14,17 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QGroupBox,
     QMessageBox,
     QLineEdit,
     QInputDialog,
     QProgressBar,
+    QTabWidget
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-
+from PyQt6.QtCore import pyqtSignal
 from inventory_app.gui.requesters.requester_model import RequesterModel
 from inventory_app.gui.requesters.requester_table import RequesterTable
 from inventory_app.gui.requesters.requester_editor import RequesterEditor
-from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.gui.utils.worker import run_in_background, Worker
 from inventory_app.utils.logger import logger
 
@@ -44,21 +43,18 @@ class RequestersPage(QWidget):
         """Initialize the requesters page."""
         super().__init__(parent)
 
-        # Initialize components using composition
         self.model = RequesterModel()
-        self.table = RequesterTable()
 
-        # Track current worker for cancellation
+        self.students_table = RequesterTable(requester_type="student")
+        self.teachers_table = RequesterTable(requester_type="teacher")
+        self.faculty_table = RequesterTable(requester_type="faculty")
+
         self._current_worker: Optional[Worker] = None
         self._is_loading = False
+        self._current_tab = "student"
 
-        # Setup connections between components
         self._setup_connections()
-
-        # Setup UI
         self.setup_ui()
-
-        # Load initial data
         self.refresh_data()
 
         logger.info("Requesters page initialized with all components")
@@ -66,13 +62,13 @@ class RequestersPage(QWidget):
     def setup_ui(self):
         """Setup the main user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
-        # Header with title and refresh button
         header_layout = QHBoxLayout()
+        Theme = get_current_theme()
         title = QLabel("👥 Laboratory Requesters")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -82,7 +78,6 @@ class RequestersPage(QWidget):
 
         layout.addLayout(header_layout)
 
-        # Action buttons row
         action_layout = QHBoxLayout()
         action_layout.setSpacing(10)
 
@@ -104,9 +99,8 @@ class RequestersPage(QWidget):
 
         layout.addLayout(action_layout)
 
-        # Search/Filter section
         search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel("Search by name, affiliation, or group:"))
+        search_layout.addWidget(QLabel("Search by name, grade, section, or department:"))
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter search term...")
@@ -120,7 +114,6 @@ class RequestersPage(QWidget):
 
         layout.addLayout(search_layout)
 
-        # Progress bar for loading indicator
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("Loading requesters... %p%")
@@ -128,22 +121,46 @@ class RequestersPage(QWidget):
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
 
-        # Main content area with requesters table
-        table_group = QGroupBox("Registered Requesters")
-        table_layout = QVBoxLayout(table_group)
-        table_layout.addWidget(self.table)
-        layout.addWidget(table_group)
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #444; }")
 
-        # Status bar
+        students_tab = QWidget()
+        students_layout = QVBoxLayout(students_tab)
+        students_layout.addWidget(self.students_table)
+        self.tabs.addTab(students_tab, "Students")
+
+        teachers_tab = QWidget()
+        teachers_layout = QVBoxLayout(teachers_tab)
+        teachers_layout.addWidget(self.teachers_table)
+        self.tabs.addTab(teachers_tab, "Teachers")
+
+        faculty_tab = QWidget()
+        faculty_layout = QVBoxLayout(faculty_tab)
+        faculty_layout.addWidget(self.faculty_table)
+        self.tabs.addTab(faculty_tab, "Faculty/Individual")
+
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        layout.addWidget(self.tabs)
+
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; font-size: 10pt;")
+        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(self.status_label)
 
     def _setup_connections(self):
         """Setup signal connections between components."""
-        # Table signals
-        self.table.requester_selected.connect(self._on_requester_selected)
-        self.table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.students_table.requester_selected.connect(self._on_requester_selected)
+        self.students_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.teachers_table.requester_selected.connect(self._on_requester_selected)
+        self.teachers_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.faculty_table.requester_selected.connect(self._on_requester_selected)
+        self.faculty_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Handle tab change to update current table."""
+        tab_types = ["student", "teacher", "faculty"]
+        if 0 <= index < len(tab_types):
+            self._current_tab = tab_types[index]
+            self._update_table()
 
     def refresh_data(self):
         """Refresh all requester data asynchronously."""
@@ -204,7 +221,12 @@ class RequestersPage(QWidget):
 
             # Update status
             stats = result["stats"]
-            self.status_label.setText(f"Total: {stats['total_requesters']} requesters")
+            type_counts = stats.get('type_breakdown', {})
+            status_text = f"Total: {stats['total_requesters']} requesters"
+            if type_counts:
+                type_parts = [f"{t.capitalize()}: {c}" for t, c in type_counts.items()]
+                status_text += " | " + ", ".join(type_parts)
+            self.status_label.setText(status_text)
 
             logger.info(
                 f"Refreshed requester data: {stats['total_requesters']} requesters displayed"
@@ -218,89 +240,15 @@ class RequestersPage(QWidget):
 
     def _update_table_batched(self):
         """Update table with batched loading to prevent UI freeze."""
-
         filtered_requesters = self.model.get_filtered_rows()
-        total_rows = len(filtered_requesters)
 
-        if total_rows == 0:
-            self.table.populate_table([])
-            return
+        students = [r for r in filtered_requesters if r.requester_type == "student"]
+        teachers = [r for r in filtered_requesters if r.requester_type == "teacher"]
+        faculty = [r for r in filtered_requesters if r.requester_type == "faculty"]
 
-        # For small datasets, just load directly
-        if total_rows <= 50:
-            self.table.populate_table(filtered_requesters)
-            return
-
-        # Disable sorting during population
-        prev_sorting = self.table.isSortingEnabled()
-        self.table.setSortingEnabled(False)
-
-        # Store for batch processing
-        self._pending_requesters = filtered_requesters
-        self._requester_batch_index = 0
-        self._requester_batch_size = 25
-        self._requester_prev_sorting = prev_sorting
-
-        # Update progress bar for batched loading
-        self.progress_bar.setRange(0, total_rows)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat(f"Loading requesters... %v/{total_rows}")
-        self.progress_bar.setVisible(True)
-
-        # Start batch processing
-        self._process_requester_batch()
-
-    def _process_requester_batch(self):
-        """Process one batch of requester rows."""
-        from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtCore import QTimer
-
-        # Safety check - ensure we have data to process
-        if not hasattr(self, "_pending_requesters") or self._pending_requesters is None:
-            return
-
-        total_rows = len(self._pending_requesters)
-        start = self._requester_batch_index
-        end = min(start + self._requester_batch_size, total_rows)
-
-        if start >= total_rows:
-            # Done processing
-            self._finish_requester_table_population()
-            return
-
-        # Populate table with rows up to current batch
-        self.table.populate_table(self._pending_requesters[:end])
-
-        # Update progress
-        self.progress_bar.setValue(end)
-
-        # Process events to keep UI responsive
-        QApplication.processEvents()
-
-        # Schedule next batch if more data and _pending_requesters still valid
-        self._requester_batch_index = end
-        if self._pending_requesters is not None and end < total_rows:
-            QTimer.singleShot(0, self._process_requester_batch)
-        else:
-            self._finish_requester_table_population()
-
-    def _finish_requester_table_population(self):
-        """Finish table population and restore state."""
-        # Restore sorting
-        self.table.setSortingEnabled(getattr(self, "_requester_prev_sorting", True))
-        if self.table.isSortingEnabled():
-            hdr = self.table.horizontalHeader()
-            if hdr is not None:
-                hdr.setSortIndicator(4, Qt.SortOrder.AscendingOrder)
-                hdr.setSortIndicatorShown(False)
-                self.table.sortItems(4, Qt.SortOrder.AscendingOrder)
-
-        # Hide progress bar
-        self.progress_bar.setVisible(False)
-
-        # Clean up
-        self._pending_requesters = None
-        self._requester_batch_index = 0
+        self.students_table.populate_table(students)
+        self.teachers_table.populate_table(teachers)
+        self.faculty_table.populate_table(faculty)
 
     def _on_load_error(self, error_tuple: tuple):
         """Handle load error (runs on main thread)."""
@@ -340,9 +288,18 @@ class RequestersPage(QWidget):
             logger.error(f"Failed to add requester: {e}")
             QMessageBox.critical(self, "Error", f"Failed to add requester: {str(e)}")
 
+    def _get_current_table(self):
+        """Get the currently active table based on tab selection."""
+        if self._current_tab == "student":
+            return self.students_table
+        elif self._current_tab == "teacher":
+            return self.teachers_table
+        return self.faculty_table
+
     def edit_selected_requester(self):
         """Edit the currently selected requester."""
-        requester_id = self.table.get_selected_requester_id()
+        table = self._get_current_table()
+        requester_id = table.get_selected_requester_id()
         if not requester_id:
             QMessageBox.warning(
                 self, "No Selection", "Please select a requester to edit."
@@ -361,7 +318,8 @@ class RequestersPage(QWidget):
 
     def delete_selected_requester(self):
         """Delete the currently selected requester."""
-        requester_id = self.table.get_selected_requester_id()
+        table = self._get_current_table()
+        requester_id = table.get_selected_requester_id()
         if not requester_id:
             QMessageBox.warning(
                 self, "No Selection", "Please select a requester to delete."
@@ -449,21 +407,23 @@ class RequestersPage(QWidget):
         self.edit_selected_requester()
 
     def _update_table(self):
-        """Update table with current filtered data using batched loading."""
+        """Update table with current filtered data."""
         try:
             filtered_requesters = self.model.get_filtered_rows()
 
-            # Use batched population for large datasets to prevent UI freeze
-            if len(filtered_requesters) > 50:
-                self._update_table_batched()
-            else:
-                self.table.populate_table(filtered_requesters)
+            students = [r for r in filtered_requesters if r.requester_type == "student"]
+            teachers = [r for r in filtered_requesters if r.requester_type == "teacher"]
+            faculty = [r for r in filtered_requesters if r.requester_type == "faculty"]
 
-            # Update search input styling based on filter state
+            self.students_table.populate_table(students)
+            self.teachers_table.populate_table(teachers)
+            self.faculty_table.populate_table(faculty)
+
             has_filter = bool(self.search_input.text().strip())
+            Theme = get_current_theme()
             if has_filter:
                 self.search_input.setStyleSheet(
-                    f"background-color: {DarkTheme.PRIMARY_DARK}; border: 1px solid {DarkTheme.ACCENT_COLOR};"
+                    f"border: 1px solid {Theme.ACCENT_COLOR};"
                 )
             else:
                 self.search_input.setStyleSheet("")

@@ -27,6 +27,12 @@ from inventory_app.gui.reports.data_sources import (
     get_acquisition_history_data,
     get_calibration_due_data,
     get_usage_statistics as ds_get_usage_statistics,
+    get_update_history_data,
+    get_disposal_history_data,
+    get_usage_by_grade_level_data,
+    get_item_usage_details,
+    get_item_batch_summary,
+    get_defective_items_data,
 )
 
 # Inline header mapping moved to header_utils
@@ -50,7 +56,7 @@ class ReportGenerator:
             end_date (datetime.date): End date of the reporting period
 
         Returns:
-            str: Granularity level ('daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'multi_year')
+            str: Granularity level ('daily', 'weekly', 'monthly', 'yearly', 'multi_year')
         """
         return date_formatter.get_smart_granularity(start_date, end_date)
 
@@ -62,6 +68,7 @@ class ReportGenerator:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
+        show_individual_only: bool = False,
         structured: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
@@ -74,6 +81,7 @@ class ReportGenerator:
             category_filter: Filter by category
             supplier_filter: Filter by supplier
             include_consumables: Whether to include consumable items
+            show_individual_only: Whether to show only individual requests
 
         Returns:
             Path to generated Excel file
@@ -94,6 +102,7 @@ class ReportGenerator:
                 category_filter=category_filter,
                 supplier_filter=supplier_filter,
                 include_consumables=include_consumables,
+                show_individual_only=show_individual_only,
             )
 
             if not report_data:
@@ -131,6 +140,7 @@ class ReportGenerator:
         category_filter: str = "",
         supplier_filter: str = "",
         include_consumables: bool = True,
+        show_individual_only: bool = False,
     ) -> List[Dict]:
         """Wrapper over data_sources.get_dynamic_report_data"""
         try:
@@ -141,6 +151,7 @@ class ReportGenerator:
                 category_filter=category_filter,
                 supplier_filter=supplier_filter,
                 include_consumables=include_consumables,
+                show_individual_only=show_individual_only,
             )
         except Exception as e:
             logger.error(f"Failed to get dynamic report data: {e}")
@@ -237,16 +248,33 @@ class ReportGenerator:
         category_filter: str = "",
         output_path: Optional[str] = None,
         low_stock_threshold: Optional[int] = None,
+        item_name_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
         structured: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
         Generate inventory report based on type.
 
         Args:
-            report_type: Type of inventory report ('stock_levels', 'expiration', 'low_stock', 'acquisition_history', 'calibration_due')
+            report_type: Type of inventory report:
+                - 'Stock Levels Report'
+                - 'Expiration Report'
+                - 'Low Stock Alert'
+                - 'Acquisition History'
+                - 'Calibration Due Report'
+                - 'Update History Report' (beta test #7)
+                - 'Disposal History Report' (beta test #16)
+                - 'Usage by Grade Level' (beta test #19)
             start_date: Start date for the report period
             end_date: End date for the report period
             category_filter: Category filter
+            low_stock_threshold: Threshold for Low Stock Alert (units)
+            item_name_filter: Filter by item name (for Item Usage Details, Batch Summary)
+            grade_filter: Filter by grade level (for Usage by Grade Level)
+            section_filter: Filter by section (for Usage by Grade Level)
+            show_individual_only: Whether to show only individual requests (for Usage by Grade Level)
             output_path: Optional output file path
 
         Returns:
@@ -281,6 +309,41 @@ class ReportGenerator:
                     start_date, end_date, category_filter
                 )
                 title = "Calibration Due Report"
+            elif report_type == "Update History Report":
+                # Beta test requirement #7: Report for update/editing history
+                report_data = self._get_update_history_data(start_date, end_date)
+                title = "Update History Report"
+            elif report_type == "Disposal History Report":
+                # Beta test requirement #16: Disposal history profile
+                report_data = self._get_disposal_history_data(
+                    start_date, end_date, category_filter
+                )
+                title = "Disposal History Report"
+            elif report_type == "Usage by Grade Level":
+                # Beta test requirement #19: Usage by grade level and section
+                report_data = self._get_usage_by_grade_level_data(
+                    start_date,
+                    end_date,
+                    category_filter,
+                    grade_filter,
+                    section_filter,
+                    show_individual_only,
+                )
+                title = "Usage by Grade Level Report"
+            elif report_type == "Item Usage Details":
+                # Beta test requirement #12: Item usage search with full history
+                report_data = self._get_item_usage_details(item_name_filter)
+                title = "Item Usage Details Report"
+            elif report_type == "Batch Summary":
+                # Beta test requirement #3: Batch history with B1, B2, B3 notation
+                report_data = self._get_item_batch_summary(item_name_filter)
+                title = "Batch Summary Report"
+            elif report_type == "Defective Items Report":
+                # Beta test requirement: Add info for defective/broken items returned
+                report_data = self._get_defective_items_data(
+                    start_date, end_date, category_filter
+                )
+                title = "Defective Items Report"
             else:
                 return f"Unknown inventory report type: {report_type}"
 
@@ -326,7 +389,7 @@ class ReportGenerator:
 
         Args:
             start_date, end_date: Date range
-                granularity: daily/weekly/monthly/quarterly or 'auto' (default: auto)
+                granularity: daily/weekly/monthly/yearly or 'auto' (default: auto)
             group_by: 'item' or 'category'
             top_n: Limit to top N rows by total quantity (None for all)
             include_consumables: whether to include consumable items
@@ -469,6 +532,183 @@ class ReportGenerator:
         except Exception as e:
             logger.error(f"Failed to get calibration due data: {e}")
             return []
+
+    def _get_update_history_data(
+        self, start_date: date, end_date: date, item_filter: str = ""
+    ) -> List[Dict]:
+        """Get update/edit history for items within date range.
+
+        Per beta test requirement #7: Report for update/editing of inventory list.
+        """
+        try:
+            return get_update_history_data(start_date, end_date, item_filter)
+        except Exception as e:
+            logger.error(f"Failed to get update history data: {e}")
+            return []
+
+    def _get_disposal_history_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
+        """Get disposal history for items within date range.
+
+        Per beta test requirement #16: Disposal history profile.
+        """
+        try:
+            return get_disposal_history_data(start_date, end_date, category_filter)
+        except Exception as e:
+            logger.error(f"Failed to get disposal history data: {e}")
+            return []
+
+    def _get_usage_by_grade_level_data(
+        self,
+        start_date: date,
+        end_date: date,
+        category_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
+    ) -> List[Dict]:
+        """Get usage data by grade level and section.
+
+        Per beta test requirement #19: Usage by grade level and section.
+        """
+        try:
+            return get_usage_by_grade_level_data(
+                start_date,
+                end_date,
+                category_filter,
+                grade_filter,
+                section_filter,
+                show_individual_only,
+            )
+        except Exception as e:
+            logger.error(f"Failed to get usage by grade level data: {e}")
+            return []
+
+    def _get_item_usage_details(self, item_name: str = "") -> List[Dict]:
+        """Get detailed usage history for a specific item.
+
+        Per beta test requirement #12: When searching, retrieve all usage information
+        for individual items with all encoded information.
+
+        Args:
+            item_name: Item name to search for (partial match supported)
+
+        Returns:
+            List of usage records
+        """
+        try:
+            return get_item_usage_details(item_name)
+        except Exception as e:
+            logger.error(f"Failed to get item usage details: {e}")
+            return []
+
+    def _get_item_batch_summary(self, item_name: str = "") -> List[Dict]:
+        """Get batch summary with B1, B2, B3 notation for items.
+
+        Per beta test requirement #3: Show batch history indicating when items
+        were received multiple times.
+
+        Args:
+            item_name: Optional item name filter (partial match)
+
+        Returns:
+            List of item batch records
+        """
+        try:
+            return get_item_batch_summary(item_name)
+        except Exception as e:
+            logger.error(f"Failed to get item batch summary: {e}")
+            return []
+
+    def _get_defective_items_data(
+        self, start_date: date, end_date: date, category_filter: str = ""
+    ) -> List[Dict]:
+        """Get defective/broken items report data.
+
+        Per beta test requirement: Add info for defective/broken items returned.
+
+        Args:
+            start_date: Start date for the report period
+            end_date: End date for the report period
+            category_filter: Optional category filter
+
+        Returns:
+            List of defective item records
+        """
+        try:
+            return get_defective_items_data(start_date, end_date, category_filter)
+        except Exception as e:
+            logger.error(f"Failed to get defective items data: {e}")
+            return []
+
+    def generate_usage_by_grade_level_report(
+        self,
+        start_date: date,
+        end_date: date,
+        category_filter: str = "",
+        grade_filter: str = "",
+        section_filter: str = "",
+        show_individual_only: bool = False,
+        output_path: Optional[str] = None,
+        structured: bool = False,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Generate Usage by Grade Level report.
+
+        Args:
+            start_date: Start date for the report period
+            end_date: End date for the report period
+            category_filter: Optional category filter
+            grade_filter: Optional grade level filter
+            section_filter: Optional section filter
+            show_individual_only: Whether to show only individual requests
+            output_path: Optional output file path
+            structured: Return structured dict instead of string path
+
+        Returns:
+            Path to generated Excel file or error string
+        """
+        try:
+            logger.info(
+                f"Generating Usage by Grade Level report from {start_date} to {end_date}"
+            )
+
+            report_data = self._get_usage_by_grade_level_data(
+                start_date,
+                end_date,
+                category_filter,
+                grade_filter,
+                section_filter,
+                show_individual_only,
+            )
+
+            if not report_data:
+                error_msg = "Failed to generate Usage by Grade Level report\nReason: No data found for the specified criteria"
+                logger.warning("No data found for Usage by Grade Level report")
+                if structured:
+                    return {"success": False, "error": error_msg}
+                return error_msg
+
+            if not output_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = f"usage_by_grade_level_{timestamp}.xlsx"
+
+            output_path_obj = Path(output_path)
+            self._create_excel_report(
+                report_data, output_path_obj, "Usage by Grade Level Report", start_date, end_date
+            )
+
+            logger.info(f"Usage by Grade Level report generated: {output_path}")
+            if structured:
+                return {"success": True, "path": str(output_path)}
+            return str(output_path)
+
+        except Exception as e:
+            logger.error(f"Failed to generate Usage by Grade Level report: {e}")
+            if structured:
+                return {"success": False, "error": str(e)}
+            return f"Failed to generate Usage by Grade Level report: {e}"
 
 
 # Global report generator instance

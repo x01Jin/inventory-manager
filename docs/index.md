@@ -5,6 +5,7 @@ Welcome to the Inventory Manager documentation. This documentation captures inst
 Table of contents
 
 - [Installation](installation.md)
+  - [Maintenance](installation.md#maintenance)
 - [Quick Start](usage.md#quick-start)
 - [User Interface Overview](usage.md#user-interface)
 - [Dashboard](dashboard.md)

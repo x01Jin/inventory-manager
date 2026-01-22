@@ -35,18 +35,46 @@ Notes
 
 - The application configures SQLite connections for stronger durability and integrity by enabling Write-Ahead Logging (`PRAGMA journal_mode = WAL`), setting `PRAGMA synchronous = FULL` and enforcing `PRAGMA foreign_keys = ON`. Because WAL uses additional files, place the database on a local disk (not a network share) for reliable operation.
 
-Scheduling maintenance
+Maintenance
 
-- **Cron (Linux/macOS):** Add a cron job to run daily (example at 2am) using the installed Python environment:
+The project includes a small maintenance helper script at `scripts/maintenance.py` that calls into the application's `ActivityLogger` utilities to prune old activity log entries and keep the activity table bounded.
 
-```bash
-# Run maintenance daily at 02:00
-0 2 * * * /path/to/venv/bin/python /path/to/repo/scripts/maintenance.py --db-path /path/to/repo/inventory.db --days-to-keep 90 --max-activities 20
+- **Usage (dry-run)**:
+
+```powershell
+python scripts/maintenance.py --days-to-keep 90 --max-activities 20 --dry-run
 ```
 
-- **Windows Task Scheduler:** Create a basic task that runs daily and use the following command as the action (Program/Script + Arguments):
+- **Run now (perform deletions)**:
 
-Program/script: `python.exe`
-Arguments: `C:\path\to\repo\scripts\maintenance.py --db-path C:\path\to\repo\inventory.db --days-to-keep 90 --max-activities 20`
+```powershell
+python scripts/maintenance.py --days-to-keep 90 --max-activities 20
+```
 
-The maintenance script will call into the app's `ActivityLogger` to delete old items and maintain a maximum number of recent activities. This provides a reliable cross-platform way to ensure the database does not grow unchecked even when the GUI application does not run.
+- **Scheduling (examples)**:
+  - Cron (Linux/macOS): add a daily cron job that runs the script using your virtual environment's Python executable. Example (02:00 daily):
+
+```bash
+0 2 * * * /path/to/venv/bin/python /path/to/repo/scripts/maintenance.py --days-to-keep 90 --max-activities 20
+```
+
+- Windows Task Scheduler: create a basic daily task that runs `python.exe` with the arguments:
+
+```path
+C:\path\to\repo\scripts\maintenance.py --days-to-keep 90 --max-activities 20
+```
+
+Notes
+
+- The maintenance script is idempotent and safe to run repeatedly. It uses parameterized queries and the `ActivityLogger` API (`cleanup_old_activities` and `maintain_activity_limit`) so no ad-hoc SQL is required.
+- If you need a different database location, pass `--db-path /path/to/inventory.db`. The script sets the global `db.db_path` before running.
+
+Seeding sample data for manual QA
+
+- The project contains `scripts/sample_data.py` which runs a realistic timeline population to help with testing and demoing features. Run it directly:
+
+```powershell
+python scripts/sample_data.py
+```
+
+This will create the database if it does not yet exist and populate a realistic set of items, requesters and requisitions for testing and manual QA.

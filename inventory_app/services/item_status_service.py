@@ -1,6 +1,12 @@
 """
 Item status service for calculating item status based on expiration and calibration dates.
 Handles status calculation for consumables and non-consumables with proper alert logic.
+
+Alert thresholds per beta test requirements:
+- Chemicals: 6 months before expiration
+- Glassware: 3 years of usage
+- Equipment/Apparatuses: 5 years of usage
+- Calibration: 3 months before due date (yearly calibration)
 """
 
 from typing import Dict, List, Optional
@@ -9,11 +15,21 @@ from dataclasses import dataclass
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.services.stock_calculation_service import stock_calculation_service
+
+
+# Alert threshold constants (in days) per beta test requirements
+CHEMICAL_EXPIRY_WARNING_DAYS = 180  # 6 months before expiration
+GLASSWARE_DISPOSAL_YEARS = 3  # 3 years of usage
+EQUIPMENT_DISPOSAL_YEARS = 5  # 5 years of usage
+CALIBRATION_WARNING_DAYS = 90  # 3 months before calibration due
+CALIBRATION_INTERVAL_DAYS = 365  # Yearly calibration
 
 
 @dataclass
 class ItemStatus:
     """Represents the status of an inventory item."""
+
     item_id: int
     status: str  # 'OK', 'EXPIRING', 'EXPIRED', 'CAL_WARNING', 'CAL_DUE'
     days_until: Optional[int] = None
@@ -26,9 +42,76 @@ class ItemStatusService:
     Handles both consumables and non-consumables with appropriate alert periods.
     """
 
+    # SQLite parameter limit (safety margin)
+    SQLITE_PARAM_LIMIT = 900
+
     def __init__(self):
         """Initialize the item status service."""
         logger.info("Item status service initialized")
+
+    def get_statuses_for_items(
+        self, item_ids: List[int]
+    ) -> Dict[int, Optional[ItemStatus]]:
+        """
+        Get status for multiple items in optimized batch queries.
+
+        Handles SQLite's 999 parameter limit by chunking large ID lists.
+        Transforms from O(N) queries to O(1) or O(chunk_count) queries.
+
+        Args:
+            item_ids: List of item IDs to fetch statuses for
+
+        Returns:
+            Dictionary mapping item_id to ItemStatus (or None if not found)
+        """
+        if not item_ids:
+            return {}
+
+        # Remove duplicates and None values
+        unique_ids = list(set(id for id in item_ids if id is not None))
+        if not unique_ids:
+            return {}
+
+        # Chunk IDs to respect SQLite parameter limit
+        chunks = [
+            unique_ids[i : i + self.SQLITE_PARAM_LIMIT]
+            for i in range(0, len(unique_ids), self.SQLITE_PARAM_LIMIT)
+        ]
+
+        result: Dict[int, Optional[ItemStatus]] = {}
+
+        try:
+            # Build a single query that fetches all needed data
+            # Use parameterized query with chunked IDs
+            query = """
+            SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
+                   i.acquisition_date, c.name as category_name
+            FROM Items i
+            LEFT JOIN Categories c ON i.category_id = c.id
+            WHERE i.id IN ({})
+            """.format(",".join("?" * len(unique_ids)))
+
+            # Execute for each chunk and merge results
+            all_rows = []
+            for chunk in chunks:
+                rows = db.execute_query(query, tuple(chunk))
+                all_rows.extend(rows)
+
+            # Calculate status for each item
+            for item_data in all_rows:
+                status = self._calculate_status(item_data)
+                if status:
+                    result[status.item_id] = status
+
+            logger.debug(
+                f"Batch-fetched status for {len(result)} items (chunks: {len(chunks)})"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to batch-fetch statuses: {e}")
+            # Fallback: return empty dict (caller will handle per-item)
+            return {}
 
     def get_item_status(self, item_id: int) -> Optional[ItemStatus]:
         """
@@ -63,20 +146,28 @@ class ItemStatusService:
     def get_all_items_status(self) -> List[ItemStatus]:
         """
         Get status for all items in the inventory.
+        Excludes items with 0 current stock to prevent alerts for depleted items.
 
         Returns:
             List of ItemStatus objects
         """
         try:
-            # Get all items with their data
-            query = """
+            query = stock_calculation_service.get_item_status_stock_subquery()
+            stock_params = stock_calculation_service.get_item_status_stock_params()
+
+            query = f"""
             SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
                    i.acquisition_date, c.name as category_name
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN (
+                {query}
+            ) stock ON i.id = stock.item_id
+            WHERE COALESCE(stock.total_stock, 0) > 0
             ORDER BY i.name
             """
-            rows = db.execute_query(query)
+            full_params = stock_params
+            rows = db.execute_query(query, full_params)
             statuses = []
 
             for item_data in rows:
@@ -84,7 +175,9 @@ class ItemStatusService:
                 if status:
                     statuses.append(status)
 
-            logger.debug(f"Calculated status for {len(statuses)} items")
+            logger.debug(
+                f"Calculated status for {len(statuses)} items (excluding 0-stock items)"
+            )
             return statuses
 
         except Exception as e:
@@ -114,30 +207,30 @@ class ItemStatusService:
         """
         all_statuses = self.get_all_items_status()
         counts = {
-            'total': len(all_statuses),
-            'ok': 0,
-            'expiring': 0,
-            'expired': 0,
-            'calibration_warning': 0,
-            'calibration_due': 0
+            "total": len(all_statuses),
+            "ok": 0,
+            "expiring": 0,
+            "expired": 0,
+            "calibration_warning": 0,
+            "calibration_due": 0,
         }
 
         for status in all_statuses:
-            if status.status == 'OK':
-                counts['ok'] += 1
+            if status.status == "OK":
+                counts["ok"] += 1
             else:
                 # Handle combined statuses by splitting on " and "
-                status_parts = status.status.split(' and ')
+                status_parts = status.status.split(" and ")
                 for status_part in status_parts:
                     status_part = status_part.strip()
-                    if status_part == 'EXPIRING':
-                        counts['expiring'] += 1
-                    elif status_part == 'EXPIRED':
-                        counts['expired'] += 1
-                    elif status_part == 'CAL_WARNING':
-                        counts['calibration_warning'] += 1
-                    elif status_part == 'CAL_DUE':
-                        counts['calibration_due'] += 1
+                    if status_part == "EXPIRING":
+                        counts["expiring"] += 1
+                    elif status_part == "EXPIRED":
+                        counts["expired"] += 1
+                    elif status_part == "CAL_WARNING":
+                        counts["calibration_warning"] += 1
+                    elif status_part == "CAL_DUE":
+                        counts["calibration_due"] += 1
 
         return counts
 
@@ -152,8 +245,8 @@ class ItemStatusService:
             ItemStatus object
         """
         try:
-            item_id = item_data['id']
-            is_consumable = item_data['is_consumable'] == 1
+            item_id = item_data["id"]
+            is_consumable = item_data["is_consumable"] == 1
             today = date.today()
 
             if is_consumable:
@@ -164,12 +257,19 @@ class ItemStatusService:
                 return self._calculate_non_consumable_status(item_id, item_data, today)
 
         except Exception as e:
-            logger.error(f"Failed to calculate status for item {item_data.get('id', 'unknown')}: {e}")
+            logger.error(
+                f"Failed to calculate status for item {item_data.get('id', 'unknown')}: {e}"
+            )
             return None
 
-    def _calculate_consumable_status(self, item_id: int, item_data: Dict, today: date) -> ItemStatus:
+    def _calculate_consumable_status(
+        self, item_id: int, item_data: Dict, today: date
+    ) -> ItemStatus:
         """
         Calculate status for consumable items.
+
+        Expiry warning threshold per beta test requirements:
+        - Chemicals: 6 months (180 days) before expiration
 
         Args:
             item_id: Item ID
@@ -179,11 +279,11 @@ class ItemStatusService:
         Returns:
             ItemStatus object
         """
-        expiration_date = item_data.get('expiration_date')
+        expiration_date = item_data.get("expiration_date")
 
         if not expiration_date:
             # No expiration date - assume OK
-            return ItemStatus(item_id=item_id, status='OK')
+            return ItemStatus(item_id=item_id, status="OK")
 
         try:
             exp_date = date.fromisoformat(expiration_date)
@@ -193,30 +293,38 @@ class ItemStatusService:
                 # Already expired
                 return ItemStatus(
                     item_id=item_id,
-                    status='EXPIRED',
+                    status="EXPIRED",
                     days_until=days_until,
-                    reference_date=exp_date
+                    reference_date=exp_date,
                 )
-            elif days_until <= 180:  # 6 months
+            elif days_until <= CHEMICAL_EXPIRY_WARNING_DAYS:  # 6 months for chemicals
                 # Expiring soon
                 return ItemStatus(
                     item_id=item_id,
-                    status='EXPIRING',
+                    status="EXPIRING",
                     days_until=days_until,
-                    reference_date=exp_date
+                    reference_date=exp_date,
                 )
             else:
                 # OK
-                return ItemStatus(item_id=item_id, status='OK')
+                return ItemStatus(item_id=item_id, status="OK")
 
         except (ValueError, TypeError):
-            logger.warning(f"Invalid expiration date format for item {item_id}: {expiration_date}")
-            return ItemStatus(item_id=item_id, status='OK')
+            logger.warning(
+                f"Invalid expiration date format for item {item_id}: {expiration_date}"
+            )
+            return ItemStatus(item_id=item_id, status="OK")
 
-    def _calculate_non_consumable_status(self, item_id: int, item_data: Dict, today: date) -> ItemStatus:
+    def _calculate_non_consumable_status(
+        self, item_id: int, item_data: Dict, today: date
+    ) -> ItemStatus:
         """
         Calculate status for non-consumable items.
         Non-consumables can have two statuses: calibration and disposal (expiration).
+
+        Disposal thresholds per beta test requirements:
+        - Glassware/Apparatus: 3 years from acquisition
+        - Equipment: 5 years from acquisition
 
         Args:
             item_id: Item ID
@@ -226,9 +334,10 @@ class ItemStatusService:
         Returns:
             ItemStatus object with combined status if multiple alerts exist
         """
-        calibration_date = item_data.get('calibration_date')
-        expiration_date = item_data.get('expiration_date')  # This is the disposal date
-        acquisition_date = item_data.get('acquisition_date')
+        calibration_date = item_data.get("calibration_date")
+        expiration_date = item_data.get("expiration_date")  # This is the disposal date
+        acquisition_date = item_data.get("acquisition_date")
+        category_name = item_data.get("category_name", "").lower()
 
         statuses = []
         reference_dates = []
@@ -239,20 +348,27 @@ class ItemStatusService:
             try:
                 cal_date = date.fromisoformat(calibration_date)
                 # Next calibration is 1 year after last calibration
-                next_cal_date = cal_date + timedelta(days=365)
+                next_cal_date = cal_date + timedelta(days=CALIBRATION_INTERVAL_DAYS)
                 days_until_cal = (next_cal_date - today).days
 
                 if days_until_cal < 0:
-                    statuses.append('CAL_DUE')
+                    statuses.append("CAL_DUE")
                     reference_dates.append(next_cal_date)
                     days_list.append(days_until_cal)
-                elif days_until_cal <= 90:  # 3 months warning
-                    statuses.append('CAL_WARNING')
+                elif days_until_cal <= CALIBRATION_WARNING_DAYS:  # 3 months warning
+                    statuses.append("CAL_WARNING")
                     reference_dates.append(next_cal_date)
                     days_list.append(days_until_cal)
 
             except (ValueError, TypeError):
-                logger.warning(f"Invalid calibration date format for item {item_id}: {calibration_date}")
+                logger.warning(
+                    f"Invalid calibration date format for item {item_id}: {calibration_date}"
+                )
+
+        # Determine disposal threshold based on category (beta test requirement #10)
+        disposal_years = EQUIPMENT_DISPOSAL_YEARS  # Default: 5 years
+        if "apparatus" in category_name or "glass" in category_name:
+            disposal_years = GLASSWARE_DISPOSAL_YEARS  # 3 years for glassware/apparatus
 
         # Check disposal status (stored in expiration_date)
         disposal_date = None
@@ -260,48 +376,53 @@ class ItemStatusService:
             try:
                 disposal_date = date.fromisoformat(expiration_date)
             except (ValueError, TypeError):
-                logger.warning(f"Invalid disposal date format for item {item_id}: {expiration_date}")
+                logger.warning(
+                    f"Invalid disposal date format for item {item_id}: {expiration_date}"
+                )
         elif acquisition_date:
-            # No disposal date set - use default 5 years from acquisition
+            # No disposal date set - use category-based default from acquisition
             try:
                 acq_date = date.fromisoformat(acquisition_date)
-                disposal_date = acq_date + timedelta(days=5 * 365)  # 5 years default
+                disposal_date = acq_date + timedelta(days=disposal_years * 365)
             except (ValueError, TypeError):
-                logger.warning(f"Invalid acquisition date format for item {item_id}: {acquisition_date}")
+                logger.warning(
+                    f"Invalid acquisition date format for item {item_id}: {acquisition_date}"
+                )
 
         if disposal_date:
             days_until_disp = (disposal_date - today).days
 
             if days_until_disp < 0:
-                statuses.append('EXPIRED')  # Disposal overdue
+                statuses.append("EXPIRED")  # Disposal overdue
                 reference_dates.append(disposal_date)
                 days_list.append(days_until_disp)
             elif days_until_disp <= 90:  # 3 months warning
-                statuses.append('EXPIRING')  # Disposal approaching
+                statuses.append("EXPIRING")  # Disposal approaching
                 reference_dates.append(disposal_date)
                 days_list.append(days_until_disp)
 
         # Return combined status if multiple alerts, otherwise single status or OK
         if not statuses:
-            return ItemStatus(item_id=item_id, status='OK')
+            return ItemStatus(item_id=item_id, status="OK")
         elif len(statuses) == 1:
             return ItemStatus(
                 item_id=item_id,
                 status=statuses[0],
                 days_until=days_list[0],
-                reference_date=reference_dates[0]
+                reference_date=reference_dates[0],
             )
         else:
             # Multiple statuses - combine with "and" separator
-            combined_status = ' and '.join(statuses)
+            combined_status = " and ".join(statuses)
             # Use the most urgent (smallest days_until, most negative)
             most_urgent_idx = days_list.index(min(days_list))
             return ItemStatus(
                 item_id=item_id,
                 status=combined_status,
                 days_until=days_list[most_urgent_idx],
-                reference_date=reference_dates[most_urgent_idx]
+                reference_date=reference_dates[most_urgent_idx],
             )
+
 
 # Global instance
 item_status_service = ItemStatusService()

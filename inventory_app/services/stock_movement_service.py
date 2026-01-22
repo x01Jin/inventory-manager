@@ -5,7 +5,7 @@ Provides centralized stock tracking and movement recording.
 
 from typing import List, Dict, Optional, Union
 from datetime import date
-from inventory_app.database.connection import db
+import inventory_app.database.connection as conn
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
 
@@ -143,7 +143,9 @@ class StockMovementService:
         try:
             # Run returns in a transaction so that all movements are created
             # atomically and we can rollback on error.
-            from inventory_app.database.connection import db as global_db
+            import inventory_app.database.connection as conn
+
+            global_db = conn.db
 
             def _process():
                 for return_item in return_data:
@@ -223,7 +225,7 @@ class StockMovementService:
                 note,
             )
 
-        db.execute_update(query, params)
+        conn.db.execute_update(query, params)
         batch_info = f" (batch {batch_id})" if batch_id else ""
         logger.debug(
             f"Recorded {mv} movement for item {item_id}{batch_info}: {quantity} units"
@@ -248,7 +250,7 @@ class StockMovementService:
             FROM Item_Batches
             WHERE item_id = ?
             """
-            batch_rows = db.execute_query(batch_query, (item_id,))
+            batch_rows = conn.db.execute_query(batch_query, (item_id,))
             total_received = batch_rows[0]["total_received"] if batch_rows else 0
 
             # Get net movement adjustments
@@ -271,7 +273,7 @@ class StockMovementService:
                 MovementType.RETURN.value,
                 item_id,
             )
-            movement_rows = db.execute_query(movement_query, params)
+            movement_rows = conn.db.execute_query(movement_query, params)
             net_adjustment = movement_rows[0]["net_adjustment"] if movement_rows else 0
 
             return max(0, total_received + net_adjustment)
@@ -302,7 +304,7 @@ class StockMovementService:
             WHERE item_id = ? AND movement_type IN {placeholders}
             """
             params = (item_id,) + movement_vals
-            rows = db.execute_query(query, params)
+            rows = conn.db.execute_query(query, params)
             return rows[0]["reserved_qty"] if rows else 0
         except Exception as e:
             logger.error(f"Failed to get reserved stock for item {item_id}: {e}")
@@ -323,6 +325,6 @@ class StockMovementService:
         DELETE FROM Stock_Movements
         WHERE source_id = ?
         """
-        db.execute_update(query, (requisition_id,))
+        conn.db.execute_update(query, (requisition_id,))
         logger.info(f"Deleted stock movements for requisition {requisition_id}")
         return True

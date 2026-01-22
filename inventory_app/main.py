@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
+import atexit
 
 # Prefer package-relative imports — this will work when the module is executed
 # as a package with `python -m inventory_app.main`. If the module is executed
@@ -20,6 +21,7 @@ try:
     from .database.connection import db
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
+    from .services.summary_tables import summary_tables_service
 except Exception:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
@@ -28,6 +30,7 @@ except Exception:
     from inventory_app.database.connection import db
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
+    from inventory_app.services.summary_tables import summary_tables_service
 
 
 def initialize_laboratory_database() -> bool:
@@ -51,6 +54,42 @@ def initialize_laboratory_database() -> bool:
         return True
     except Exception:
         logger.exception("Failed to initialize Laboratory Inventory database")
+        return False
+
+
+def run_migrations_with_splash(app) -> bool:
+    """Run pending migrations with splash screen.
+
+    Args:
+        app: QApplication instance needed for splash screen
+
+    Returns:
+        bool: True if all migrations succeeded, False on failure
+    """
+    from inventory_app.database.migrations import migration_manager
+    from inventory_app.gui.splash_screen import SplashScreen
+
+    pending = migration_manager.get_pending_migrations()
+    if not pending:
+        return True
+
+    splash = SplashScreen()
+    splash.show()
+    app.processEvents()
+
+    try:
+        migration_manager.run_pending_migrations(
+            progress_callback=lambda status, percent: (
+                splash.update_progress(status, percent),
+                app.processEvents(),
+                None,
+            )[-1]
+        )
+        splash.close()
+        return True
+    except Exception:
+        logger.exception("Migration failed")
+        splash.close()
         return False
 
 
@@ -81,19 +120,43 @@ def main() -> int:
             logger.error("Application startup failed: database initialization error")
             return 1
 
-        if not verify_components():
-            logger.warning(
-                "One or more components failed verification; continuing startup"
-            )
-
-        # Import GUI components only after database initialization succeeds
+        # Import GUI components and create application early for splash screen
         try:
-            from inventory_app.gui.main_window import main as gui_main  # Local import
+            from PyQt6.QtWidgets import QApplication
+            from inventory_app.gui.main_window import main as gui_main
         except ImportError:
             logger.exception(
                 "Failed to import GUI components. Confirm PyQt6 and GUI packages are installed."
             )
             return 1
+
+        app = QApplication(sys.argv)
+
+        # Run migrations with splash if needed
+        if not run_migrations_with_splash(app):
+            logger.error("Application startup failed: migration error")
+            return 1
+
+        if not verify_components():
+            logger.warning(
+                "One or more components failed verification; continuing startup"
+            )
+
+        # Initialize summary tables service (Chunk 8)
+        try:
+            if summary_tables_service.initialize():
+                logger.info("Summary tables service initialized")
+                # Backfill summaries if this is a new database
+                summary_tables_service.backfill_summaries()
+                atexit.register(summary_tables_service.shutdown)
+            else:
+                logger.warning(
+                    "Summary tables service initialization failed; continuing without summary tables"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Summary tables service unavailable: {e}; continuing without summary tables"
+            )
 
         logger.info("Launching GUI")
         gui_exit_code = gui_main()

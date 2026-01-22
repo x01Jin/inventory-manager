@@ -355,6 +355,8 @@ class BaseRequisitionDialog(QDialog):
         panel.setMinimumHeight(200)  # Minimum height for usability
         panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(panel)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         # Search and filter
         search_group = QGroupBox("🔍 Search Items")
@@ -362,6 +364,8 @@ class BaseRequisitionDialog(QDialog):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         search_layout = QVBoxLayout(search_group)
+        search_layout.setContentsMargins(5, 10, 5, 5)
+        search_layout.setSpacing(5)
 
         self.item_search = QLineEdit()
         self.item_search.setPlaceholderText("Search items by name...")
@@ -384,6 +388,8 @@ class BaseRequisitionDialog(QDialog):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         items_layout = QVBoxLayout(items_group)
+        items_layout.setContentsMargins(5, 10, 5, 5)
+        items_layout.setSpacing(5)
 
         self.available_items_list = QListWidget()
         self.available_items_list.setMinimumHeight(100)  # Minimum height for list
@@ -432,6 +438,8 @@ class BaseRequisitionDialog(QDialog):
             self.edit_selected_item_amount
         )
         layout.addWidget(self.selected_items_list)
+        layout.setSpacing(5)
+        layout.setContentsMargins(5, 10, 5, 5)
 
         # Summary info
         self.items_summary = QLabel("No items selected")

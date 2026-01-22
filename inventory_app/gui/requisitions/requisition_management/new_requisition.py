@@ -50,7 +50,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
         # Requester selection widget
         self.requester_widget = RequesterSelectorWidget(parent=self)
         self.requester_widget.requester_selected.connect(self._on_requester_selected)
-        layout.addWidget(self.requester_widget)
+        layout.addWidget(self.requester_widget, 0)  # No stretch
 
         # Activity details widget
         self.activity_widget = ActivityDetailsWidget(parent=self)
@@ -59,7 +59,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             self.update_create_button_state
         )
         self.activity_widget.field_changed.connect(self.update_create_button_state)
-        layout.addWidget(self.activity_widget)
+        layout.addWidget(self.activity_widget, 1)  # Allow stretch
 
         return panel
 

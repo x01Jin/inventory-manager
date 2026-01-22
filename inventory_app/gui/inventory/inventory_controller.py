@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date
 from inventory_app.database.connection import db
 from inventory_app.services.item_status_service import item_status_service
+from inventory_app.services.stock_calculation_service import stock_calculation_service
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
 from inventory_app.gui.reports.columns import inventory_common_joins_sql
@@ -29,36 +30,7 @@ class InventoryController:
         Returns:
             SQL subquery string for stock calculations
         """
-        base_query = """
-            SELECT
-                ib.item_id,
-                SUM(ib.quantity_received) as original_stock,
-                COALESCE(movements.consumed_qty, 0) as consumed_qty,
-                COALESCE(movements.disposed_qty, 0) as disposed_qty,
-                COALESCE(movements.returned_qty, 0) as returned_qty,
-                SUM(ib.quantity_received) -
-                COALESCE(movements.consumed_qty, 0) -
-                COALESCE(movements.disposed_qty, 0) +
-                COALESCE(movements.returned_qty, 0) as total_stock
-            FROM Item_Batches ib
-            LEFT JOIN (
-                SELECT
-                    sm.item_id,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as consumed_qty,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as disposed_qty,
-                        SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as returned_qty
-                FROM Stock_Movements sm
-                GROUP BY sm.item_id
-            ) movements ON ib.item_id = movements.item_id
-        """
-        # The movement type params will be passed when executing the final query
-
-        if item_id:
-            base_query += f" WHERE ib.item_id = {item_id}"
-
-        base_query += " GROUP BY ib.item_id"
-
-        return base_query
+        return stock_calculation_service.get_stock_calculation_subquery(item_id)
 
     def _get_requested_calculations(self) -> str:
         """
@@ -67,23 +39,7 @@ class InventoryController:
         Finalized requisitions don't reduce available stock (movements have been replaced).
         Returns SQL subquery for requested calculations.
         """
-        return """
-            SELECT ri.item_id, SUM(ri.quantity_requested) as requested_qty
-            FROM Requisition_Items ri
-            JOIN Requisitions r ON ri.requisition_id = r.id
-            JOIN Items i ON ri.item_id = i.id
-            WHERE r.status != 'returned'  -- Only active requisitions reduce available stock
-            AND EXISTS (
-                SELECT 1 FROM Stock_Movements sm
-                WHERE sm.item_id = ri.item_id
-                AND sm.source_id = r.id
-                AND (
-                    (i.is_consumable = 1 AND sm.movement_type = ?) OR
-                    (i.is_consumable = 0 AND sm.movement_type = ?)
-                )
-            )
-            GROUP BY ri.item_id
-        """
+        return stock_calculation_service.get_requisition_calculation_subquery()
 
     def load_inventory_data(self) -> List[Dict[str, Any]]:
         """Load inventory items with related data from database."""

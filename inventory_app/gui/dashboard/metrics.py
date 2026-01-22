@@ -3,13 +3,71 @@ Metrics management for the dashboard.
 Handles metric calculations and card creation.
 """
 
+from typing import Dict, Optional
+
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QPainter
 
 from inventory_app.gui.styles import get_current_theme
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+
+
+class SkeletonCard(QGroupBox):
+    """Skeleton loading card with animated pulse effect."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(title, parent)
+        self.setStyleSheet("""
+            QGroupBox {
+                background-color: transparent;
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 9pt;
+            }
+        """)
+        self._pulse_value = 0
+        self._pulse_direction = 1
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+
+        self.value_label = QLabel("...")
+        self.value_label.setStyleSheet("""
+            font-size: 18pt;
+            font-weight: bold;
+            border: none;
+            background-color: transparent;
+            color: #666;
+        """)
+        self.value_label.setObjectName("skeleton_value")
+        layout.addWidget(self.value_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self._animation_timer = QTimer(self)
+        self._animation_timer.timeout.connect(self._animate_pulse)
+        self._animation_timer.start(50)
+
+    def _animate_pulse(self):
+        self._pulse_value += 0.1 * self._pulse_direction
+        if self._pulse_value >= 1.0:
+            self._pulse_value = 1.0
+            self._pulse_direction = -1
+        elif self._pulse_value <= 0.0:
+            self._pulse_value = 0.0
+            self._pulse_direction = 1
+        self.update()
+
+    def paintEvent(self, a0):
+        super().paintEvent(a0)
+        if hasattr(self, '_pulse_value'):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            color = QColor(60, 60, 60)
+            color.setAlphaF(0.3 + self._pulse_value * 0.2)
+            painter.fillRect(self.rect(), color)
 
 
 class MetricsManager:
@@ -18,7 +76,7 @@ class MetricsManager:
     def __init__(self):
         pass
 
-    def create_compact_metric_card(self, title: str, value: str):
+    def create_compact_metric_card(self, title: str, value: str, loading: bool = False):
         """Create a compact metric card widget."""
         Theme = get_current_theme()
         card = QGroupBox(title)
@@ -30,17 +88,25 @@ class MetricsManager:
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(2)
 
-        value_label = QLabel(value)
+        if loading:
+            value_label = QLabel("...")
+        else:
+            value_label = QLabel(value)
         value_label.setStyleSheet(f"""
             font-size: {Theme.FONT_SIZE_HEADER}pt; 
             font-weight: bold;
             border: none;
             background-color: transparent;
         """)
+        value_label.setObjectName("value_label")
 
         layout.addWidget(value_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         return card
+
+    def create_skeleton_metric_card(self, title: str):
+        """Create a skeleton loading card for metrics."""
+        return SkeletonCard(title)
 
     def get_metric_keys(self):
         """Get the list of metric keys and their display names."""
@@ -186,7 +252,7 @@ class MetricsManager:
                 "overdue_reqs": 0,
             }
 
-    def create_metrics_widget(self):
+    def create_metrics_widget(self, loading: bool = False):
         """Create a widget containing all metric cards in a compact grid."""
 
         widget = QWidget()
@@ -194,35 +260,32 @@ class MetricsManager:
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
 
-        metrics = self.get_all_metrics()
         metric_keys = self.get_metric_keys()
 
-        # Create 3x3 grid of metric cards
         for i, (key, title) in enumerate(metric_keys):
             row = i // 3
             col = i % 3
-            value = str(metrics.get(key, 0))
-            card = self.create_compact_metric_card(title, value)
+            value = "..." if loading else "0"
+            card = self.create_compact_metric_card(title, value, loading)
             layout.addWidget(card, row, col)
 
         return widget
 
-    def update_metrics_widget(self, metrics_widget):
+    def update_metrics_widget(self, metrics_widget, metrics: Optional[Dict[str, int]] = None):
         """Update the metrics widget with current data."""
         try:
-            metrics = self.get_all_metrics()
+            if metrics is None:
+                metrics = self.get_all_metrics()
             metric_keys = self.get_metric_keys()
 
             layout = metrics_widget.layout()
             if not layout:
                 return
 
-            # Update each card in the grid
             for i, (key, title) in enumerate(metric_keys):
                 value = str(metrics.get(key, 0))
                 card = layout.itemAt(i).widget()
                 if card:
-                    # Update the value label (only child in the card's layout)
                     card_layout = card.layout()
                     if card_layout and card_layout.count() >= 1:
                         value_label = card_layout.itemAt(0).widget()

@@ -3,6 +3,9 @@ Return Processor - Simplified one-time return process for requisitions.
 
 Handles final return processing where all items are processed at once.
 No partial returns, no editing after processing.
+
+Per beta test requirements:
+- Add info for defective/broken items returned
 """
 
 from typing import List, Optional
@@ -15,7 +18,10 @@ from inventory_app.utils.logger import logger
 
 
 class ReturnItem:
-    """Simple data structure for one-time return processing."""
+    """Simple data structure for one-time return processing.
+
+    Per beta test: Added defective/broken quantity tracking for non-consumables.
+    """
 
     def __init__(
         self,
@@ -24,14 +30,18 @@ class ReturnItem:
         quantity_requested: int,
         quantity_returned: int = 0,
         quantity_lost: int = 0,
+        quantity_defective: int = 0,  # Beta test: track defective/broken items
         is_consumable: bool = False,
+        defective_notes: str = "",  # Beta test: notes about defective items
     ):
         self.item_id = item_id
         self.batch_id = batch_id
         self.quantity_requested = quantity_requested
         self.quantity_returned = quantity_returned  # For consumables only
         self.quantity_lost = quantity_lost  # For non-consumables only
+        self.quantity_defective = quantity_defective  # Defective/broken items
         self.is_consumable = is_consumable
+        self.defective_notes = defective_notes  # Reason/description for defective
 
     @property
     def quantity_processed(self) -> int:
@@ -69,7 +79,10 @@ class ReturnProcessor:
         logger.info("Return processor initialized")
 
     def process_returns(
-        self, requisition_id: int, return_items: List[ReturnItem], editor_name: str
+        self,
+        requisition_id: int,
+        return_items: List[ReturnItem],
+        editor_name: str,
     ) -> bool:
         """
         Process all returns for a requisition in one final operation.
@@ -132,6 +145,16 @@ class ReturnProcessor:
                         if return_item.quantity_lost > 0:
                             lost_items.append(
                                 f"{return_item.quantity_lost}x (ID: {return_item.item_id})"
+                            )
+
+                        # Record defective items (per beta test B.2)
+                        if return_item.quantity_defective > 0:
+                            self._record_defective_item(
+                                requisition_id,
+                                return_item.item_id,
+                                return_item.quantity_defective,
+                                return_item.defective_notes,
+                                editor_name,
                             )
 
                 # Update requisition status to final "returned"
@@ -292,6 +315,51 @@ class ReturnProcessor:
         except Exception as e:
             logger.error(f"Failed to update requisition {requisition_id} status: {e}")
 
+    def _record_defective_item(
+        self,
+        requisition_id: int,
+        item_id: int,
+        quantity: int,
+        notes: str,
+        reported_by: str,
+    ) -> None:
+        """
+        Record defective/broken items in the Defective_Items table.
+
+        Per beta test requirement B.2: Add info for defective/broken items returned.
+
+        Args:
+            requisition_id: ID of the requisition
+            item_id: ID of the item
+            quantity: Number of defective items
+            notes: Description of the defect
+            reported_by: Name of person reporting
+        """
+        try:
+            query = """
+            INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by)
+            VALUES (?, ?, ?, ?, ?)
+            """
+            db.execute_update(
+                query,
+                (
+                    item_id,
+                    requisition_id,
+                    quantity,
+                    notes or "",
+                    reported_by,
+                ),
+            )
+            logger.info(
+                f"Recorded {quantity} defective items (ID: {item_id}) "
+                f"for requisition {requisition_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to record defective item {item_id} for requisition {requisition_id}: {e}"
+            )
+            # Don't raise - defective recording failure shouldn't block return processing
+
     def get_requisition_items_for_return(self, requisition_id: int) -> List[ReturnItem]:
         """
         Get items for a requisition that need return processing.
@@ -411,9 +479,11 @@ class ReturnProcessor:
                 "consumed_items": [],
                 "returned_non_consumables": [],
                 "lost_non_consumables": [],
+                "defective_items": [],
                 "total_returned": 0,
                 "total_consumed": 0,
                 "total_lost": 0,
+                "total_defective": 0,
             }
 
             # Process each original requisition item
@@ -462,6 +532,21 @@ class ReturnProcessor:
                         )
                         summary["total_returned"] += returned_quantity
 
+            # Fetch and count defective items
+            defective_query = """
+            SELECT i.name AS item_name, di.quantity
+            FROM Defective_Items di
+            JOIN Items i ON i.id = di.item_id
+            WHERE di.requisition_id = ?
+            """
+            defective_rows = db.execute_query(defective_query, (requisition_id,))
+            if defective_rows:
+                for row in defective_rows:
+                    summary["defective_items"].append(
+                        {"item_name": row["item_name"], "quantity": row["quantity"]}
+                    )
+                    summary["total_defective"] += row["quantity"]
+
             return summary
 
         except Exception as e:
@@ -469,6 +554,39 @@ class ReturnProcessor:
                 f"Failed to get return summary for requisition {requisition_id}: {e}"
             )
             return {}
+
+    def get_requisition_defective_items(self, requisition_id: int) -> list:
+        """
+        Get all defective items recorded for a requisition.
+
+        Args:
+            requisition_id: ID of the requisition
+
+        Returns:
+            List of defective items with details (item name, quantity, notes, reported by)
+        """
+        try:
+            query = """
+            SELECT
+                i.name AS item_name,
+                di.quantity,
+                di.notes,
+                di.reported_by,
+                di.reported_date,
+                c.name AS category
+            FROM Defective_Items di
+            JOIN Items i ON i.id = di.item_id
+            JOIN Categories c ON c.id = i.category_id
+            WHERE di.requisition_id = ?
+            ORDER BY di.reported_date DESC, i.name
+            """
+            return db.execute_query(query, (requisition_id,)) or []
+
+        except Exception as e:
+            logger.error(
+                f"Failed to get defective items for requisition {requisition_id}: {e}"
+            )
+            return []
 
 
 # Global instance for easy access

@@ -47,10 +47,17 @@ The import can be cancelled while in progress by clicking the Cancel button.
 - **Stocks**: The importer accepts a variety of free-form `stocks` values. Parsing rules are:
   - **Numeric counts** (e.g., `2`, `10`) are parsed as integer quantities (floats coerced to int).
   - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **single containers**: the importer sets `quantity = 1` and records the matched `size` (the parsed size will be used as the item `size` when the explicit `size` column is empty).
+
+  - **Supported size units** include common volume/mass units such as: `ml`, `l`, `g`, `kg`, `mg`, `gal`, `liter`, `litre`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
+
   - **Leading counts with extra info** (e.g., `10 boxes (100pcs)`, `1 set of 8 pieces`) — the leading integer is used as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
   - **Empty / missing** stocks values result in `quantity = 0`.
   - **Invalid values** (no parseable number or recognized size) cause the row to be skipped and an explanatory message is included in the import log.
   - **Case & spacing**: size units are matched case-insensitively. They are space-sensitive except when attached to a number (both `900ml` and `900 ml` are accepted).
+
+Notes
+
+- The importer uses `inventory_app.utils.stock_parser.parse_stock_value` for parsing logic and is covered by unit tests (see `tests/test_item_importer_types.py`).
 - **Item type**: The importer normalizes and cleans the `item type` cell before classification:
   - Leading vendor prefixes like `TA,` are stripped when present (case-insensitive).
   - Values containing `consum`, `consumable`, `consumables`, `reagent`, `reagents`, or `chemical` are treated as **Consumable**.

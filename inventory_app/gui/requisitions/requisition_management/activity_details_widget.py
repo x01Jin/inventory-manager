@@ -44,7 +44,14 @@ class ActivityDetailsWidget(QGroupBox):
 
     def _setup_ui(self):
         """Setup the widget UI."""
+        from PyQt6.QtWidgets import QSizePolicy
+        
+        # Set size policy to expand and fill available space
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
 
         # Activity name
         activity_name_layout = QHBoxLayout()
@@ -56,12 +63,13 @@ class ActivityDetailsWidget(QGroupBox):
         activity_name_layout.addWidget(self.activity_name)
         layout.addLayout(activity_name_layout)
 
-        # Activity description
+        # Activity description - give it stretch to expand
         layout.addWidget(QLabel("Description:"))
         self.activity_description = QTextEdit()
         self.activity_description.setPlaceholderText("Activity description")
+        self.activity_description.setMinimumHeight(60)
         self.activity_description.textChanged.connect(self._on_field_changed)
-        layout.addWidget(self.activity_description)
+        layout.addWidget(self.activity_description, 1)  # Stretch factor 1
 
         # Activity date - will be populated by parent
         self.date_layout = QHBoxLayout()

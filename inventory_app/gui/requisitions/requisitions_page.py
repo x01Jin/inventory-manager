@@ -3,7 +3,8 @@ Requisitions management page - Complete laboratory requesting system.
 Provides full CRUD operations for requisitions with requester management.
 
 Uses background threading via QThreadPool for data loading to prevent
-UI freezes on slower hardware.
+UI freezes on slower hardware. Supports parallel data loading for improved
+performance.
 """
 
 from typing import Optional
@@ -22,19 +23,28 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QSizePolicy,
     QProgressBar,
+    QFileDialog,
 )
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
 from inventory_app.gui.requisitions.requisitions_table import RequisitionsTable
 from inventory_app.gui.requisitions.requisitions_filters import RequisitionsFilters
 from inventory_app.gui.requisitions.requisition_preview import RequisitionPreview
+from inventory_app.gui.styles import get_current_theme
 from inventory_app.gui.requisitions.requisition_management import (
     NewRequisitionDialog,
     EditRequisitionDialog,
     ItemReturnDialog,
     status_watcher,
 )
-from inventory_app.gui.utils.worker import run_in_background, Worker
+from inventory_app.gui.utils.worker import Worker
+from inventory_app.gui.utils.parallel_loader import (
+    ParallelDataLoader,
+    LoadTask,
+    LoadProgress,
+    parallel_load_manager,
+    LoadPriority,
+)
 from inventory_app.utils.logger import logger
 
 
@@ -60,6 +70,7 @@ class RequisitionsPage(QWidget):
 
         # Track current worker for cancellation
         self._current_worker: Optional[Worker] = None
+        self._parallel_loader: Optional[ParallelDataLoader] = None
         self._is_loading = False
 
         # Setup connections between components
@@ -76,13 +87,14 @@ class RequisitionsPage(QWidget):
     def setup_ui(self):
         """Setup the main user interface."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
         # Header with title and refresh button
         header_layout = QHBoxLayout()
+        Theme = get_current_theme()
         title = QLabel("📋 Laboratory Requisitions")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {Theme.FONT_SIZE_TITLE}pt; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -111,10 +123,15 @@ class RequisitionsPage(QWidget):
         self.delete_button.clicked.connect(self.delete_requisition)
         self.delete_button.setEnabled(False)
 
+        self.print_button = QPushButton("🖨️ Print")
+        self.print_button.clicked.connect(self.print_requisition)
+        self.print_button.setEnabled(False)
+
         action_layout.addWidget(self.add_button)
         action_layout.addWidget(self.edit_button)
         action_layout.addWidget(self.return_button)
         action_layout.addWidget(self.delete_button)
+        action_layout.addWidget(self.print_button)
         action_layout.addStretch()
 
         layout.addLayout(action_layout)
@@ -145,6 +162,8 @@ class RequisitionsPage(QWidget):
         # Filters section
         self.filters.set_model(self.model)
         left_layout.addWidget(self.filters)
+        left_layout.setSpacing(10)
+
 
         # Table section
         table_group = QGroupBox("Laboratory Requisitions")
@@ -172,8 +191,9 @@ class RequisitionsPage(QWidget):
         layout.addWidget(main_splitter)
 
         # Status bar
+        Theme = get_current_theme()
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; font-size: 10pt;")
+        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
         layout.addWidget(self.status_label)
 
     def _setup_connections(self):
@@ -190,55 +210,81 @@ class RequisitionsPage(QWidget):
         self.filters.clear_filters_requested.connect(self._on_filters_cleared)
 
     def refresh_data(self):
-        """Refresh all requisition data asynchronously."""
+        """Refresh all requisition data asynchronously using parallel loading."""
         if self._is_loading:
             logger.debug("Load already in progress, skipping")
             return
 
-        # Cancel any existing worker
+        # Cancel any existing workers
         if self._current_worker:
             self._current_worker.cancel()
+        if self._parallel_loader:
+            self._parallel_loader.cancel()
 
         self._is_loading = True
         self._set_loading_state(True)
 
-        logger.info("Starting async requisition data refresh...")
+        logger.info("Starting parallel requisition data refresh...")
 
-        # Run data loading in background thread
-        self._current_worker = run_in_background(
-            self._load_data_background,
-            on_result=self._on_data_loaded,
-            on_error=self._on_load_error,
-            on_finished=self._on_load_finished,
+        # Create load tasks for parallel execution
+        def load_requisition_data():
+            """Load requisition data from database."""
+            success = self.model.load_data()
+            if not success:
+                raise Exception("Failed to load requisition data from database")
+            return {
+                "success": success,
+                "all_requisitions": self.model.all_requisitions,
+            }
+
+        def load_requester_options():
+            """Load requester filter options."""
+            self.filters._load_requester_options()
+            return True
+
+        # Use parallel loader for concurrent loading
+        self._parallel_loader = parallel_load_manager.load_page_data(
+            tasks=[
+                LoadTask(
+                    "requisitions",
+                    load_requisition_data,
+                    weight=0.8,
+                    priority=LoadPriority.NORMAL,
+                ),
+                LoadTask(
+                    "requesters",
+                    load_requester_options,
+                    weight=0.2,
+                    priority=LoadPriority.NORMAL,
+                ),
+            ],
+            on_progress=self._on_parallel_progress,
+            on_complete=self._on_parallel_complete,
+            on_error=self._on_parallel_error,
         )
 
-    def _load_data_background(self) -> dict:
-        """
-        Load requisition data in background thread.
+    def _on_parallel_progress(self, progress: LoadProgress):
+        """Handle progress update from parallel loader."""
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(int(progress.total_progress))
+        self.progress_bar.setFormat(
+            f"Loading requisitions... {int(progress.total_progress)}%"
+        )
 
-        Returns dict with all needed data for UI update.
-        This method runs off the main thread.
-        """
-        # Load initial data from model
-        success = self.model.load_data()
-        if not success:
-            raise Exception("Failed to load requisition data from database")
-
-        return {
-            "success": True,
-            "all_requisitions": self.model.all_requisitions,
-        }
-
-    def _on_data_loaded(self, result: dict):
-        """Handle data loaded from background thread (runs on main thread)."""
+    def _on_parallel_complete(self, results: dict):
+        """Handle completion of parallel loading."""
         try:
-            if not result.get("success"):
+            req_result = results.get("requisitions", {})
+            if not req_result.get("success"):
                 logger.error("Data load returned failure")
                 QMessageBox.warning(
                     self,
                     "Data Load Error",
                     "Failed to load requisition data from database.",
                 )
+                self._is_loading = False
+                self._parallel_loader = None
+                self._set_loading_state(False)
                 return
 
             # Update all requisition statuses using the status watcher
@@ -249,9 +295,6 @@ class RequisitionsPage(QWidget):
                 )
                 # Reload data to get updated statuses
                 self.model.load_data()
-
-            # Reload requester options (in case new requesters have requisitions)
-            self.filters._load_requester_options()
 
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
@@ -274,15 +317,23 @@ class RequisitionsPage(QWidget):
                 f"Returned: {stats['returned_requisitions']}"
             )
 
+            # Hide progress and re-enable buttons
+            self._is_loading = False
+            self._parallel_loader = None
+            self._set_loading_state(False)
+
             logger.info(
                 f"Refreshed requisition data: {total_count} requisitions loaded"
             )
 
         except Exception as e:
-            logger.error(f"Error processing loaded data: {e}")
-            QMessageBox.critical(
-                self, "Error", f"Failed to process requisition data: {str(e)}"
-            )
+            logger.error(f"Error processing parallel load results: {e}")
+            self._on_load_error((type(e), e, str(e)))
+
+    def _on_parallel_error(self, name: str, error: Exception, traceback_str: str):
+        """Handle error from parallel loader."""
+        logger.error(f"Parallel load task '{name}' failed: {error}")
+        self._on_load_error((type(error), error, traceback_str))
 
     def _populate_table_batched(self, rows: list):
         """Populate table in batches to prevent UI freeze."""
@@ -365,6 +416,9 @@ class RequisitionsPage(QWidget):
 
     def _on_load_error(self, error_tuple: tuple):
         """Handle load error (runs on main thread)."""
+        self._is_loading = False
+        self._parallel_loader = None
+        self._set_loading_state(False)
         exctype, value, tb = error_tuple
         logger.error(f"Failed to refresh data: {value}\n{tb}")
         QMessageBox.critical(
@@ -375,6 +429,7 @@ class RequisitionsPage(QWidget):
         """Handle load finished (runs on main thread)."""
         self._is_loading = False
         self._current_worker = None
+        self._parallel_loader = None
         self._set_loading_state(False)
 
     def _set_loading_state(self, is_loading: bool):
@@ -583,6 +638,450 @@ class RequisitionsPage(QWidget):
                 self, "Error", f"Failed to delete requisition: {str(e)}"
             )
 
+    def print_requisition(self):
+        """
+        Print or export the currently selected requisition.
+
+        Per beta test requirement B.2: In REQUISITIONS, have an option to print.
+        Exports requisition details to a printable PDF or HTML file.
+        """
+        requisition_id = self.table.get_selected_requisition_id()
+        if not requisition_id:
+            QMessageBox.warning(
+                self, "No Selection", "Please select a requisition to print."
+            )
+            return
+
+        try:
+            requisition_summary = self.model.get_requisition_by_id(requisition_id)
+            if not requisition_summary:
+                QMessageBox.warning(self, "Error", "Could not load requisition data.")
+                return
+
+            # Ask user where to save the file
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Requisition Report",
+                f"requisition_{requisition_id}.html",
+                "HTML Files (*.html);;All Files (*.*)",
+            )
+
+            if not file_path:
+                return  # User cancelled
+
+            # Generate HTML report
+            html_content = self._generate_requisition_html(requisition_summary)
+
+            # Write to file
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Requisition report saved successfully!\n\n"
+                f"File: {file_path}\n\n"
+                "You can open this file in a browser and use Print (Ctrl+P) to print it.",
+            )
+
+            logger.info(f"Requisition {requisition_id} exported to {file_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to print requisition {requisition_id}: {e}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to export requisition: {str(e)}"
+            )
+
+    @staticmethod
+    def _generate_requisition_html(req_summary) -> str:
+        """
+        Generate a printable HTML report for a requisition.
+
+        Args:
+            req_summary: RequisitionSummary object
+
+        Returns:
+            HTML string for the requisition report
+        """
+        from datetime import date
+        from inventory_app.utils.date_utils import format_date_short, format_time_12h
+        from inventory_app.gui.requisitions.requisition_management.return_processor import (
+            ReturnProcessor,
+        )
+
+        req = req_summary.requisition
+        requester = req_summary.requester
+
+        # Check if individual request
+        is_individual = getattr(req_summary, "is_individual", 0) == 1
+
+        # Format dates
+        expected_request_str = ""
+        if req.expected_request:
+            expected_request_str = f"{format_date_short(req.expected_request)} - {format_time_12h(req.expected_request.time())}"
+
+        expected_return_str = ""
+        if req.expected_return:
+            expected_return_str = f"{format_date_short(req.expected_return)} - {format_time_12h(req.expected_return.time())}"
+
+        activity_date_str = ""
+        if req.lab_activity_date:
+            activity_date_str = format_date_short(req.lab_activity_date)
+
+        # Build items table rows
+        items_rows = ""
+        for i, item in enumerate(req_summary.items, 1):
+            items_rows += f"""
+            <tr>
+                <td>{i}</td>
+                <td>{item["name"]}</td>
+                <td style="text-align: center;">{item["quantity_requested"]}</td>
+            </tr>
+            """
+
+        # Build return details section if processed
+        return_details_html = ""
+        if req.status == "returned" and req.id is not None:
+            try:
+                return_processor = ReturnProcessor()
+                summary = return_processor.get_requisition_return_summary(req.id)
+
+                if summary and (
+                    summary["total_returned"] > 0
+                    or summary["total_lost"] > 0
+                    or summary["total_consumed"] > 0
+                ):
+                    return_details_html = """
+                    <div class="section">
+                        <h2>🔒 Final Return Details</h2>
+                    """
+
+                    if summary["returned_consumables"]:
+                        return_details_html += "<h3>✅ Consumables Returned:</h3><ul>"
+                        for item in summary["returned_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["consumed_items"]:
+                        return_details_html += "<h3>🔥 Consumables Consumed:</h3><ul>"
+                        for item in summary["consumed_items"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["returned_non_consumables"]:
+                        return_details_html += (
+                            "<h3>↩️ Non-Consumables Returned:</h3><ul>"
+                        )
+                        for item in summary["returned_non_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    if summary["lost_non_consumables"]:
+                        return_details_html += (
+                            "<h3>❌ Non-Consumables Lost/Damaged:</h3><ul>"
+                        )
+                        for item in summary["lost_non_consumables"]:
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})</li>"
+                            )
+                        return_details_html += "</ul>"
+
+                    defective_items = return_processor.get_requisition_defective_items(
+                        req.id
+                    )
+                    if defective_items:
+                        return_details_html += "<h3>⚠️ Defective Items:</h3><ul>"
+                        for item in defective_items:
+                            notes = item.get("notes") or ""
+                            reporter = item.get("reported_by") or ""
+                            return_details_html += (
+                                f"<li>{item['item_name']} (x{item['quantity']})"
+                            )
+                            if notes:
+                                return_details_html += f" — Issue: {notes}"
+                            if reporter:
+                                return_details_html += (
+                                    f" <em>(reported by {reporter})</em>"
+                                )
+                            return_details_html += "</li>"
+                        return_details_html += "</ul>"
+
+                    return_details_html += f"""
+                        <p class="totals"><strong>Totals:</strong> {summary["total_returned"]} returned, 
+                        {summary["total_consumed"]} consumed, {summary["total_lost"]} lost, {summary["total_defective"]} defective</p>
+                    </div>
+                    """
+            except Exception:
+                pass  # Skip return details on error
+
+        # Status color mapping
+        status_colors = {
+            "active": "#22c55e",
+            "requested": "#f59e0b",
+            "overdue": "#ef4444",
+            "returned": "#64748b",
+        }
+        status_color = status_colors.get(req.status, "#374151")
+
+        if is_individual:
+            requester_info_html = f"""
+            <span class="info-label">Name:</span>
+            <span>{getattr(req_summary, "individual_name", "N/A") or "N/A"}</span>
+            """
+            if getattr(req_summary, "individual_contact", None):
+                requester_info_html += f"""
+                <span class="info-label">Contact:</span>
+                <span>{req_summary.individual_contact}</span>
+                """
+            if getattr(req_summary, "individual_purpose", None):
+                requester_info_html += f"""
+                <span class="info-label">Purpose:</span>
+                <span>{req_summary.individual_purpose}</span>
+                """
+            requester_info_html += """
+            <span class="info-label">Type:</span>
+            <span>Individual Request</span>
+            """
+            activity_section_html = ""
+        else:
+            requester = req_summary.requester
+            req_type = getattr(requester, 'requester_type', None) or 'faculty'
+            requester_info_html = f"""
+            <span class="info-label">Name:</span>
+            <span>{requester.name}</span>
+            <span class="info-label">Type:</span>
+            <span>{req_type.title()}</span>
+            """
+            if req_type == 'student':
+                if requester.grade_level and requester.section:
+                    requester_info_html += f"""
+                    <span class="info-label">Grade/Section:</span>
+                    <span>{requester.grade_level} - {requester.section}</span>
+                    """
+            elif req_type == 'teacher':
+                if requester.department:
+                    requester_info_html += f"""
+                    <span class="info-label">Department:</span>
+                    <span>{requester.department}</span>
+                    """
+            elif req_type == 'faculty':
+                pass
+            activity_section_html = f"""
+    <div class="section">
+        <h2>Activity Details</h2>
+        <div class="info-grid">
+            <span class="info-label">Activity:</span>
+            <span>{req.lab_activity_name}</span>
+            <span class="info-label">Activity Date:</span>
+            <span>{activity_date_str}</span>
+            <span class="info-label">Students:</span>
+            <span>{req.num_students or "N/A"}</span>
+            <span class="info-label">Groups:</span>
+            <span>{req.num_groups or "N/A"}</span>
+        </div>
+    </div>
+    """
+
+        html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requisition #{req.id} - Laboratory Inventory</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{
+            margin: 0;
+            color: #333;
+        }}
+        .header .subtitle {{
+            color: #666;
+            font-size: 14px;
+        }}
+        .status {{
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            background-color: {status_color};
+        }}
+        .section {{
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }}
+        .section h2 {{
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 8px;
+        }}
+        .info-label {{
+            font-weight: bold;
+            color: #555;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }}
+        th, td {{
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }}
+        th {{
+            background-color: #333;
+            color: white;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f2f2f2;
+        }}
+        .totals {{
+            font-weight: bold;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+        }}
+        .print-footer {{
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }}
+        @media print {{
+            body {{
+                padding: 10px;
+            }}
+            .section {{
+                break-inside: avoid;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📋 Laboratory Requisition</h1>
+        <p class="subtitle">Requisition #{req.id}</p>
+        <span class="status">{req.status.upper()}</span>
+    </div>
+    
+    <div class="section">
+        <h2>Requester Information</h2>
+        <div class="info-grid">
+            {requester_info_html}
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Timeline</h2>
+        <div class="info-grid">
+            <span class="info-label">Expected Request:</span>
+            <span>{expected_request_str}</span>
+            <span class="info-label">Expected Return:</span>
+            <span>{expected_return_str}</span>
+        </div>
+    </div>
+    
+    {activity_section_html}
+    
+    <div class="section">
+        <h2>Requested Items ({req_summary.total_items})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Item Name</th>
+                    <th style="width: 100px;">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+    </div>
+    </div>
+    
+    <div class="section">
+        <h2>⏰ Timeline</h2>
+        <div class="info-grid">
+            <span class="info-label">Expected Request:</span>
+            <span>{expected_request_str}</span>
+            <span class="info-label">Expected Return:</span>
+            <span>{expected_return_str}</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📝 Activity Details</h2>
+        <div class="info-grid">
+            <span class="info-label">Activity:</span>
+            <span>{req.lab_activity_name}</span>
+            <span class="info-label">Activity Date:</span>
+            <span>{activity_date_str}</span>
+            <span class="info-label">Students:</span>
+            <span>{req.num_students or "N/A"}</span>
+            <span class="info-label">Groups:</span>
+            <span>{req.num_groups or "N/A"}</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📦 Requested Items ({req_summary.total_items})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Item Name</th>
+                    <th style="width: 100px;">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+    </div>
+    
+    {return_details_html}
+    
+    <div class="print-footer">
+        <p>Generated by Laboratory Inventory Management System</p>
+        <p>Printed on: {format_date_short(date.today())}</p>
+    </div>
+</body>
+</html>
+        """
+        return html
+
     def _on_filter_changed(self):
         """Handle any filter change - apply filters and refresh table with batched loading."""
         try:
@@ -670,6 +1169,7 @@ class RequisitionsPage(QWidget):
                 self.delete_button.setEnabled(
                     True
                 )  # Delete always enabled for selected items
+                self.print_button.setEnabled(True)  # Print always enabled for selected
 
                 # Update button tooltips to explain disabled state
                 if is_processed:
@@ -687,6 +1187,7 @@ class RequisitionsPage(QWidget):
                 self.edit_button.setEnabled(False)
                 self.return_button.setEnabled(False)
                 self.delete_button.setEnabled(False)
+                self.print_button.setEnabled(False)
 
             logger.debug(f"Action buttons updated for selection: {has_selection}")
 

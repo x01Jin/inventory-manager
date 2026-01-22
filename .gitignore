@@ -1,5 +1,6 @@
 .clinerules/
 .roo/
+.github/
 .venv/
 logs/
 __pycache__/
@@ -14,3 +15,12 @@ scripts/
 *.spec
 *.json
 *.db
+AGENTS.md
+GEMINI.md
+
+# pytest-cov generated files
+.coverage
+.coverage.*
+.cache
+htmlcov/
+coverage.xml

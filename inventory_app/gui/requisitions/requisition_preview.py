@@ -111,10 +111,9 @@ class RequisitionPreview(QWidget):
     def populate_details(self, req_summary: RequisitionSummary):
         """Populate the preview with detailed requisition information."""
         req = req_summary.requisition
-        requester = req_summary.requester
 
         # Header
-        header = QLabel("📋 Requisition Details")
+        header = QLabel("Requisition Details")
         header.setStyleSheet(
             f"font-size: {DarkTheme.FONT_SIZE_TITLE}pt; font-weight: bold; margin-bottom: 10px;"
         )
@@ -126,16 +125,17 @@ class RequisitionPreview(QWidget):
         self.container_layout.addWidget(status_frame)
 
         # Requester Information
-        requester_section = self.create_requester_section(requester)
+        requester_section = self.create_requester_section(req_summary)
         self.container_layout.addWidget(requester_section)
 
-        # Timeline (below requester info as requested)
+        # Activity Details (skip for individual requests)
+        if not (hasattr(req_summary, "is_individual") and req_summary.is_individual):
+            activity_section = self.create_activity_section(req)
+            self.container_layout.addWidget(activity_section)
+
+        # Timeline
         timeline_section = self.create_timeline_section(req)
         self.container_layout.addWidget(timeline_section)
-
-        # Activity Details
-        activity_section = self.create_activity_section(req)
-        self.container_layout.addWidget(activity_section)
 
         # Requested Items
         items_section = self.create_items_section(
@@ -167,28 +167,67 @@ class RequisitionPreview(QWidget):
 
         return frame
 
-    def create_requester_section(self, requester) -> QGroupBox:
+    def create_requester_section(self, req_summary) -> QGroupBox:
         """Create the requester information section."""
-        group = QGroupBox("👤 Requester Information")
+        group = QGroupBox("Requester Information")
         group.setStyleSheet(self._get_group_style())
 
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        name_label = QLabel(f"• Name: {requester.name}")
-        name_label.setStyleSheet(
-            f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
-        )
-        name_label.setWordWrap(True)
-        layout.addWidget(name_label)
+        if hasattr(req_summary, "is_individual") and req_summary.is_individual:
+            name_label = QLabel(f"Name: {req_summary.individual_name or 'N/A'}")
+            name_label.setStyleSheet(
+                f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
+            )
+            name_label.setWordWrap(True)
+            layout.addWidget(name_label)
 
-        affiliation_label = QLabel(f"• Affiliation: {requester.affiliation}")
-        affiliation_label.setWordWrap(True)
-        layout.addWidget(affiliation_label)
+            if req_summary.individual_contact:
+                contact_label = QLabel(f"Contact: {req_summary.individual_contact}")
+                contact_label.setWordWrap(True)
+                layout.addWidget(contact_label)
 
-        group_label = QLabel(f"• Group: {requester.group_name}")
-        group_label.setWordWrap(True)
-        layout.addWidget(group_label)
+            if req_summary.individual_purpose:
+                purpose_label = QLabel(f"Purpose: {req_summary.individual_purpose}")
+                purpose_label.setWordWrap(True)
+                layout.addWidget(purpose_label)
+
+            individual_label = QLabel("Individual Request")
+            individual_label.setStyleSheet(
+                f"font-style: italic; color: {DarkTheme.TEXT_MUTED};"
+            )
+            layout.addWidget(individual_label)
+        else:
+            requester = req_summary.requester
+            name_label = QLabel(f"Name: {requester.name}")
+            name_label.setStyleSheet(
+                f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
+            )
+            name_label.setWordWrap(True)
+            layout.addWidget(name_label)
+
+            req_type = getattr(requester, "requester_type", None) or "faculty"
+            type_label = QLabel(f"Type: {req_type.title()}")
+            type_label.setStyleSheet(
+                f"font-style: italic; color: {DarkTheme.TEXT_MUTED};"
+            )
+            layout.addWidget(type_label)
+
+            if req_type == "student":
+                if requester.grade_level and requester.section:
+                    group_label = QLabel(
+                        f"Grade/Section: {requester.grade_level} - {requester.section}"
+                    )
+                    group_label.setWordWrap(True)
+                    layout.addWidget(group_label)
+            elif req_type == "teacher":
+                if requester.department:
+                    group_label = QLabel(f"Department: {requester.department}")
+                    group_label.setWordWrap(True)
+                    layout.addWidget(group_label)
+            elif req_type == "faculty":
+                pass
 
         return group
 
@@ -235,7 +274,8 @@ class RequisitionPreview(QWidget):
         layout = QVBoxLayout(group)
         layout.setSpacing(8)
 
-        activity_label = QLabel(f"• Activity: {req.lab_activity_name}")
+        activity_name = getattr(req, "lab_activity_name", None) or "Unknown"
+        activity_label = QLabel(f"• Activity: {activity_name}")
         activity_label.setStyleSheet(
             f"font-weight: bold; font-size: {DarkTheme.FONT_SIZE_NORMAL}pt;"
         )
@@ -398,14 +438,55 @@ class RequisitionPreview(QWidget):
                     item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
                     layout.addWidget(item_label)
 
-            # Summary totals
-            totals_label = QLabel(
-                f"📊 Totals: {summary['total_returned']} returned, {summary['total_consumed']} consumed, {summary['total_lost']} lost"
+            # Defective Items (if any)
+            defective_items = return_processor.get_requisition_defective_items(
+                requisition_id
             )
-            totals_label.setStyleSheet(
+
+            if defective_items:
+                defective_section = QLabel("⚠️ Defective Items:")
+                defective_section.setStyleSheet(
+                    "font-weight: bold; font-size: 10pt; margin-top: 5px;"
+                )
+                layout.addWidget(defective_section)
+
+                for item in defective_items:
+                    item_label = QLabel(
+                        f"  • {item['item_name']} (x{item['quantity']})"
+                    )
+                    item_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+                    layout.addWidget(item_label)
+
+                    if item["notes"]:
+                        notes_label = QLabel(f"    Issue: {item['notes']}")
+                        notes_label.setStyleSheet(
+                            f"font-size: 9pt; margin-left: 20px; color: {DarkTheme.WARNING_COLOR}; font-style: italic;"
+                        )
+                        notes_label.setWordWrap(True)
+                        layout.addWidget(notes_label)
+
+            # Summary totals (vertical)
+            totals_header = QLabel("📊 Totals:")
+            totals_header.setStyleSheet(
                 f"font-weight: bold; font-size: 10pt; color: {DarkTheme.SUCCESS_COLOR}; margin-top: 8px;"
             )
-            layout.addWidget(totals_label)
+            layout.addWidget(totals_header)
+
+            returned_label = QLabel(f"• Returned: {summary['total_returned']}")
+            returned_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(returned_label)
+
+            consumed_label = QLabel(f"• Consumed: {summary['total_consumed']}")
+            consumed_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(consumed_label)
+
+            lost_label = QLabel(f"• Lost: {summary['total_lost']}")
+            lost_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(lost_label)
+
+            defective_label = QLabel(f"• Defective: {summary['total_defective']}")
+            defective_label.setStyleSheet("font-size: 9pt; margin-left: 10px;")
+            layout.addWidget(defective_label)
 
             # Lock notice
             lock_notice = QLabel("🔒 This requisition has been finalized...")

@@ -19,8 +19,10 @@ class RequesterRow:
     """Data structure for displaying requester information in tables."""
     id: Optional[int] = None
     name: str = ""
-    affiliation: str = ""
-    group_name: str = ""
+    requester_type: str = "teacher"
+    grade_level: str = ""
+    section: str = ""
+    department: str = ""
     created_datetime: Optional[datetime] = None
     requisitions_count: int = 0
 
@@ -71,8 +73,10 @@ class RequesterModel:
                 row = RequesterRow(
                     id=requester.id,
                     name=requester.name,
-                    affiliation=requester.affiliation,
-                    group_name=requester.group_name,
+                    requester_type=requester.requester_type,
+                    grade_level=requester.grade_level or "",
+                    section=requester.section or "",
+                    department=requester.department or "",
                     created_datetime=requester.created_at,
                     requisitions_count=requisition_counts.get(requester.id, 0)
                 )
@@ -89,7 +93,7 @@ class RequesterModel:
         Filter requesters by search term.
 
         Args:
-            search_term: Term to search for in requester name, affiliation, or group
+            search_term: Term to search for in requester name, grade, section, or department
         """
         self.search_term = search_term.lower()
         self._apply_filters()
@@ -124,22 +128,22 @@ class RequesterModel:
         try:
             total_requesters = len(self.filtered_requesters)
 
-            # Count requesters by affiliation
-            affiliations = {}
+            # Count requesters by type
+            type_counts = {}
             for requester in self.filtered_requesters:
-                affiliation = requester.affiliation or "Unknown"
-                affiliations[affiliation] = affiliations.get(affiliation, 0) + 1
+                req_type = requester.requester_type or "unknown"
+                type_counts[req_type] = type_counts.get(req_type, 0) + 1
 
             return {
                 'total_requesters': total_requesters,
-                'affiliation_breakdown': affiliations
+                'type_breakdown': type_counts
             }
 
         except Exception as e:
             logger.error(f"Failed to calculate statistics: {e}")
             return {
                 'total_requesters': 0,
-                'affiliation_breakdown': {}
+                'type_breakdown': {}
             }
 
     def add_requester(self, requester_data: dict) -> bool:
@@ -155,8 +159,10 @@ class RequesterModel:
         try:
             requester = RequesterDB()
             requester.name = requester_data.get('name', '')
-            requester.affiliation = requester_data.get('affiliation', '')
-            requester.group_name = requester_data.get('group_name', '')
+            requester.requester_type = requester_data.get('requester_type', 'teacher')
+            requester.grade_level = requester_data.get('grade_level')
+            requester.section = requester_data.get('section')
+            requester.department = requester_data.get('department')
 
             success = requester.save()
             if success:
@@ -185,8 +191,10 @@ class RequesterModel:
                 return False
 
             requester.name = requester_data.get('name', requester.name)
-            requester.affiliation = requester_data.get('affiliation', requester.affiliation)
-            requester.group_name = requester_data.get('group_name', requester.group_name)
+            requester.requester_type = requester_data.get('requester_type', requester.requester_type)
+            requester.grade_level = requester_data.get('grade_level', requester.grade_level)
+            requester.section = requester_data.get('section', requester.section)
+            requester.department = requester_data.get('department', requester.department)
 
             success = requester.save()
             if success:
@@ -286,16 +294,19 @@ class RequesterModel:
         filtered = []
 
         for requester in requesters:
-            # Search in requester information
             if search_term in requester.name.lower():
                 filtered.append(requester)
                 continue
 
-            if search_term in requester.affiliation.lower():
+            if search_term in (requester.grade_level or "").lower():
                 filtered.append(requester)
                 continue
 
-            if search_term in requester.group_name.lower():
+            if search_term in (requester.section or "").lower():
+                filtered.append(requester)
+                continue
+
+            if search_term in (requester.department or "").lower():
                 filtered.append(requester)
                 continue
 
