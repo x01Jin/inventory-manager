@@ -27,7 +27,7 @@ class StockSummary:
     disposed_qty: int
     returned_qty: int
     total_stock: int
-    low_stock_threshold: int = 10
+    low_stock_threshold: int = 5
     is_low_stock: bool = False
     is_out_of_stock: bool = False
     last_updated: Optional[datetime] = None
@@ -141,7 +141,7 @@ class SummaryTablesService:
             disposed_qty INTEGER DEFAULT 0,
             returned_qty INTEGER DEFAULT 0,
             total_stock INTEGER DEFAULT 0,
-            low_stock_threshold INTEGER DEFAULT 10,
+            low_stock_threshold INTEGER DEFAULT 5,
             is_low_stock INTEGER DEFAULT 0,
             is_out_of_stock INTEGER DEFAULT 0,
             last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
