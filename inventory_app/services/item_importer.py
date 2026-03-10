@@ -7,7 +7,7 @@ normalizes values before creating Item records via the existing model API.
 Supports progress callbacks for async UI updates.
 """
 
-from typing import List, Tuple, Any, Optional, Callable
+from typing import Dict, List, Set, Tuple, Any, Optional, Callable
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from inventory_app.database.models import Item
@@ -84,6 +84,165 @@ def _normalize_header(h: Any) -> str:
     return s.replace(" ", "").replace("_", "")
 
 
+def _normalize_item_type(raw_item_type: Any) -> str:
+    """Normalize item type text used for consumable classification."""
+    raw_type_text = "" if raw_item_type is None else str(raw_item_type)
+    return re.sub(r"^\s*ta,\s*", "", raw_type_text, flags=re.I).strip().lower()
+
+
+def _is_consumable_type(raw_item_type: Any) -> bool:
+    """Return True when raw item type text resolves to consumable."""
+    cleaned = _normalize_item_type(raw_item_type)
+    if ("non" in cleaned or "not" in cleaned) and "consum" in cleaned:
+        return False
+
+    return any(
+        k in cleaned
+        for k in (
+            "consum",
+            "consumable",
+            "consumables",
+            "reagent",
+            "reagents",
+            "chemical",
+        )
+    )
+
+
+def _resolve_header_mapping(ws: Worksheet) -> Tuple[int, Dict[int, str], List[str]]:
+    """Find header row and build a column index -> canonical field mapping."""
+    max_scan_rows = min(40, ws.max_row if ws.max_row is not None else 40)
+    header_row_index = None
+    headers: List[str] = []
+
+    for i, row in enumerate(
+        ws.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
+    ):
+        if not row:
+            continue
+
+        scanned = [_normalize_header(cell) for cell in row]
+        normalized_header_set = {h for h in scanned if h}
+
+        has_name = bool(NAME_NORMALIZED & normalized_header_set)
+        has_stocks = bool({"stocks", "stock"} & normalized_header_set)
+        has_item_type = bool({"itemtype", "type"} & normalized_header_set)
+
+        if has_name and has_stocks and has_item_type:
+            headers = scanned
+            header_row_index = i
+            break
+
+    if header_row_index is None:
+        raise ValueError(
+            "Missing required header row (need columns for name, stocks, and item type). Check if all required headers are present and double check the spelling of the headers"
+        )
+
+    col_map: Dict[int, str] = {}
+    for idx, h in enumerate(headers, start=1):
+        if not h:
+            continue
+        mapped = HEADER_MAP_NORMALIZED.get(h)
+        if mapped:
+            col_map[idx] = mapped
+
+    normalized_header_set = {h for h in headers if h}
+    if not (NAME_NORMALIZED & normalized_header_set):
+        raise ValueError(
+            "Missing required header 'name' (or acceptable variants like 'item' or 'item name'). Check if all required headers are present and double check the spelling of the headers"
+        )
+    if not ({"stocks", "stock"} & normalized_header_set):
+        raise ValueError(
+            "Missing required header 'stocks'. Check if all required headers are present and double check the spelling of the headers"
+        )
+    if not ({"itemtype", "type"} & normalized_header_set):
+        raise ValueError(
+            "Missing required header 'item type'. Check if all required headers are present and double check the spelling of the headers"
+        )
+
+    return header_row_index, col_map, headers
+
+
+def _is_decimal_without_unit(raw_stocks: Any) -> bool:
+    """Return True for numeric decimal stocks with no explicit unit text."""
+    if isinstance(raw_stocks, float):
+        return not float(raw_stocks).is_integer()
+    if isinstance(raw_stocks, int):
+        return False
+
+    if raw_stocks is None:
+        return False
+
+    text = str(raw_stocks).strip()
+    if text == "":
+        return False
+
+    # Numeric-only strings like "1.5" are ambiguous for consumables.
+    if re.fullmatch(r"\d+\.\d+", text):
+        return True
+
+    return False
+
+
+def _with_selected_unit(raw_stocks: Any, unit: str) -> Any:
+    """Attach a selected unit to raw stock values before parsing."""
+    if raw_stocks is None:
+        return raw_stocks
+    if isinstance(raw_stocks, (int, float)):
+        return f"{raw_stocks} {unit}"
+
+    text = str(raw_stocks).strip()
+    if text == "":
+        return raw_stocks
+    return f"{text} {unit}"
+
+
+def collect_consumable_rows_missing_unit(path: str) -> List[Dict[str, Any]]:
+    """List consumable rows with decimal stock values that have no explicit unit.
+
+    Returns list entries with keys: row_index, name, stocks.
+    """
+    wb = load_workbook(path, data_only=True)
+    ws_any = wb.active
+    if ws_any is None:
+        raise ValueError("The Excel workbook has no active worksheet")
+
+    ws: Worksheet = ws_any  # type: ignore[assignment]
+    header_row_index, col_map, _ = _resolve_header_mapping(ws)
+
+    flagged_rows: List[Dict[str, Any]] = []
+    start_row = int(header_row_index) + 1
+
+    for row_idx, row in enumerate(
+        ws.iter_rows(min_row=start_row, values_only=True), start=start_row
+    ):
+        row_data: Dict[str, Any] = {}
+        for col_idx, cell_value in enumerate(row, start=1):
+            if col_idx in col_map:
+                row_data[col_map[col_idx]] = cell_value
+
+        name = row_data.get("name")
+        item_type_raw = row_data.get("item_type")
+        raw_stocks = row_data.get("stocks")
+
+        if name is None or str(name).strip() == "":
+            continue
+        if not _is_consumable_type(item_type_raw):
+            continue
+        if not _is_decimal_without_unit(raw_stocks):
+            continue
+
+        flagged_rows.append(
+            {
+                "row_index": row_idx,
+                "name": str(name).strip(),
+                "stocks": str(raw_stocks).strip(),
+            }
+        )
+
+    return flagged_rows
+
+
 def _parse_int(val) -> int:
     try:
         if val is None or (isinstance(val, str) and val.strip() == ""):
@@ -118,6 +277,8 @@ def import_items_from_excel(
     path: str,
     editor_name: str = "Import",
     progress_callback: Optional[Callable[[int, int, int], None]] = None,
+    row_unit_overrides: Optional[Dict[int, str]] = None,
+    rows_to_skip: Optional[Set[int]] = None,
 ) -> Tuple[int, List[str]]:
     """Import items from an Excel file.
 
@@ -125,6 +286,9 @@ def import_items_from_excel(
         path: Path to .xlsx file
         editor_name: Name stored in audit logs
         progress_callback: Optional callback(current, total, skipped) for progress updates
+        row_unit_overrides: Optional mapping of Excel row index -> selected unit
+            (e.g., {42: "L"}) for consumables with missing units.
+        rows_to_skip: Optional set of Excel row indexes to skip by user choice.
 
     Returns:
         (count_imported, messages): number of successfully imported rows and list of messages
@@ -139,66 +303,14 @@ def import_items_from_excel(
     # Explicitly assert typing for linters; active() may return a types union
     ws: Worksheet = ws_any  # type: ignore[assignment]
 
-    # Find the header row by scanning the first N rows and looking for required headers.
-    # This allows ignoring top title rows (e.g., report titles) and finding the actual table header.
-    max_scan_rows = min(40, ws.max_row if ws.max_row is not None else 40)
-    header_row = None
-    header_row_index = None
-    headers = []
-
-    for i, row in enumerate(
-        ws.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
-    ):
-        if not row:
-            continue
-        scanned = [_normalize_header(cell) for cell in row]
-        normalized_header_set = set([h for h in scanned if h])
-
-        # Check presence of required groups: name variants, stocks, item type
-        has_name = bool(NAME_NORMALIZED & normalized_header_set)
-        has_stocks = bool({"stocks", "stock"} & normalized_header_set)
-        has_item_type = bool({"itemtype", "type"} & normalized_header_set)
-
-        if has_name and has_stocks and has_item_type:
-            header_row = row
-            headers = scanned
-            header_row_index = i
-            break
-
-    if header_row is None:
-        raise ValueError(
-            "Missing required header row (need columns for name, stocks, and item type). Check if all required headers are present and double check the spelling of the headers"
-        )
-
-    # Create mapping column index -> canonical field name
-    col_map = {}
-    for idx, h in enumerate(headers, start=1):
-        if not h:
-            continue
-        mapped = HEADER_MAP_NORMALIZED.get(h)
-        if mapped:
-            col_map[idx] = mapped
+    header_row_index, col_map, headers = _resolve_header_mapping(ws)
     logger.debug(f"Header found on row {header_row_index}: {headers}")
     logger.debug(f"Column mapping: {col_map}")
-    # Check required headers presence (we require a name, stocks, and item type header)
-    normalized_header_set = set([h for h in headers if h])
-    # determine presence of name: accept several human variants (name, item, item name, names)
-    if not (NAME_NORMALIZED & normalized_header_set):
-        raise ValueError(
-            "Missing required header 'name' (or acceptable variants like 'item' or 'item name'). Check if all required headers are present and double check the spelling of the headers"
-        )
 
-    # stocks header acceptance
-    if not ({"stocks", "stock"} & normalized_header_set):
-        raise ValueError(
-            "Missing required header 'stocks'. Check if all required headers are present and double check the spelling of the headers"
-        )
-
-    # item type header (supports 'item type', 'item_type', 'ItemType', and 'type')
-    if not ({"itemtype", "type"} & normalized_header_set):
-        raise ValueError(
-            "Missing required header 'item type'. Check if all required headers are present and double check the spelling of the headers"
-        )
+    if row_unit_overrides is None:
+        row_unit_overrides = {}
+    if rows_to_skip is None:
+        rows_to_skip = set()
 
     messages: List[str] = []
     imported = 0
@@ -242,6 +354,18 @@ def import_items_from_excel(
                 )
                 skipped += 1
                 continue
+
+            if row_idx in rows_to_skip:
+                messages.append(
+                    f"Row {row_idx}: skipped by user during unit resolution"
+                )
+                skipped += 1
+                continue
+
+            selected_unit = row_unit_overrides.get(row_idx)
+            if selected_unit:
+                raw_stocks = _with_selected_unit(raw_stocks, selected_unit)
+
             # Parse the free-form stocks cell. This may extract quantity, a size string
             # (e.g. '900ml', '1 L') and an optional notes string. For size-bearing
             # entries (volume/mass), quantity comes from the numeric part so consumables
@@ -270,31 +394,7 @@ def import_items_from_excel(
             # Some vendor spreadsheets include a leading code like 'TA, ' before the
             # actual item type (e.g., 'TA, non consumable'). Strip such prefixes
             # case-insensitively and robustly detect consumable vs non-consumable.
-            raw_type_text = str(item_type_raw)
-            # remove leading 'TA,' or 'TA, ' etc.
-            cleaned = (
-                re.sub(r"^\s*ta,\s*", "", raw_type_text, flags=re.I).strip().lower()
-            )
-
-            # Negative forms (non-consumable, not consumable) take precedence
-            is_consumable = 0
-            if ("non" in cleaned or "not" in cleaned) and "consum" in cleaned:
-                is_consumable = 0
-            elif any(
-                k in cleaned
-                for k in (
-                    "consum",
-                    "consumable",
-                    "consumables",
-                    "reagent",
-                    "reagents",
-                    "chemical",
-                )
-            ):
-                is_consumable = 1
-            else:
-                # Default to non-consumable when unclear — this mirrors conservative behavior
-                is_consumable = 0
+            is_consumable = 1 if _is_consumable_type(item_type_raw) else 0
 
             # Optional fields (text fields default to 'N/A'; date fields return date objects or None)
             size = row_data.get("size")

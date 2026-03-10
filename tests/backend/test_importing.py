@@ -1,7 +1,10 @@
 import pytest
 from openpyxl import Workbook
 from inventory_app.database.connection import db
-from inventory_app.services.item_importer import import_items_from_excel
+from inventory_app.services.item_importer import (
+    collect_consumable_rows_missing_unit,
+    import_items_from_excel,
+)
 from inventory_app.utils.stock_parser import parse_stock_value, parse_stock_quantity
 
 
@@ -36,6 +39,14 @@ def test_stock_string_parsing():
     info = parse_stock_value("125 gms")
     assert info["quantity"] == 125
     assert info["size"] == "125 gms"
+
+    info = parse_stock_value("1.1 gal")
+    assert info["quantity"] == 1100
+    assert info["size"] == "1.1 gal"
+
+    info = parse_stock_value("1.1 galon")
+    assert info["quantity"] == 1100
+    assert info["size"] == "1.1 galon"
 
     info = parse_stock_value("10 boxes")
     assert info["quantity"] == 10
@@ -203,3 +214,71 @@ def test_importer_edge_cases(temp_db, tmp_path):
         "SELECT id FROM Categories WHERE name = 'Uncategorized'"
     )[0]["id"]
     assert nocat[0]["category_id"] == uncat_id
+
+
+def test_collect_consumable_rows_missing_unit_detects_decimal_only(temp_db, tmp_path):
+    """Detect consumable rows that have decimal stocks without explicit unit text."""
+    excel_path = tmp_path / "missing_unit_scan.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(["name", "stocks", "item type", "category"])
+    ws.append(["Ethanol", "1.5", "Consumable", "Chemicals-Liquid"])
+    ws.append(["Ethyl Alcohol 95%", "1.1 gal", "Consumable", "Chemicals-Liquid"])
+    ws.append(["Gloves", "100", "Consumable", "Consumables"])
+    wb.save(excel_path)
+
+    flagged = collect_consumable_rows_missing_unit(str(excel_path))
+    assert len(flagged) == 1
+    assert flagged[0]["name"] == "Ethanol"
+    assert flagged[0]["stocks"] == "1.5"
+
+
+def test_importer_applies_unit_overrides_and_skip_rows(temp_db, tmp_path):
+    """Apply user unit selections to rows and skip selected ambiguous rows."""
+    excel_path = tmp_path / "missing_unit_resolution.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(["name", "stocks", "item type", "category"])
+    ws.append(["Ethanol", "1.5", "Consumable", "Chemicals-Liquid"])
+    ws.append(["Acetone", "2.0", "Consumable", "Chemicals-Liquid"])
+    ws.append(["Beaker", "5", "Non-Consumable", "Equipment"])
+    wb.save(excel_path)
+
+    flagged = collect_consumable_rows_missing_unit(str(excel_path))
+    by_name = {entry["name"]: entry["row_index"] for entry in flagged}
+
+    imported_count, messages = import_items_from_excel(
+        str(excel_path),
+        editor_name="tester",
+        row_unit_overrides={int(by_name["Ethanol"]): "L"},
+        rows_to_skip={int(by_name["Acetone"])},
+    )
+
+    assert imported_count == 2
+    assert any("skipped by user" in msg.lower() for msg in messages)
+
+    ethanol = db.execute_query(
+        "SELECT size FROM Items WHERE name = ?",
+        ("Ethanol",),
+    )
+    assert ethanol
+    assert ethanol[0]["size"] == "1.5 L"
+
+    ethanol_qty = db.execute_query(
+        """
+        SELECT ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name = ?
+        ORDER BY ib.id DESC
+        LIMIT 1
+        """,
+        ("Ethanol",),
+    )
+    assert ethanol_qty
+    assert ethanol_qty[0]["quantity_received"] == 1500
+
+    acetone = db.execute_query("SELECT id FROM Items WHERE name = ?", ("Acetone",))
+    assert not acetone

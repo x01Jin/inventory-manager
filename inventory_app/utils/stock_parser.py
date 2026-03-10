@@ -5,7 +5,7 @@ Single-purpose functions for parsing free-form 'stocks' cells from imported Exce
 
 Behavior summary:
 - Numeric-only values -> treated as integer quantity (floats coerced to int).
-- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity and size=<matched substring>. Some units are scaled to base usable units (`L` family -> ml, `kg` family -> g) so partial requisitions work with integer values.
+- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity and size=<matched substring>. Some units are scaled to base usable units (`L` family -> ml, `kg` family -> g, `gal/galon` family -> project-standard 1000 scaling) so partial requisitions work with integer values.
 - Packaging counts with piece details ("1 box (100pcs)", "2 packs of 50 pcs") -> quantity is converted to usable pieces (leading count * per-package piece count), with details retained in notes.
 - Other leading counts with words ("2 sets", "10 boxes") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
 - Empty / None -> quantity 0.
@@ -43,6 +43,10 @@ _SIZE_UNITS = {
     "milligram",
     "milligrams",
     "gal",
+    "galon",
+    "galons",
+    "gallon",
+    "gallons",
     "liter",
     "liters",
     "litre",
@@ -88,7 +92,8 @@ _RE_PIECE_COUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:pcs|pieces|pc)\b", re.I)
 
 # Multipliers applied to the numeric part for units that represent larger
 # containers. This keeps requisitions integer-based while allowing partial use.
-# Example: 2.5 L -> 2500 usable units (ml), 1 kilo -> 1000 usable units (g).
+# Example: 2.5 L -> 2500 usable units (ml), 1 kilo -> 1000 usable units (g),
+# 1.1 gal -> 1100 usable units (project-standard conversion behavior).
 _UNIT_MULTIPLIERS = {
     "l": 1000,
     "liter": 1000,
@@ -103,6 +108,11 @@ _UNIT_MULTIPLIERS = {
     "kilos": 1000,
     "kilogram": 1000,
     "kilograms": 1000,
+    "gal": 1000,
+    "galon": 1000,
+    "galons": 1000,
+    "gallon": 1000,
+    "gallons": 1000,
 }
 
 

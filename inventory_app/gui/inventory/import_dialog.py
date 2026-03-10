@@ -6,7 +6,7 @@ for audit and perform import via `inventory_app.services.item_importer` service.
 Uses background threading via QThreadPool to prevent UI freezes during import.
 """
 
-from typing import Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from PyQt6.QtWidgets import (
     QDialog,
@@ -19,9 +19,16 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QGroupBox,
     QProgressBar,
+    QComboBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 from PyQt6.QtCore import pyqtSignal, QObject
-from inventory_app.services.item_importer import import_items_from_excel
+from inventory_app.services.item_importer import (
+    collect_consumable_rows_missing_unit,
+    import_items_from_excel,
+)
 from inventory_app.gui.utils.worker import worker_pool, Worker
 from inventory_app.utils.logger import logger
 
@@ -38,11 +45,19 @@ class ImportWorkerSignals(QObject):
 class ImportWorker(Worker):
     """Worker for import with progress callback support."""
 
-    def __init__(self, file_path: str, editor_name: str):
+    def __init__(
+        self,
+        file_path: str,
+        editor_name: str,
+        row_unit_overrides: Optional[Dict[int, str]] = None,
+        rows_to_skip: Optional[Set[int]] = None,
+    ):
         # Don't call parent init, we handle everything ourselves
         super(Worker, self).__init__()
         self.file_path = file_path
         self.editor_name = editor_name
+        self.row_unit_overrides = row_unit_overrides or {}
+        self.rows_to_skip = rows_to_skip or set()
         self.signals = ImportWorkerSignals()
         self._is_cancelled = False
 
@@ -60,6 +75,8 @@ class ImportWorker(Worker):
                 self.file_path,
                 editor_name=self.editor_name,
                 progress_callback=progress_callback,
+                row_unit_overrides=self.row_unit_overrides,
+                rows_to_skip=self.rows_to_skip,
             )
 
             if not self._is_cancelled:
@@ -84,6 +101,90 @@ class ImportWorker(Worker):
     def cancel(self):
         """Request cancellation."""
         self._is_cancelled = True
+
+
+class MissingConsumableUnitDialog(QDialog):
+    """Resolve consumable rows with decimal stocks that have no explicit unit."""
+
+    UNIT_CHOICES = ["ml", "L", "mg", "g", "kg"]
+
+    def __init__(self, flagged_rows: List[Dict[str, object]], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Resolve Missing Consumable Units")
+        self.setModal(True)
+        self.flagged_rows = flagged_rows
+        self._row_selectors: Dict[int, QComboBox] = {}
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        info = QLabel(
+            "Some consumable rows have decimal stock values without units. "
+            "For each row, choose a unit or keep the default Skip action."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        table = QTableWidget(len(self.flagged_rows), 4)
+        table.setHorizontalHeaderLabels(["Excel Row", "Item", "Stocks", "Action"])
+        vertical_header = table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setVisible(False)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+
+        for i, entry in enumerate(self.flagged_rows):
+            row_index_raw = entry.get("row_index", 0)
+            row_index = int(str(row_index_raw))
+            item_name = str(entry.get("name", ""))
+            stocks = str(entry.get("stocks", ""))
+
+            table.setItem(i, 0, QTableWidgetItem(str(row_index)))
+            table.setItem(i, 1, QTableWidgetItem(item_name))
+            table.setItem(i, 2, QTableWidgetItem(stocks))
+
+            selector = QComboBox()
+            selector.addItem("Skip row", "skip")
+            for unit in self.UNIT_CHOICES:
+                selector.addItem(f"Use {unit}", unit)
+            table.setCellWidget(i, 3, selector)
+            self._row_selectors[row_index] = selector
+
+        header = table.horizontalHeader()
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+
+        layout.addWidget(table)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        continue_button = QPushButton("Continue Import")
+        continue_button.clicked.connect(self.accept)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        buttons_layout.addWidget(continue_button)
+        buttons_layout.addWidget(cancel_button)
+        layout.addLayout(buttons_layout)
+
+        self.resize(760, 420)
+
+    def get_resolution(self) -> Tuple[Dict[int, str], Set[int]]:
+        """Return row-level unit decisions gathered from the dialog table."""
+        row_unit_overrides: Dict[int, str] = {}
+        rows_to_skip: Set[int] = set()
+
+        for row_index, selector in self._row_selectors.items():
+            value = selector.currentData()
+            if value == "skip":
+                rows_to_skip.add(row_index)
+            elif isinstance(value, str) and value.strip():
+                row_unit_overrides[row_index] = value.strip()
+
+        return row_unit_overrides, rows_to_skip
 
 
 class ImportItemsDialog(QDialog):
@@ -121,7 +222,8 @@ class ImportItemsDialog(QDialog):
         notes = QLabel(
             "Notes: Missing text values will be set to 'N/A'. Empty dates will be treated as 'N/A'. "
             "For consumables, unit-bearing stocks like '900ml', '1 L', '2.5 L', '1 kilo', or '125 gms' are auto-read as usable quantities (for example, 900, 1000, 2500, 1000, and 125) while preserving size text. "
-            "Package entries like '1 box (100pcs)' are auto-read as quantity 100."
+            "Package entries like '1 box (100pcs)' are auto-read as quantity 100. "
+            "If consumable rows have decimal stocks with missing units (for example, '1.5'), you will be prompted to choose units or skip those rows before import starts."
         )
         notes.setWordWrap(True)
         info_layout.addWidget(notes)
@@ -206,6 +308,27 @@ class ImportItemsDialog(QDialog):
 
         editor = self.editor_input.text().strip() or "Import"
 
+        row_unit_overrides: Dict[int, str] = {}
+        rows_to_skip: Set[int] = set()
+
+        try:
+            flagged_rows = collect_consumable_rows_missing_unit(self.file_path)
+        except Exception as e:
+            logger.error(f"Failed to scan workbook for missing consumable units: {e}")
+            QMessageBox.critical(
+                self,
+                "Import failed",
+                f"Could not inspect workbook for missing consumable units: {str(e)}",
+            )
+            return
+
+        if flagged_rows:
+            resolver = MissingConsumableUnitDialog(flagged_rows, self)
+            if resolver.exec() != QDialog.DialogCode.Accepted:
+                self.status_label.setText("Import cancelled before start.")
+                return
+            row_unit_overrides, rows_to_skip = resolver.get_resolution()
+
         # Set importing state
         self._is_importing = True
         self._set_importing_state(True)
@@ -213,7 +336,12 @@ class ImportItemsDialog(QDialog):
         self.progress_bar.setValue(0)
 
         # Create custom import worker with progress support
-        self._current_worker = ImportWorker(self.file_path, editor)
+        self._current_worker = ImportWorker(
+            self.file_path,
+            editor,
+            row_unit_overrides=row_unit_overrides,
+            rows_to_skip=rows_to_skip,
+        )
         self._current_worker.signals.progress.connect(self._on_progress)
         self._current_worker.signals.result.connect(self._on_import_complete)
         self._current_worker.signals.error.connect(self._on_import_error)
@@ -239,7 +367,9 @@ class ImportItemsDialog(QDialog):
 
         # Count skipped from messages
         skipped_count = sum(
-            1 for m in messages if "skipping" in m.lower() or "failed" in m.lower()
+            1
+            for m in messages
+            if any(k in m.lower() for k in ("skipping", "skipped", "failed"))
         )
 
         # Update final status

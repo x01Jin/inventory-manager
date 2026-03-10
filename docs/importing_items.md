@@ -7,6 +7,7 @@ This document describes the Excel import feature for adding inventory items in b
 - File: Excel (.xlsx)
 - Minimum required columns: **name**, **stocks**, **item type** (accepts many human variants; header matching is case- and space-insensitive)
 - Optional columns: **category**, **size**, **brand**, **supplier**, **other specifications**, **po number**, **expiration date**, **calibration date**, **acquisition date**
+- Pre-import review: consumable rows with decimal `stocks` and no unit (example: `1.5`) are listed so you can choose a unit (`ml`, `L`, `mg`, `g`, `kg`) or skip each row.
 
 ---
 
@@ -17,8 +18,9 @@ The import runs in a background thread to prevent UI freezing during large impor
 1. Select an Excel file (.xlsx)
 2. Enter editor name for audit trail
 3. Click Import - the operation runs in the background
-4. A progress bar displays real-time status: `[current/total], skipped: X`
-5. A completion message shows total imported and skipped counts
+4. If decimal consumable stocks have missing units, a resolution dialog appears before import starts.
+5. A progress bar displays real-time status: `[current/total], skipped: X`
+6. A completion message shows total imported and skipped counts
 
 The import can be cancelled while in progress by clicking the Cancel button.
 
@@ -45,11 +47,14 @@ The import can be cancelled while in progress by clicking the Cancel button.
 
 - **Name**: Required — rows with missing or empty names are skipped and reported.
 - **Stocks**: The importer accepts a variety of free-form `stocks` values. Parsing rules are:
+  - **Missing-unit review for consumables**: before import runs, rows classified as consumable that have decimal numeric stocks with no explicit unit (for example, `1.5`) are flagged for manual resolution. You can either:
+    - choose a unit from the dropdown (`ml`, `L`, `mg`, `g`, `kg`) so import rewrites the stock value as `<value> <unit>` (example: `1.5` + `L` -> `1.5 L` -> quantity `1500`), or
+    - skip that row.
   - **Numeric counts** (e.g., `2`, `10`) are parsed as integer quantities (floats coerced to int).
   - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **usable quantity with size**: the importer records the matched `size` and calculates an integer usable quantity.
-  - For larger units, the importer converts to base usable units so partial requisitions remain possible with integer quantities: `L/liter/litre/ltr/lt/lts` are converted to ml (`1 L -> 1000`), and `kg/kilo/kilogram` forms are converted to grams (`1 kilo -> 1000`). Units already in smaller forms like `ml` and `g` keep their numeric quantity.
+  - For larger units, the importer converts to base usable units so partial requisitions remain possible with integer quantities: `L/liter/litre/ltr/lt/lts` are converted to ml (`1 L -> 1000`), `gal/galon/gallon` forms follow the same project conversion (`1.1 gal -> 1100`), and `kg/kilo/kilogram` forms are converted to grams (`1 kilo -> 1000`). Units already in smaller forms like `ml` and `g` keep their numeric quantity.
 
-  - **Supported size units** include common volume/mass units such as: `ml`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `l`, `lt`, `lts`, `g`, `gm`, `gms`, `gram`, `grams`, `kg`, `kilo`, `kilos`, `kilogram`, `kilograms`, `mg`, `milligram`, `milligrams`, `gal`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
+  - **Supported size units** include common volume/mass units such as: `ml`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `l`, `lt`, `lts`, `g`, `gm`, `gms`, `gram`, `grams`, `kg`, `kilo`, `kilos`, `kilogram`, `kilograms`, `mg`, `milligram`, `milligrams`, `gal`, `galon`, `gallon`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
 
   - **Package counts with piece details** (e.g., `1 box (100pcs)`, `2 packs of 50 pcs`) are converted to usable stock units using `packages * pieces` (so `1 box (100pcs)` becomes quantity `100`). Piece details are still recorded as notes and appended to `other_specifications`.
   - **Other leading counts with extra info** (e.g., `10 boxes`, `1 set of 8 pieces`) use the leading integer as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
@@ -73,6 +78,7 @@ Notes
 
 - `900ml` → quantity=900, size=`900ml`
 - `1.1 L` → quantity=1100, size=`1.1 L`
+- `1.1 gal` → quantity=1100, size=`1.1 gal`
 - `2.5 L` → quantity=2500, size=`2.5 L`
 - `1 kilo` → quantity=1000, size=`1 kilo`
 - `125 gms` → quantity=125, size=`125 gms`
