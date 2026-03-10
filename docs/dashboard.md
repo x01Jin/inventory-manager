@@ -16,7 +16,7 @@ The dashboard displays nine metric cards providing instant insight into system s
 | **Total Stock** | Aggregate quantity across all non-disposed batches | `SUM(quantity_received) - SUM(consumed) - SUM(disposed) + SUM(returned)` |
 | **Recent Adds** | Items modified in the last 7 days | `COUNT(*) WHERE last_modified >= datetime('now', '-7 days')` |
 | **Low Stock** | Items with stock between 1-9 | `COUNT(*) WHERE current_stock BETWEEN 1 AND 9` |
-| **Expiring Soon** | Items with expiration/disposal dates in the next 30 days | Date <= today + 30 days |
+| **Expiring Soon** | Items currently in status `EXPIRING` | Derived from `item_status_service.get_alert_counts()['expiring']` |
 | **Ongoing Reqs** | Requisitions in requested/active/overdue status | `COUNT(*) WHERE status IN ('requested', 'active', 'overdue')` |
 | **Requested Reqs** | Requisitions awaiting fulfillment | `COUNT(*) WHERE status = 'requested'` |
 | **Active Reqs** | Requisitions currently checked out | `COUNT(*) WHERE status = 'active'` |
@@ -25,11 +25,11 @@ The dashboard displays nine metric cards providing instant insight into system s
 **Notes:**
 
 - Metrics are loaded asynchronously in background threads to prevent UI freezes
-- Query consolidation reduces database roundtrips from 9+ separate queries to 4 optimized queries
+- Metrics use consolidated queries and shared status-service counts to keep dashboard panels consistent
 - Loading state is displayed while metrics compute in the background
 - Total Stock excludes disposed batches and accounts for consumptions, disposals, and returns
 - Low Stock metric uses absolute threshold (1-9); percentage-based thresholds are used in reports only
-- The Expiring Soon metric card is a 30-day snapshot; the Critical Alerts panel uses longer warning windows (180/90 days).
+- Expiring Soon metric and Critical Alerts now share the same status windows (consumables: 180 days, non-consumables: 90 days).
 
 ### Activity Panel
 
@@ -100,7 +100,7 @@ Real-time alerts for items requiring immediate attention:
 - Metrics, activity, and alerts load in parallel using background workers
 - Loading state is shown on metric cards ("...") until data arrives
 - Dashboard uses the WorkerPool with QThreadPool for background execution
-- Query consolidation reduces database roundtrips from 9+ to 4 queries
+- Query consolidation reduces database roundtrips versus per-card loading
 - Workers can be cancelled to prevent stale data from overwriting fresh data
 
 ## Integration with Other Pages
@@ -116,7 +116,7 @@ Real-time alerts for items requiring immediate attention:
 
 The dashboard is read-only and non-configurable. Data sources and thresholds are defined in:
 
-- `inventory_app/gui/dashboard/metrics_worker.py` - Consolidated metrics queries (4 queries vs 9+)
+- `inventory_app/gui/dashboard/metrics_worker.py` - Consolidated metrics queries and status-aligned expiring count
 - `inventory_app/gui/dashboard/metrics.py` - Metric definitions and UI widgets
 - `inventory_app/gui/dashboard/activity.py` - Activity loading and display
 - `inventory_app/gui/dashboard/alerts.py` - Alert loading and display

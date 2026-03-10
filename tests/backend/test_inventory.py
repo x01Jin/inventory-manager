@@ -10,6 +10,7 @@ from inventory_app.services.category_config import (
     get_category_config,
     get_all_category_names,
 )
+from inventory_app.services.item_status_service import item_status_service
 from inventory_app.services.validation_service import ValidationService
 
 
@@ -246,3 +247,77 @@ def test_varied_stock_movements(temp_db):
     for i, (m_type, qty) in enumerate(expected):
         assert rows[i]["movement_type"] == m_type
         assert rows[i]["quantity"] == qty
+
+
+def test_non_consumable_disposal_uses_category_config(temp_db):
+    """Status fallback disposal date must follow category_config policy per category."""
+    today = date.today()
+
+    categories = db.execute_query("SELECT id, name FROM Categories")
+    cat_ids = {row["name"]: row["id"] for row in categories}
+
+    apparatus_acq = (today - timedelta(days=(3 * 365) - 30)).isoformat()
+    models_acq = (today - timedelta(days=(3 * 365) - 30)).isoformat()
+
+    apparatus_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable, acquisition_date) VALUES (?, ?, ?, ?)",
+        ("Apparatus Policy Item", cat_ids["Apparatus"], 0, apparatus_acq),
+        return_last_id=True,
+    )[1]
+    models_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable, acquisition_date) VALUES (?, ?, ?, ?)",
+        ("Model Policy Item", cat_ids["Lab Models"], 0, models_acq),
+        return_last_id=True,
+    )[1]
+
+    assert isinstance(apparatus_id, int)
+    assert isinstance(models_id, int)
+
+    for item_id in (apparatus_id, models_id):
+        db.execute_update(
+            "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+            (item_id, 1, 1, today.isoformat()),
+        )
+
+    apparatus_status = item_status_service.get_item_status(apparatus_id)
+    models_status = item_status_service.get_item_status(models_id)
+
+    assert apparatus_status is not None
+    assert models_status is not None
+    assert "EXPIRING" in apparatus_status.status
+    assert models_status.status == "OK"
+
+
+def test_non_calibration_category_ignores_calibration_alerts(temp_db):
+    """Calibration status should only apply to categories configured for calibration."""
+    today = date.today()
+
+    categories = db.execute_query("SELECT id, name FROM Categories")
+    cat_ids = {row["name"]: row["id"] for row in categories}
+
+    item_id = db.execute_update(
+        """
+        INSERT INTO Items (name, category_id, is_consumable, calibration_date, acquisition_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            "Apparatus Calibration Should Be Ignored",
+            cat_ids["Apparatus"],
+            0,
+            (today - timedelta(days=330)).isoformat(),
+            today.isoformat(),
+        ),
+        return_last_id=True,
+    )[1]
+
+    assert isinstance(item_id, int)
+
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 1, today.isoformat()),
+    )
+
+    status = item_status_service.get_item_status(item_id)
+    assert status is not None
+    assert "CAL_WARNING" not in status.status
+    assert "CAL_DUE" not in status.status

@@ -7,7 +7,7 @@ The Dashboard provides a concise, read-only overview of system state: key metric
 The current Dashboard is composed of four primary panels (your deployment may show a subset):
 
 - **Key Metrics (3×3 grid):** Compact cards with the following metric keys: `Total Items`, `Total Stock`, `Recent Adds`, `Low Stock`, `Expiring Soon`, `Ongoing Reqs`, `Requested Reqs`, `Active Reqs`, `Overdue Reqs`.
-  - *Important definitions:* `Total Stock` is computed from received batches minus consumed/disposed movements plus returns, excluding disposed batches. `Low Stock` (metrics card) is an absolute count of items with current stock < 10 and > 0. `Expiring Soon` counts items with expiration dates within the next 30 days. `Recent Adds` counts items modified in the last 7 days. Requisition counts reflect statuses in the database.
+  - *Important definitions:* `Total Stock` is computed from received batches minus consumed/disposed movements plus returns, excluding disposed batches. `Low Stock` (metrics card) is an absolute count of items with current stock < 10 and > 0. `Expiring Soon` uses shared status logic (`EXPIRING`) so it matches the alerts panel windows (typically 180 days for consumables and 90 days for non-consumables). `Recent Adds` counts items modified in the last 7 days. Requisition counts reflect statuses in the database.
 
 ### Metric definitions (exact, technical)
 
@@ -15,7 +15,7 @@ The current Dashboard is composed of four primary panels (your deployment may sh
 - `Total Stock`: Calculated as SUM(received quantities of non-disposed batches) - SUM(consumed) - SUM(disposed) + SUM(returned).
 - `Recent Adds`: Items with `last_modified` in the last 7 days.
 - `Low Stock` (metric): Items with computed current stock < 10 and > 0 (absolute threshold).
-- `Expiring Soon`: Items with `expiration_date` within the next 30 days.
+- `Expiring Soon`: Items currently in `EXPIRING` status from shared status logic.
 - `Ongoing Reqs`: Requisitions with status IN (`requested`, `active`, `overdue`).
 - `Requested / Active / Overdue Reqs`: Counts of requisitions with the named status.
 

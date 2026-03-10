@@ -36,48 +36,9 @@ Effect:
 
 - Content can drift if only one doc set is updated.
 
-## 5) Calibration Policy Is Implicit, Not Strictly Enforced by Category
-
-Category config marks calibration as required for Equipment only, but status logic checks calibration dates for any non-consumable item when a calibration date exists.
-
-Effect:
-
-- Apparatus/Lab Models/Others can still enter calibration warning/overdue states if a calibration date is manually set.
-- Behavior is valid technically but policy intent is ambiguous.
-
-## 6) Disposal Rules Are Duplicated Across Modules
-
-Category lifespan defaults are defined in `inventory_app/services/category_config.py`, while status evaluation in `inventory_app/services/item_status_service.py` also applies category-name heuristics.
-
-Effect:
-
-- Business rules can drift when one module changes and the other is not updated.
-- Future category additions are higher risk without a single source of truth for lifecycle rules.
-
-## 7) Legacy/Conflicting Comments Still Exist in Status Service
-
-Some comments and constants in `inventory_app/services/item_status_service.py` still reference older wording (for example, mixed Glassware/Apparatus/Equipment phrasing).
-
-Effect:
-
-- Maintainers can misread current business rules while implementing changes.
-- Documentation rewrites can regress if comments are treated as authoritative.
-
-## 8) Dashboard Uses Different "Expiring Soon" Windows Across Panels
-
-The dashboard metric card for `Expiring Soon` currently uses a 30-day cutoff (`metrics_worker.py`), while the Critical Alerts panel uses broader warning windows (180 days for consumables and 90 days for non-consumables/calibration).
-
-Effect:
-
-- Users can see different "expiring" counts on the same page.
-- This behavior is now documented, but product intent is still ambiguous and can cause support confusion.
-
 ## Suggested Priority Order
 
-1. Unify category lifecycle/alert logic into one source of truth used by both editor defaults and status evaluation.
-2. Clarify calibration policy for non-equipment categories and enforce it consistently in UI + status logic.
-3. Decide whether dashboard expiring metrics should match alert windows or remain intentionally different (and standardize naming accordingly).
-4. Decide a single source of truth (or sync process) for user-facing docs.
-5. Rework individual request data contract if activity fields should become optional in that mode.
-6. Add app-level authentication/authorization if shared-device usage is expected.
-7. Plan backend architecture changes for multi-user/server deployments.
+1. Decide a single source of truth (or automated sync process) for user-facing docs.
+2. Rework individual request data contract if activity fields should become optional in that mode.
+3. Add app-level authentication/authorization if shared-device usage is expected.
+4. Plan backend architecture changes for multi-user/server deployments.

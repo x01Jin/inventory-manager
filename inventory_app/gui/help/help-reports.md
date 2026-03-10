@@ -33,7 +33,7 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).
-- **Calibration Due Report:** Non-consumable items with calibration due within the selected window.
+- **Calibration Due Report:** Items in calibration-enabled categories (default: Equipment) with calibration due within the selected window.
 - **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, and reason for editing.
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
 - **Usage by Grade Level:** Usage breakdown by requester grade level and section, showing lab activity name and date. Useful for tracking material usage across different educational groups.

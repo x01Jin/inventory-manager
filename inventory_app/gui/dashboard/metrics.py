@@ -13,6 +13,7 @@ from inventory_app.gui.styles import get_current_theme
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+from inventory_app.services.item_status_service import item_status_service
 
 
 class SkeletonCard(QGroupBox):
@@ -62,7 +63,7 @@ class SkeletonCard(QGroupBox):
 
     def paintEvent(self, a0):
         super().paintEvent(a0)
-        if hasattr(self, '_pulse_value'):
+        if hasattr(self, "_pulse_value"):
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             color = QColor(60, 60, 60)
@@ -186,15 +187,11 @@ class MetricsManager:
                 low_stock_result[0]["count"] if low_stock_result else 0
             )
 
-            # Expiring soon (next 30 days)
-            from datetime import datetime, timedelta
+            # Keep metric windows consistent with alert status logic.
+            alert_counts = item_status_service.get_alert_counts()
+            metrics["expiring_soon"] = alert_counts.get("expiring", 0)
 
-            expiry_date = (datetime.now() + timedelta(days=30)).date().isoformat()
-            expiring_query = "SELECT COUNT(*) as count FROM Items WHERE expiration_date <= ? AND expiration_date IS NOT NULL"
-            expiring_result = db.execute_query(expiring_query, (expiry_date,))
-            metrics["expiring_soon"] = (
-                expiring_result[0]["count"] if expiring_result else 0
-            )
+            from datetime import datetime, timedelta
 
             # Recent additions (last 7 days)
             recent_date = (datetime.now() - timedelta(days=7)).date().isoformat()
@@ -271,7 +268,9 @@ class MetricsManager:
 
         return widget
 
-    def update_metrics_widget(self, metrics_widget, metrics: Optional[Dict[str, int]] = None):
+    def update_metrics_widget(
+        self, metrics_widget, metrics: Optional[Dict[str, int]] = None
+    ):
         """Update the metrics widget with current data."""
         try:
             if metrics is None:

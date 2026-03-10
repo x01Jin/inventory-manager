@@ -155,7 +155,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 - Implemented inventory report types (UI and code):
   - Stock Levels Report — aggregates `Item_Batches` receipts minus `Stock_Movements` consumption/disposal to compute current stock.
   - Expiration Report — items with `expiration_date` within the given range. Addresses beta test requirement #10 for expiration alerts.
-  - Calibration Due Report — items with `calibration_date` within the range. Addresses beta test requirement #11 for calibration alerts.
+  - Calibration Due Report — items in calibration-enabled categories with `calibration_date` within the range (default policy: Equipment). Addresses beta test requirement #11 for calibration alerts.
   - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
@@ -216,7 +216,7 @@ Common Reports
 
 - Stock Levels
 - Expiration
-- Calibration Due
+- Calibration Due (calibration-enabled categories only)
 - Trends (grouping by item or category; time-series heatmap/top-N). Default granularity is `Auto` (uses the same smart granularity rules as Usage reports); manual granularity selection is still supported.
 - **Update History Report** - Shows history of edits to inventory items including editor name, timestamp, and reason
 - **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them

@@ -9,12 +9,14 @@ from datetime import datetime, timedelta
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.movement_types import MovementType
+from inventory_app.services.item_status_service import item_status_service
 
 
 def get_consolidated_metrics() -> Dict[str, Any]:
     """
     Get all dashboard metrics in consolidated database queries.
-    Consolidates 9+ separate queries into 3 optimized queries.
+    Consolidates most dashboard metrics into optimized DB queries and
+    sources alert-related counts from the shared status service.
 
     Returns:
         Dictionary with all metric values
@@ -79,11 +81,10 @@ def get_consolidated_metrics() -> Dict[str, Any]:
             metrics["total_stock"] = stock_result[0]["total_stock"] or 0
             metrics["low_stock"] = stock_result[0]["low_stock"] or 0
 
-        # Query 3: Expiring items count
-        expiry_date = (today + timedelta(days=30)).isoformat()
-        expiring_query = "SELECT COUNT(*) as count FROM Items WHERE expiration_date <= ? AND expiration_date IS NOT NULL"
-        expiring_result = db.execute_query(expiring_query, (expiry_date,))
-        metrics["expiring_soon"] = expiring_result[0]["count"] if expiring_result else 0
+        # Expiring count is sourced from the shared status service so dashboard
+        # metric windows match the alerts panel logic.
+        alert_counts = item_status_service.get_alert_counts()
+        metrics["expiring_soon"] = alert_counts.get("expiring", 0)
 
         # Query 4: Requisition counts (all statuses in one query)
         reqs_query = """

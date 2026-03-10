@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone, date
 from inventory_app.database.connection import db
 from inventory_app.utils.activity_logger import ActivityLogger
 from inventory_app.gui.dashboard.metrics import MetricsManager
+from inventory_app.gui.dashboard.metrics_worker import get_consolidated_metrics
 from inventory_app.gui.reports.data_sources import (
     get_expiration_data,
     get_calibration_due_data,
@@ -115,9 +116,12 @@ def test_alert_data_retrieval(temp_db):
     assert any(str(d.get("Item Name", "")).lower() == "expiring item" for d in exp_data)
 
     # Insert an item needing calibration
+    equipment_id = db.execute_query(
+        "SELECT id FROM Categories WHERE name = ?", ("Equipment",)
+    )[0]["id"]
     cal_id = db.execute_update(
         "INSERT INTO Items (name, category_id, calibration_date) VALUES (?, ?, ?)",
-        ("Calib Item", 1, (today + timedelta(days=30)).isoformat()),
+        ("Calib Item", equipment_id, (today + timedelta(days=30)).isoformat()),
         return_last_id=True,
     )[1]
     # Must have stock to show in alerts
@@ -154,3 +158,63 @@ def test_activity_log_triggers(temp_db):
     total = db.execute_query("SELECT COUNT(*) as count FROM Activity_Log")[0]["count"]
     # Trigger from schema.sql should keep it at 20
     assert total <= 20
+
+
+def test_dashboard_expiring_metric_uses_status_windows(temp_db):
+    """Expiring metric should follow item status windows, not a fixed 30-day SQL cutoff."""
+    today = date.today()
+
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, expiration_date) VALUES (?, ?, ?)",
+        ("120-Day Consumable", 1, (today + timedelta(days=120)).isoformat()),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 5, today.isoformat()),
+    )
+
+    consolidated = get_consolidated_metrics()
+    manager_metrics = MetricsManager().get_all_metrics()
+
+    assert consolidated["expiring_soon"] >= 1
+    assert manager_metrics["expiring_soon"] >= 1
+
+
+def test_calibration_report_filters_to_calibration_categories(temp_db):
+    """Calibration due report should include only categories configured for calibration."""
+    today = date.today()
+
+    categories = db.execute_query("SELECT id, name FROM Categories")
+    cat_ids = {row["name"]: row["id"] for row in categories}
+
+    equipment_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, calibration_date) VALUES (?, ?, ?)",
+        (
+            "Equipment Cal Item",
+            cat_ids["Equipment"],
+            (today + timedelta(days=30)).isoformat(),
+        ),
+        return_last_id=True,
+    )[1]
+    apparatus_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, calibration_date) VALUES (?, ?, ?)",
+        (
+            "Apparatus Cal Item",
+            cat_ids["Apparatus"],
+            (today + timedelta(days=30)).isoformat(),
+        ),
+        return_last_id=True,
+    )[1]
+
+    for item_id in (equipment_id, apparatus_id):
+        db.execute_update(
+            "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+            (item_id, 1, 1, today.isoformat()),
+        )
+
+    rows = get_calibration_due_data(today, today + timedelta(days=180))
+    item_names = {str(r.get("Item Name", "")).lower() for r in rows}
+
+    assert "equipment cal item" in item_names
+    assert "apparatus cal item" not in item_names

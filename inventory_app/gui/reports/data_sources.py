@@ -10,6 +10,12 @@ from inventory_app.gui.reports.query_builder import (
 from inventory_app.utils.logger import logger
 from inventory_app.gui.reports.report_utils import date_formatter
 from inventory_app.services.movement_types import MovementType
+from inventory_app.services.category_config import DEFAULT_CATEGORIES
+
+
+def _get_calibration_category_names() -> List[str]:
+    """Return category names that should participate in calibration reporting."""
+    return [c.name for c in DEFAULT_CATEGORIES if c.has_calibration]
 
 
 def get_dynamic_report_data(
@@ -215,7 +221,7 @@ def get_trends_data(
             result_rows = rows
 
         result_rows = sorted(
-            result_rows, key=lambda r: (r.get("TOTAL QUANTITY") or 0), reverse=True
+            result_rows, key=lambda r: r.get("TOTAL QUANTITY") or 0, reverse=True
         )
 
         if top_n and isinstance(top_n, int):
@@ -334,7 +340,7 @@ def get_low_stock_data(
             if current <= int(original * pct_thresh):
                 filtered.append(r)
 
-        filtered = sorted(filtered, key=lambda r: (r.get("Current Stock") or 0))
+        filtered = sorted(filtered, key=lambda r: r.get("Current Stock") or 0)
         return filtered
 
     except Exception as e:
@@ -398,6 +404,11 @@ def get_calibration_due_data(
     Items with 0 stock are assumed to be depleted/disposed and should not appear in alerts.
     """
     try:
+        calibration_categories = _get_calibration_category_names()
+        if not calibration_categories:
+            return []
+
+        category_placeholders = ",".join("?" for _ in calibration_categories)
         query = """
             SELECT
                 i.name AS "Item Name",
@@ -429,7 +440,9 @@ def get_calibration_due_data(
             ) stock ON i.id = stock.item_id
             WHERE i.calibration_date BETWEEN ? AND ?
             AND COALESCE(stock.total_stock, 0) > 0
+            AND c.name IN ({})
             """
+        query = query.format(category_placeholders)
 
         params = [
             MovementType.CONSUMPTION.value,
@@ -437,6 +450,7 @@ def get_calibration_due_data(
             MovementType.RETURN.value,
             start_date.isoformat(),
             end_date.isoformat(),
+            *calibration_categories,
         ]
 
         if category_filter:

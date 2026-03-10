@@ -2,11 +2,9 @@
 Item status service for calculating item status based on expiration and calibration dates.
 Handles status calculation for consumables and non-consumables with proper alert logic.
 
-Alert thresholds per beta test requirements:
-- Chemicals: 6 months before expiration
-- Glassware: 3 years of usage
-- Equipment/Apparatuses: 5 years of usage
-- Calibration: 3 months before due date (yearly calibration)
+Policy source of truth:
+- Category lifecycle and calibration applicability come from category_config.
+- Status calculations consume those rules instead of duplicating category heuristics.
 """
 
 from typing import Dict, List, Optional
@@ -16,12 +14,12 @@ from dataclasses import dataclass
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.services.stock_calculation_service import stock_calculation_service
+from inventory_app.services.category_config import get_category_config
 
 
-# Alert threshold constants (in days) per beta test requirements
+# Alert threshold constants (in days)
 CHEMICAL_EXPIRY_WARNING_DAYS = 180  # 6 months before expiration
-GLASSWARE_DISPOSAL_YEARS = 3  # 3 years of usage
-EQUIPMENT_DISPOSAL_YEARS = 5  # 5 years of usage
+NON_CONSUMABLE_WARNING_DAYS = 90  # 3 months before disposal target
 CALIBRATION_WARNING_DAYS = 90  # 3 months before calibration due
 CALIBRATION_INTERVAL_DAYS = 365  # Yearly calibration
 
@@ -322,9 +320,8 @@ class ItemStatusService:
         Calculate status for non-consumable items.
         Non-consumables can have two statuses: calibration and disposal (expiration).
 
-        Disposal thresholds per beta test requirements:
-        - Glassware/Apparatus: 3 years from acquisition
-        - Equipment: 5 years from acquisition
+        Disposal thresholds and calibration applicability are sourced from
+        category_config.
 
         Args:
             item_id: Item ID
@@ -337,14 +334,19 @@ class ItemStatusService:
         calibration_date = item_data.get("calibration_date")
         expiration_date = item_data.get("expiration_date")  # This is the disposal date
         acquisition_date = item_data.get("acquisition_date")
-        category_name = item_data.get("category_name", "").lower()
+        category_name = item_data.get("category_name", "")
+        category_config = get_category_config(category_name) if category_name else None
+        if category_config is None:
+            # Fallback keeps unknown/non-standard categories on a conservative,
+            # non-calibrated lifecycle policy.
+            category_config = get_category_config("Others")
 
         statuses = []
         reference_dates = []
         days_list = []
 
-        # Check calibration status
-        if calibration_date:
+        # Calibration status is only applicable for categories that require it.
+        if category_config and category_config.has_calibration and calibration_date:
             try:
                 cal_date = date.fromisoformat(calibration_date)
                 # Next calibration is 1 year after last calibration
@@ -365,11 +367,6 @@ class ItemStatusService:
                     f"Invalid calibration date format for item {item_id}: {calibration_date}"
                 )
 
-        # Determine disposal threshold based on category (beta test requirement #10)
-        disposal_years = EQUIPMENT_DISPOSAL_YEARS  # Default: 5 years
-        if "apparatus" in category_name or "glass" in category_name:
-            disposal_years = GLASSWARE_DISPOSAL_YEARS  # 3 years for glassware/apparatus
-
         # Check disposal status (stored in expiration_date)
         disposal_date = None
         if expiration_date:
@@ -379,11 +376,11 @@ class ItemStatusService:
                 logger.warning(
                     f"Invalid disposal date format for item {item_id}: {expiration_date}"
                 )
-        elif acquisition_date:
-            # No disposal date set - use category-based default from acquisition
+        elif acquisition_date and category_config:
+            # No disposal date set - derive from category lifecycle policy.
             try:
                 acq_date = date.fromisoformat(acquisition_date)
-                disposal_date = acq_date + timedelta(days=disposal_years * 365)
+                disposal_date = category_config.calculate_expiration_date(acq_date)
             except (ValueError, TypeError):
                 logger.warning(
                     f"Invalid acquisition date format for item {item_id}: {acquisition_date}"
@@ -396,7 +393,7 @@ class ItemStatusService:
                 statuses.append("EXPIRED")  # Disposal overdue
                 reference_dates.append(disposal_date)
                 days_list.append(days_until_disp)
-            elif days_until_disp <= 90:  # 3 months warning
+            elif days_until_disp <= NON_CONSUMABLE_WARNING_DAYS:
                 statuses.append("EXPIRING")  # Disposal approaching
                 reference_dates.append(disposal_date)
                 days_list.append(days_until_disp)
