@@ -126,27 +126,19 @@ class MainWindow(QMainWindow):
 
     def _refresh_page_data(self, page_index: int) -> None:
         """Refresh page data if needed."""
-        if page_index == 0 and hasattr(
-            self.dashboard_page, "refresh_data"
-        ):
+        if page_index == 0 and hasattr(self.dashboard_page, "refresh_data"):
             self.dashboard_page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed dashboard data")
-        elif page_index == 1 and hasattr(
-            self.inventory_page, "refresh_data"
-        ):
+        elif page_index == 1 and hasattr(self.inventory_page, "refresh_data"):
             self.inventory_page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed inventory data")
-        elif page_index == 2 and hasattr(
-            self.requisitions_page, "refresh_data"
-        ):
+        elif page_index == 2 and hasattr(self.requisitions_page, "refresh_data"):
             self.requisitions_page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed requisitions data")
-        elif page_index == 3 and hasattr(
-            self.requesters_page, "refresh_data"
-        ):
+        elif page_index == 3 and hasattr(self.requesters_page, "refresh_data"):
             self.requesters_page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed requesters data")

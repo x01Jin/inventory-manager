@@ -146,12 +146,16 @@ class ValidationService:
             expected_return = requisition_data.get("date_return")
 
         if not isinstance(expected_request, str) or not expected_request.strip():
-            self._last_error = "Missing or invalid required requisition field: expected_request"
+            self._last_error = (
+                "Missing or invalid required requisition field: expected_request"
+            )
             logger.error(self._last_error)
             return False
 
         if not isinstance(expected_return, str) or not expected_return.strip():
-            self._last_error = "Missing or invalid required requisition field: expected_return"
+            self._last_error = (
+                "Missing or invalid required requisition field: expected_return"
+            )
             logger.error(self._last_error)
             return False
 

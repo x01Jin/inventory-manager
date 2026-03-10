@@ -60,8 +60,12 @@ def test_main_window_reports_refresh_targets_reports_page(qtbot, monkeypatch):
     reports_calls = []
     help_calls = []
 
-    monkeypatch.setattr(window.reports_page, "refresh_data", lambda: reports_calls.append(1))
-    monkeypatch.setattr(window.help_page, "load_current_tab", lambda: help_calls.append(1))
+    monkeypatch.setattr(
+        window.reports_page, "refresh_data", lambda: reports_calls.append(1)
+    )
+    monkeypatch.setattr(
+        window.help_page, "load_current_tab", lambda: help_calls.append(1)
+    )
 
     window._refresh_page_data(4)
 
@@ -75,7 +79,9 @@ def test_main_window_help_refresh_targets_help_page(qtbot, monkeypatch):
     qtbot.addWidget(window)
 
     help_calls = []
-    monkeypatch.setattr(window.help_page, "load_current_tab", lambda: help_calls.append(1))
+    monkeypatch.setattr(
+        window.help_page, "load_current_tab", lambda: help_calls.append(1)
+    )
 
     window._refresh_page_data(6)
 

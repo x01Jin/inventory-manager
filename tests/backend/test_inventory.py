@@ -178,13 +178,14 @@ def test_cascade_delete_integrity(temp_db):
         "SELECT * FROM Stock_Movements WHERE item_id = ?", (item_id,)
     )
 
+
 def test_varied_stock_movements(temp_db):
     """Verify all types of stock movements in StockMovementService."""
     from inventory_app.services.stock_movement_service import StockMovementService
     from inventory_app.services.movement_types import MovementType
-    
+
     svc = StockMovementService()
-    
+
     # Setup item and batch
     item_id = db.execute_update(
         "INSERT INTO Items (name, category_id) VALUES (?, ?)",
@@ -196,7 +197,7 @@ def test_varied_stock_movements(temp_db):
         "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
         (item_id, 1, 100, "2025-01-01"),
     )
-    
+
     # Create requester and requisition for FK satisfaction
     reqr_id = db.execute_update(
         "INSERT INTO Requesters (name) VALUES (?)", ("MoveTester",), return_last_id=True
@@ -204,37 +205,44 @@ def test_varied_stock_movements(temp_db):
     req_id = db.execute_update(
         "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (reqr_id, "2025-01-01 00:00:00", "2025-01-01 00:00:00", "active", "Testing", "2025-01-01"),
+        (
+            reqr_id,
+            "2025-01-01 00:00:00",
+            "2025-01-01 00:00:00",
+            "active",
+            "Testing",
+            "2025-01-01",
+        ),
         return_last_id=True,
     )[1]
     assert req_id is not None
 
     # 1. RESERVATION
     svc.record_reservation(item_id, 10, source_id=req_id, note="tester")
-    
+
     # 2. RETURN
     svc.record_return(item_id, 5, source_id=req_id, note="tester")
-    
+
     # 3. DISPOSAL
     svc.record_disposal(item_id, 2, source_id=None, note="tester")
-    
+
     # 4. REQUEST
     # Create another requisition for request if needed, or use the same one
     svc.record_request(item_id, 3, source_id=req_id, note="tester")
-    
+
     # Verify records exist with correct types
     rows = db.execute_query(
         "SELECT movement_type, quantity FROM Stock_Movements WHERE item_id = ? ORDER BY id",
-        (item_id,)
+        (item_id,),
     )
-    
+
     expected = [
         (MovementType.RESERVATION.value, 10),
         (MovementType.RETURN.value, 5),
         (MovementType.DISPOSAL.value, 2),
         (MovementType.REQUEST.value, 3),
     ]
-    
+
     for i, (m_type, qty) in enumerate(expected):
         assert rows[i]["movement_type"] == m_type
         assert rows[i]["quantity"] == qty
