@@ -10,7 +10,7 @@ Supports progress callbacks for async UI updates.
 from typing import List, Tuple, Any, Optional, Callable
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
-from inventory_app.database.models import Item, Category
+from inventory_app.database.models import Item
 from inventory_app.utils.logger import logger
 from inventory_app.database.connection import db
 from datetime import datetime, date
@@ -324,10 +324,13 @@ def import_items_from_excel(
             calibration_date = _parse_date(row_data.get("calibration_date"))
             acquisition_date = _parse_date(row_data.get("acquisition_date"))
 
-            # Resolve category: try to match existing Category by name (case-insensitive),
-            # otherwise create it. If no category provided, use or create 'Uncategorized'.
+            # Resolve category: try to match existing Category by name (case-insensitive).
+            # Categories are fixed and read-only (as of v0.7.0b); unknown categories are
+            # mapped to 'Uncategorized'. If no category provided or value is empty/N/A,
+            # also use 'Uncategorized'.
             raw_category = row_data.get("category")
             try:
+                category_id = None
                 if raw_category and str(raw_category).strip().upper() not in (
                     "",
                     "N/A",
@@ -340,11 +343,14 @@ def import_items_from_excel(
                     if rows:
                         category_id = rows[0]["id"]
                     else:
-                        cat = Category(name=cat_name)
-                        cat.save()
-                        category_id = cat.id
-                else:
-                    # Use or create 'Uncategorized'
+                        # Category doesn't exist; log and map to Uncategorized
+                        logger.debug(
+                            f"Category '{cat_name}' not found; mapping to 'Uncategorized'"
+                        )
+
+                # If no category was matched or if the provided category doesn't exist,
+                # use 'Uncategorized'
+                if category_id is None:
                     rows = db.execute_query(
                         "SELECT id FROM Categories WHERE name = ? COLLATE NOCASE",
                         ("Uncategorized",),
@@ -352,11 +358,14 @@ def import_items_from_excel(
                     if rows:
                         category_id = rows[0]["id"]
                     else:
-                        cat = Category(name="Uncategorized")
-                        cat.save()
-                        category_id = cat.id
+                        # Fallback to first available category if Uncategorized doesn't exist
+                        fallback = db.execute_query(
+                            "SELECT id FROM Categories ORDER BY id LIMIT 1"
+                        )
+                        if fallback:
+                            category_id = fallback[0]["id"]
             except Exception as e:
-                logger.error(f"Failed to resolve/create category '{raw_category}': {e}")
+                logger.error(f"Failed to resolve category '{raw_category}': {e}")
                 # As a final fallback, use first category id if available
                 fallback = db.execute_query(
                     "SELECT id FROM Categories ORDER BY id LIMIT 1"

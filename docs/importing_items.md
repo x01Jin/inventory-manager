@@ -78,9 +78,14 @@ Notes
 
 ## Category handling 🗂️
 
-- If the `category` column is present and contains a value, the importer tries to find an existing Category by name (case-insensitive). If not found, it creates a new Category with that name.
-- If the `category` column is empty or contains `N/A`, the importer will use (and create if necessary) the `Uncategorized` category.
-- This approach prevents foreign-key constraint failures and ensures items always have a valid `category_id` in the `Items` table.
+Categories in the inventory system are fixed and read-only. When importing items:
+
+- If the `category` column contains a value that matches an existing category (case-insensitive), that category is used.
+- If the category value does not match any existing category, the item is assigned to the `Uncategorized` category.
+- If the `category` column is empty or contains `N/A`, the item is assigned to the `Uncategorized` category.
+- This approach ensures items always have a valid `category_id` and prevents foreign-key constraint failures.
+
+**Note:** To use custom categories, they must be configured in the system before importing items.
 
 ---
 
