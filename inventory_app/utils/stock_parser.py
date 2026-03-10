@@ -5,7 +5,7 @@ Single-purpose functions for parsing free-form 'stocks' cells from imported Exce
 
 Behavior summary:
 - Numeric-only values -> treated as integer quantity (floats coerced to int).
-- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity: quantity=<numeric part> and size=<matched substring>.
+- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity and size=<matched substring>. Some units are scaled to base usable units (`L` family -> ml, `kg` family -> g) so partial requisitions work with integer values.
 - Packaging counts with piece details ("1 box (100pcs)", "2 packs of 50 pcs") -> quantity is converted to usable pieces (leading count * per-package piece count), with details retained in notes.
 - Other leading counts with words ("2 sets", "10 boxes") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
 - Empty / None -> quantity 0.
@@ -22,10 +22,26 @@ from typing import Dict, Any
 # Units considered to be size indicators (volume/mass). Case-insensitive.
 _SIZE_UNITS = {
     "ml",
+    "milliliter",
+    "milliliters",
+    "millilitre",
+    "millilitres",
     "l",
+    "lt",
+    "lts",
     "g",
+    "gm",
+    "gms",
+    "gram",
+    "grams",
     "kg",
+    "kilo",
+    "kilos",
+    "kilogram",
+    "kilograms",
     "mg",
+    "milligram",
+    "milligrams",
     "gal",
     "liter",
     "liters",
@@ -70,6 +86,25 @@ _RE_LEADING_COUNT_WITH_UNIT = re.compile(r"^\s*(\d+)\s*([a-z]+)\b", re.I)
 # Regex to capture a piece count mention, e.g. '100pcs' or '50 pieces'
 _RE_PIECE_COUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:pcs|pieces|pc)\b", re.I)
 
+# Multipliers applied to the numeric part for units that represent larger
+# containers. This keeps requisitions integer-based while allowing partial use.
+# Example: 2.5 L -> 2500 usable units (ml), 1 kilo -> 1000 usable units (g).
+_UNIT_MULTIPLIERS = {
+    "l": 1000,
+    "liter": 1000,
+    "liters": 1000,
+    "litre": 1000,
+    "litres": 1000,
+    "ltr": 1000,
+    "lt": 1000,
+    "lts": 1000,
+    "kg": 1000,
+    "kilo": 1000,
+    "kilos": 1000,
+    "kilogram": 1000,
+    "kilograms": 1000,
+}
+
 
 def parse_stock_value(raw: Any) -> Dict[str, Any]:
     """Parse a raw 'stocks' cell and return structured info.
@@ -100,6 +135,7 @@ def parse_stock_value(raw: Any) -> Dict[str, Any]:
     # First try to find a number with a recognized size unit anywhere in the string.
     # For values like '900ml', use the numeric part as stock quantity so
     # consumables can be requested/returned in partial usable amounts.
+    # For larger units, convert to base usable units (e.g., '1 L' -> 1000).
     for m in _RE_NUMBER_WITH_UNIT.finditer(s):
         unit = m.group(2)
         if unit.lower() in _SIZE_UNITS:
@@ -108,7 +144,8 @@ def parse_stock_value(raw: Any) -> Dict[str, Any]:
             start, end = m.span()
             size_substr = s[start:end]
             qty_raw = m.group(1)
-            quantity = int(float(qty_raw))
+            multiplier = _UNIT_MULTIPLIERS.get(unit.lower(), 1)
+            quantity = int(float(qty_raw) * multiplier)
             return {"quantity": quantity, "size": size_substr.strip(), "notes": None}
 
     # If no size units found, try for a leading integer quantity

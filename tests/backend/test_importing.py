@@ -25,6 +25,18 @@ def test_stock_string_parsing():
     assert info["quantity"] == 900
     assert info["size"] == "900ml"
 
+    info = parse_stock_value("2.5 L")
+    assert info["quantity"] == 2500
+    assert info["size"] == "2.5 L"
+
+    info = parse_stock_value("1 kilo")
+    assert info["quantity"] == 1000
+    assert info["size"] == "1 kilo"
+
+    info = parse_stock_value("125 gms")
+    assert info["quantity"] == 125
+    assert info["size"] == "125 gms"
+
     info = parse_stock_value("10 boxes")
     assert info["quantity"] == 10
     assert info["size"] is None
@@ -55,6 +67,8 @@ def test_excel_importer_logic(temp_db, tmp_path):
     ws.append(["Item B", "500ml", "TA, Consumables", "Chemicals-Liquid"])
     ws.append(["Item C", "5", "Equipment", "Equipment"])
     ws.append(["Item D", "1 box (100pcs)", "Consumables", "Consumables"])
+    ws.append(["Item E", "1 kilo", "Consumables", "Chemicals-Solid"])
+    ws.append(["Item F", "2.5 L", "Consumables", "Chemicals-Liquid"])
     wb.save(excel_path)
 
     # Run import
@@ -62,11 +76,11 @@ def test_excel_importer_logic(temp_db, tmp_path):
         str(excel_path), editor_name="tester"
     )
 
-    assert imported_count == 4
+    assert imported_count == 6
 
     # Verify DB state
     rows = db.execute_query("SELECT name, is_consumable, size FROM Items ORDER BY name")
-    assert len(rows) == 4
+    assert len(rows) == 6
 
     # Item A: Consumable = 1
     assert rows[0]["name"] == "Item A"
@@ -116,6 +130,44 @@ def test_excel_importer_logic(temp_db, tmp_path):
     )
     assert item_d_specs
     assert "(100pcs)" in (item_d_specs[0]["other_specifications"] or "")
+
+    # Item E: Alternate metric alias in stocks should populate size and stock quantity.
+    item_e = db.execute_query("SELECT size FROM Items WHERE name = ?", ("Item E",))
+    assert item_e
+    assert "kilo" in (item_e[0]["size"] or "").lower()
+
+    item_e_qty = db.execute_query(
+        """
+        SELECT ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name = ?
+        ORDER BY ib.id DESC
+        LIMIT 1
+        """,
+        ("Item E",),
+    )
+    assert item_e_qty
+    assert item_e_qty[0]["quantity_received"] == 1000
+
+    # Item F: Liter values should be converted to ml-equivalent usable units.
+    item_f = db.execute_query("SELECT size FROM Items WHERE name = ?", ("Item F",))
+    assert item_f
+    assert item_f[0]["size"] == "2.5 L"
+
+    item_f_qty = db.execute_query(
+        """
+        SELECT ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name = ?
+        ORDER BY ib.id DESC
+        LIMIT 1
+        """,
+        ("Item F",),
+    )
+    assert item_f_qty
+    assert item_f_qty[0]["quantity_received"] == 2500
 
 
 def test_importer_edge_cases(temp_db, tmp_path):
