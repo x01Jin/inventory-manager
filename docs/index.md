@@ -36,6 +36,9 @@ If you want feature-by-feature pages, these are still available:
 - [Reports](reports.md)
 - [Settings](settings.md)
 - [General Help](help-general.md)
+- [Importing Items](importing_items.md)
+- [Instruction Manual](instruction-manual.md)
+- [Reference](reference.md)
 
 ## View Docs Locally
 
