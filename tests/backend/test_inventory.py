@@ -112,7 +112,7 @@ def test_validation_service_logic(temp_db):
     start = datetime.now()
     end = start + timedelta(hours=2)
     requisition_data = {
-        "date_requested": start.isoformat(),
+        "expected_request": start.isoformat(),
         "expected_return": end.isoformat(),
         "lab_activity_name": "Test",
         "lab_activity_date": date.today().isoformat(),
@@ -125,6 +125,29 @@ def test_validation_service_logic(temp_db):
     assert svc.validate_requisition_creation(1, requisition_data, items_data) is False
     error = svc.get_last_error()
     assert error is not None and "after" in error
+
+    # Invalid: required expected_return missing
+    requisition_data["expected_return"] = ""
+    assert svc.validate_requisition_creation(1, requisition_data, items_data) is False
+    error = svc.get_last_error()
+    assert error is not None and "expected_return" in error
+
+
+def test_validation_service_accepts_legacy_requisition_date_keys(temp_db):
+    """Legacy date_requested/date_return keys should still validate for compatibility."""
+    svc = ValidationService()
+
+    start = datetime.now()
+    end = start + timedelta(hours=2)
+    requisition_data = {
+        "date_requested": start.isoformat(),
+        "date_return": end.isoformat(),
+        "lab_activity_name": "Compatibility Test",
+        "lab_activity_date": date.today().isoformat(),
+    }
+    items_data = [{"item_id": 1, "quantity_requested": 1}]
+
+    assert svc.validate_requisition_creation(1, requisition_data, items_data) is True
 
 
 def test_cascade_delete_integrity(temp_db):

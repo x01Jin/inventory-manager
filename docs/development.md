@@ -43,9 +43,10 @@ Tests include backend and GUI flows (`pytest-qt`).
 If you add or change fields:
 
 1. Update `inventory_app/database/schema.sql`.
-2. Add migration support in `inventory_app/database/migrations` as needed.
-3. Update affected models/services/tests.
-4. Update docs that describe the changed behavior.
+2. Add a numbered migration in `inventory_app/database/migrations` as needed.
+3. Keep `001_baseline_schema.py` as the baseline marker; new migrations should start at `002_*`.
+4. Update affected models/services/tests.
+5. Update docs that describe the changed behavior.
 
 ## Debugging
 

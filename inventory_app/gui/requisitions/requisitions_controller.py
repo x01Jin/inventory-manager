@@ -300,16 +300,28 @@ class RequisitionsController:
 
             req_dict = dict(rows[0])
             # Convert dates with error handling
-            if req_dict.get("date_requested"):
+            if req_dict.get("expected_request"):
                 try:
-                    req_dict["date_requested"] = date.fromisoformat(
-                        req_dict["date_requested"]
+                    req_dict["expected_request"] = datetime.fromisoformat(
+                        req_dict["expected_request"]
                     )
                 except (ValueError, TypeError):
                     logger.warning(
-                        f"Invalid date_requested format for requisition {requisition_id}: {req_dict['date_requested']}"
+                        "Invalid expected_request format for requisition "
+                        f"{requisition_id}: {req_dict['expected_request']}"
                     )
-                    req_dict["date_requested"] = date.today()
+                    req_dict["expected_request"] = datetime.now()
+            if req_dict.get("expected_return"):
+                try:
+                    req_dict["expected_return"] = datetime.fromisoformat(
+                        req_dict["expected_return"]
+                    )
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "Invalid expected_return format for requisition "
+                        f"{requisition_id}: {req_dict['expected_return']}"
+                    )
+                    req_dict["expected_return"] = datetime.now()
             if req_dict.get("lab_activity_date"):
                 try:
                     req_dict["lab_activity_date"] = date.fromisoformat(

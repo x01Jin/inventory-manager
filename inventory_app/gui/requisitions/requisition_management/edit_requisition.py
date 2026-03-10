@@ -280,7 +280,7 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
             svc = ValidationService()
             requisition_data = {
-                "date_requested": expected_request.isoformat()
+                "expected_request": expected_request.isoformat()
                 if expected_request
                 else "",
                 "expected_return": expected_return.isoformat()

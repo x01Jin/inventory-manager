@@ -50,3 +50,33 @@ def test_help_page_tabs_and_content(qtbot):
     tab_name = hp.tab_widget.tabText(0)
     viewer = hp.viewers[tab_name]
     assert viewer.toPlainText() or viewer.toHtml()
+
+
+def test_main_window_reports_refresh_targets_reports_page(qtbot, monkeypatch):
+    """Reports page refresh should call reports page hook, not help page hook."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    reports_calls = []
+    help_calls = []
+
+    monkeypatch.setattr(window.reports_page, "refresh_data", lambda: reports_calls.append(1))
+    monkeypatch.setattr(window.help_page, "load_current_tab", lambda: help_calls.append(1))
+
+    window._refresh_page_data(4)
+
+    assert len(reports_calls) == 1
+    assert len(help_calls) == 0
+
+
+def test_main_window_help_refresh_targets_help_page(qtbot, monkeypatch):
+    """Help page refresh should trigger help tab reload on help index."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    help_calls = []
+    monkeypatch.setattr(window.help_page, "load_current_tab", lambda: help_calls.append(1))
+
+    window._refresh_page_data(6)
+
+    assert len(help_calls) == 1

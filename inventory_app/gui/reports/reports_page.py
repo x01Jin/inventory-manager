@@ -649,6 +649,14 @@ class ReportsPage(QWidget):
         report_types = ["usage", "inventory", "trends"]
         self.current_report_type = report_types[index]
 
+    def refresh_data(self):
+        """Refresh report page dynamic selector data."""
+        try:
+            self.on_usage_report_type_changed()
+            self.on_usage_filter_type_changed()
+        except Exception as e:
+            logger.error(f"Failed to refresh reports page data: {e}")
+
     def on_usage_report_type_changed(self):
         """Handle usage report type dropdown changes."""
         report_type = self.usage_report_type.currentData()

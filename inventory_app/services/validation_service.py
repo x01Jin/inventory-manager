@@ -128,10 +128,30 @@ class ValidationService:
 
     def _validate_requisition_details(self, requisition_data: Dict) -> bool:
         """Validate requisition details."""
-        required_fields = ["date_requested", "lab_activity_name", "lab_activity_date"]
+        required_fields = ["lab_activity_name", "lab_activity_date"]
 
         if not isinstance(requisition_data, dict):
             self._last_error = "Invalid requisition data"
+            logger.error(self._last_error)
+            return False
+
+        expected_request = requisition_data.get("expected_request")
+        if not isinstance(expected_request, str) or not expected_request.strip():
+            # Backward compatibility for legacy payloads still using date_requested.
+            expected_request = requisition_data.get("date_requested")
+
+        expected_return = requisition_data.get("expected_return")
+        if not isinstance(expected_return, str) or not expected_return.strip():
+            # Backward compatibility for legacy payloads still using date_return.
+            expected_return = requisition_data.get("date_return")
+
+        if not isinstance(expected_request, str) or not expected_request.strip():
+            self._last_error = "Missing or invalid required requisition field: expected_request"
+            logger.error(self._last_error)
+            return False
+
+        if not isinstance(expected_return, str) or not expected_return.strip():
+            self._last_error = "Missing or invalid required requisition field: expected_return"
             logger.error(self._last_error)
             return False
 
@@ -150,9 +170,9 @@ class ValidationService:
 
         # Validate dates in ISO format
         try:
-            date_requested = datetime.fromisoformat(requisition_data["date_requested"])
+            expected_request_dt = datetime.fromisoformat(expected_request)
         except Exception:
-            self._last_error = "Invalid date_requested format"
+            self._last_error = "Invalid expected_request format"
             logger.error(self._last_error)
             return False
 
@@ -164,21 +184,16 @@ class ValidationService:
             logger.error(self._last_error)
             return False
 
-        # If expected_return exists, validate it and ensure it is after date_requested
-        expected_return = requisition_data.get(
-            "expected_return"
-        ) or requisition_data.get("date_return")
-        if expected_return:
-            try:
-                expected_return_dt = datetime.fromisoformat(expected_return)
-                if expected_return_dt <= date_requested:
-                    self._last_error = "Expected return must be after date_requested"
-                    logger.error(self._last_error)
-                    return False
-            except Exception:
-                self._last_error = "Invalid expected_return format"
+        try:
+            expected_return_dt = datetime.fromisoformat(expected_return)
+            if expected_return_dt <= expected_request_dt:
+                self._last_error = "Expected return must be after expected_request"
                 logger.error(self._last_error)
                 return False
+        except Exception:
+            self._last_error = "Invalid expected_return format"
+            logger.error(self._last_error)
+            return False
 
         return True
 

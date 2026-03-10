@@ -165,7 +165,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
             # Server-side validation using ValidationService to enforce bounds and types
             svc = ValidationService()
             requisition_data = {
-                "date_requested": expected_request.isoformat(),
+                "expected_request": expected_request.isoformat(),
                 "expected_return": expected_return.isoformat(),
                 "lab_activity_name": activity_name,
                 "lab_activity_date": activity_date or date.today().isoformat(),

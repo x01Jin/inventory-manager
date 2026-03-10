@@ -23,7 +23,12 @@ class MigrationManager:
     MIGRATION_PATTERN = re.compile(r"^(\d+)_.*\.py$")
 
     def __init__(self, migrations_dir: str):
-        self.migrations_dir = Path(migrations_dir)
+        resolved_path = Path(migrations_dir).resolve()
+        # Allow callers to pass either the migrations directory or a file inside it
+        # (for example __file__ from this package).
+        self.migrations_dir = (
+            resolved_path.parent if resolved_path.is_file() else resolved_path
+        )
         self._migrations_cache: list[dict[str, Any]] | None = None
 
     def _discover_migrations(self) -> list[dict[str, Any]]:
@@ -31,25 +36,35 @@ class MigrationManager:
         if self._migrations_cache is not None:
             return self._migrations_cache
 
+        if not self.migrations_dir.exists() or not self.migrations_dir.is_dir():
+            logger.warning(f"Migrations directory not found: {self.migrations_dir}")
+            self._migrations_cache = []
+            return self._migrations_cache
+
         migrations = []
         for file_path in sorted(self.migrations_dir.glob("[0-9]*.py")):
             match = self.MIGRATION_PATTERN.match(file_path.name)
             if match:
                 migration_id = int(match.group(1))
-                spec = importlib.util.spec_from_file_location(
-                    f"migration_{migration_id}", file_path
-                )
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                    migrations.append(
-                        {
-                            "id": migration_id,
-                            "description": getattr(module, "description", "No description"),
-                            "up": getattr(module, "up", None),
-                            "path": file_path,
-                        }
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        f"migration_{migration_id}", file_path
                     )
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        migrations.append(
+                            {
+                                "id": migration_id,
+                                "description": getattr(
+                                    module, "description", "No description"
+                                ),
+                                "up": getattr(module, "up", None),
+                                "path": file_path,
+                            }
+                        )
+                except Exception:
+                    logger.exception(f"Failed to load migration file: {file_path}")
 
         self._migrations_cache = sorted(migrations, key=lambda m: m["id"])
         return self._migrations_cache
