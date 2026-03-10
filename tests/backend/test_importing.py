@@ -29,6 +29,15 @@ def test_stock_string_parsing():
     assert info["quantity"] == 10
     assert info["size"] is None
 
+    info = parse_stock_value("1 box (100pcs)")
+    assert info["quantity"] == 100
+    assert info["size"] is None
+    assert info["notes"] == "(100pcs)"
+
+    info = parse_stock_value("2 packs of 50 pcs")
+    assert info["quantity"] == 100
+    assert info["size"] is None
+
     # Invalid strings
     with pytest.raises(ValueError):
         parse_stock_value("just text")
@@ -45,6 +54,7 @@ def test_excel_importer_logic(temp_db, tmp_path):
     ws.append(["Item A", "1", "Consumables", "Chemicals-Solid"])
     ws.append(["Item B", "500ml", "TA, Consumables", "Chemicals-Liquid"])
     ws.append(["Item C", "5", "Equipment", "Equipment"])
+    ws.append(["Item D", "1 box (100pcs)", "Consumables", "Consumables"])
     wb.save(excel_path)
 
     # Run import
@@ -52,11 +62,11 @@ def test_excel_importer_logic(temp_db, tmp_path):
         str(excel_path), editor_name="tester"
     )
 
-    assert imported_count == 3
+    assert imported_count == 4
 
     # Verify DB state
     rows = db.execute_query("SELECT name, is_consumable, size FROM Items ORDER BY name")
-    assert len(rows) == 3
+    assert len(rows) == 4
 
     # Item A: Consumable = 1
     assert rows[0]["name"] == "Item A"
@@ -84,6 +94,28 @@ def test_excel_importer_logic(temp_db, tmp_path):
     # Item C: Equipment (Not consumable)
     assert rows[2]["name"] == "Item C"
     assert rows[2]["is_consumable"] == 0
+
+    # Item D: Boxed piece count converts to usable quantity.
+    item_d_qty = db.execute_query(
+        """
+        SELECT ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name = ?
+        ORDER BY ib.id DESC
+        LIMIT 1
+        """,
+        ("Item D",),
+    )
+    assert item_d_qty
+    assert item_d_qty[0]["quantity_received"] == 100
+
+    item_d_specs = db.execute_query(
+        "SELECT other_specifications FROM Items WHERE name = ?",
+        ("Item D",),
+    )
+    assert item_d_specs
+    assert "(100pcs)" in (item_d_specs[0]["other_specifications"] or "")
 
 
 def test_importer_edge_cases(temp_db, tmp_path):

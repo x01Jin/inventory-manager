@@ -50,14 +50,15 @@ The import can be cancelled while in progress by clicking the Cancel button.
 
   - **Supported size units** include common volume/mass units such as: `ml`, `l`, `g`, `kg`, `mg`, `gal`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
 
-  - **Leading counts with extra info** (e.g., `10 boxes (100pcs)`, `1 set of 8 pieces`) — the leading integer is used as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
+  - **Package counts with piece details** (e.g., `1 box (100pcs)`, `2 packs of 50 pcs`) are converted to usable stock units using `packages * pieces` (so `1 box (100pcs)` becomes quantity `100`). Piece details are still recorded as notes and appended to `other_specifications`.
+  - **Other leading counts with extra info** (e.g., `10 boxes`, `1 set of 8 pieces`) use the leading integer as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
   - **Empty / missing** stocks values result in `quantity = 0`.
   - **Invalid values** (no parseable number or recognized size) cause the row to be skipped and an explanatory message is included in the import log.
   - **Case & spacing**: size units are matched case-insensitively. They are space-sensitive except when attached to a number (both `900ml` and `900 ml` are accepted).
 
 Notes
 
-- The importer uses `inventory_app.utils.stock_parser.parse_stock_value` for parsing logic and is covered by unit tests (see `tests/test_item_importer_types.py`).
+- The importer uses `inventory_app.utils.stock_parser.parse_stock_value` for parsing logic and is covered by unit tests (see `tests/backend/test_importing.py`).
 - **Item type**: The importer normalizes and cleans the `item type` cell before classification:
   - Leading vendor prefixes like `TA,` are stripped when present (case-insensitive).
   - Values containing `consum`, `consumable`, `consumables`, `reagent`, `reagents`, or `chemical` are treated as **Consumable**.
@@ -71,7 +72,8 @@ Notes
 
 - `900ml` → quantity=900, size=`900ml`
 - `1.1 L` → quantity=1, size=`1.1 L` (decimal quantities are coerced to int)
-- `10 boxes (100pcs)` → quantity=10, notes=`(100pcs)` appended to `other_specifications`
+- `1 box (100pcs)` → quantity=100, notes=`(100pcs)` appended to `other_specifications`
+- `2 packs of 50 pcs` → quantity=100, notes captured as `of 50 pcs`
 - `1 set of 8 pieces` → quantity=1, notes captured as `of 8 pieces`
 
 ### Consumables rule (important)

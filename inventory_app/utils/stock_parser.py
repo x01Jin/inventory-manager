@@ -6,7 +6,8 @@ Single-purpose functions for parsing free-form 'stocks' cells from imported Exce
 Behavior summary:
 - Numeric-only values -> treated as integer quantity (floats coerced to int).
 - Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity: quantity=<numeric part> and size=<matched substring>.
-- Leading counts with words ("2 sets", "10 boxes (100pcs)") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
+- Packaging counts with piece details ("1 box (100pcs)", "2 packs of 50 pcs") -> quantity is converted to usable pieces (leading count * per-package piece count), with details retained in notes.
+- Other leading counts with words ("2 sets", "10 boxes") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
 - Empty / None -> quantity 0.
 - If no numeric information is present, a ValueError is raised (same behavior as previous importer: invalid stock value skips the row).
 
@@ -36,6 +37,24 @@ _SIZE_UNITS = {
 # A broader set that includes "pcs" / "pieces" for notes detection
 _PIECE_UNITS = {"pcs", "pieces", "pc"}
 
+# Container words that indicate package-based counts.
+_PACKAGING_UNITS = {
+    "box",
+    "boxes",
+    "pack",
+    "packs",
+    "package",
+    "packages",
+    "pkg",
+    "pkgs",
+    "case",
+    "cases",
+    "carton",
+    "cartons",
+    "bundle",
+    "bundles",
+}
+
 # Regex to find a number optionally with attached unit (e.g. '900ml' or '1.1 ml')
 _RE_NUMBER_WITH_UNIT = re.compile(r"(?i)(\d+(?:\.\d+)?)(?:\s*)?([a-z]+)\b")
 
@@ -44,6 +63,12 @@ _RE_LEADING_INT = re.compile(r"^\s*(\d+)\b")
 
 # Regex to capture parenthetical trailing info like '(100pcs)'
 _RE_PAREN_INFO = re.compile(r"\(([^)]+)\)")
+
+# Regex to capture leading count + container unit, e.g. '2 boxes ...'
+_RE_LEADING_COUNT_WITH_UNIT = re.compile(r"^\s*(\d+)\s*([a-z]+)\b", re.I)
+
+# Regex to capture a piece count mention, e.g. '100pcs' or '50 pieces'
+_RE_PIECE_COUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:pcs|pieces|pc)\b", re.I)
 
 
 def parse_stock_value(raw: Any) -> Dict[str, Any]:
@@ -91,6 +116,22 @@ def parse_stock_value(raw: Any) -> Dict[str, Any]:
     if m_lead:
         quantity = int(m_lead.group(1))
         notes = None
+
+        # Convert package counts to usable piece counts when a per-package piece
+        # quantity is present (e.g. '1 box (100pcs)' -> 100).
+        pack_match = _RE_LEADING_COUNT_WITH_UNIT.search(s)
+        if pack_match:
+            pack_unit = pack_match.group(2).lower()
+            if pack_unit in _PACKAGING_UNITS:
+                piece_match = _RE_PIECE_COUNT.search(s)
+                if piece_match:
+                    try:
+                        piece_count = int(float(piece_match.group(1)))
+                        if piece_count > 0:
+                            quantity = quantity * piece_count
+                    except Exception:
+                        pass
+
         # If there's parenthetical info capture it to notes
         par = _RE_PAREN_INFO.search(s)
         if par:
