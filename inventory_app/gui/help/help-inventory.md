@@ -77,7 +77,7 @@ Alert thresholds (how statuses are derived):
 Key fields and behaviors in the Add/Edit dialog:
 
 - **Name (required):** The visible name of the item.
-- **Category (required):** Select from predefined categories (Chemicals-Solid, Chemicals-Liquid, Prepared Slides, Consumables, Equipment, Apparatus, Lab Models, Others, or Uncategorized). **Changing the category automatically calculates the item type and expiration/calibration dates** based on the category's built-in thresholds. You can still manually adjust these dates afterward.
+- **Category (required):** Select from predefined categories (Chemicals-Solid, Chemicals-Liquid, Prepared Slides, Consumables, Equipment, Apparatus, Lab Models, Others, or Uncategorized). Changing category automatically calculates item type plus default expiration/disposal dates, and calibration date where applicable. You can still manually adjust these dates afterward.
 - **Supplier / Size / Brand:** Select suppliers from existing entries; sizes and brands are free-form text.
 - **PO Number:** Optional purchase order number.
 - **Batch Quantity (Add only):** Number of units/batches to record for a new item. Must be a positive integer. Defaults to 1.
@@ -96,7 +96,7 @@ When you select a category, dates are automatically calculated using industry st
 - **Prepared Slides:** Expiration set to 36 months (3 years) from acquisition date
 - **Consumables:** Expiration set to 12 months (1 year) from acquisition date
 - **Equipment:** Disposal set to 5 years from acquisition; Calibration set to 1 year from acquisition
-- **Apparatus / Glassware:** Disposal set to 3 years from acquisition; Calibration set to 1 year from acquisition (if applicable)
+- **Apparatus / Glassware:** Disposal set to 3 years from acquisition; no calibration schedule by default
 - **Lab Models / Others:** Disposal set to 5 years from acquisition
 - **Uncategorized:** No automatic date calculation
 

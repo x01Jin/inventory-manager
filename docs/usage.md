@@ -35,7 +35,7 @@
 4. Fill schedule and activity details.
 5. Save.
 
-The system records stock movements inside a database transaction to reduce partial updates.
+The system updates inventory in one save flow to avoid partial changes.
 
 ### Process a Return
 

@@ -1,66 +1,73 @@
-# General Help & FAQ
+# General Help and FAQ
 
-## Frequently Asked Questions
+This page answers common questions in plain language. Use it as a quick reference before opening detailed feature pages.
 
-### What happens when the database schema updates?
+## What happens when the database updates?
 
-On startup, the application automatically checks for and applies any pending database updates. A progress screen may briefly appear showing migration progress. No user action is required, and no data is lost during this process.
+At startup, the app checks and applies available schema updates automatically. You may briefly see a migration progress screen.
 
-### How do I create a requisition?
+## How do I create a requisition?
 
-1. Navigate to the Requisitions page
-2. Click "New Requisition"
-3. Select a requester from the dropdown or choose "Individual Request" for ad-hoc requisitions
-4. Add items from the inventory
-5. Set expected return date
-6. Click "Create Requisition"
+1. Open `Requisitions`.
+2. Click `New Requisition`.
+3. Select a requester (or individual request mode).
+4. Add one or more items and quantities.
+5. Set expected request/return schedule details.
+6. Save.
 
-### Can I edit a requisition after creation?
+## Can I edit a requisition later?
 
-Yes. Select a requisition from the list and click "Edit". You can modify items, dates, and requester information. Changes are logged in the requisition history.
+Yes, as long as it is not finalized/returned. Changes are recorded in requisition history.
 
-### How do returns work?
+## How do returns work?
 
-1. Find the active requisition in the list
-2. Click "Return" to process the return
-3. Mark items as returned or defective
-4. Add notes for defective items
-5. Confirm the return
+1. Open an active requisition.
+2. Click `Return`.
+3. Enter returned, consumed, and defective quantities.
+4. Add notes for defects if needed.
+5. Confirm.
 
-### What are the alert thresholds?
+After return processing, the requisition becomes finalized and is no longer editable.
 
-| Category | Alert Timing |
-| ---------- | ------------- |
-| Chemicals | 6 months before expiration |
-| Glassware/Apparatus | 3 years after first use |
-| Equipment | 5 years after first use |
-| Equipment Calibration | 3 months before due date |
+## What are the active alert rules?
 
-### How are grade levels used?
+| Rule | Warning Window | Overdue Condition |
+| --- | --- | --- |
+| Consumable expiration | 180 days before expiration | Date is in the past |
+| Non-consumable disposal (all configured non-consumables) | 90 days before disposal | Date is in the past |
+| Equipment calibration | 90 days before next due date | Next due date is in the past |
 
-Grade levels are associated with requesters and used for usage tracking reports. When creating a requester, you can specify their grade level (Grade 7, Grade 8, etc.) and section (Section A, Einstein, etc.).
+Notes:
 
-### Can I track who made changes to items?
+- Next calibration due date is calculated as 1 year after the last calibration date.
+- Items with `0` current stock are excluded from status alerts.
 
-Yes. When editing items, you must provide an editor name. All edits are logged in the Update History with the editor name, timestamp, and reason for the change.
+## How are grade levels used?
 
-### How do I generate reports?
+Requester grade/section data is used by reports such as usage-by-grade summaries.
 
-1. Navigate to the Reports page
-2. Select a report type from the sidebar
-3. Set date range and filtering options
-4. Click "Generate Report"
-5. Use the Export button to save as Excel or print
+## Is there an audit trail?
 
-### What is virtual scrolling?
+Yes. Item edits and requisition updates require editor attribution and are logged with timestamps.
 
-Virtual scrolling allows the application to handle large datasets efficiently by only rendering visible rows. Enable it in Settings for better performance with thousands of items.
+## How do I generate reports?
 
-### How do I import items from Excel?
+1. Open `Reports`.
+2. Choose a report type.
+3. Set date range and filters.
+4. Click `Generate Report`.
+5. Export to Excel (or print where supported).
 
-1. Go to Settings → Import Items
-2. Select an Excel file with item data
-3. Map the columns to fields
-4. Click Import
+## What about virtual scrolling?
 
-Required columns: Name, Category. Optional: Size, Brand, PO Number, Supplier, Expiration Date, Quantity Received.
+Virtual scrolling exists as an internal performance feature flag, but it is currently not user-configurable in Settings.
+
+## How do I import items from Excel?
+
+1. Open `Inventory`.
+2. Click `Import Items`.
+3. Select an `.xlsx` file.
+4. Enter editor name.
+5. Start import and review imported/skipped row counts.
+
+For full import rules (header variants, parsing behavior, and validation), see `docs/importing_items.md`.

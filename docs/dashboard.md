@@ -16,7 +16,7 @@ The dashboard displays nine metric cards providing instant insight into system s
 | **Total Stock** | Aggregate quantity across all non-disposed batches | `SUM(quantity_received) - SUM(consumed) - SUM(disposed) + SUM(returned)` |
 | **Recent Adds** | Items modified in the last 7 days | `COUNT(*) WHERE last_modified >= datetime('now', '-7 days')` |
 | **Low Stock** | Items with stock between 1-9 | `COUNT(*) WHERE current_stock BETWEEN 1 AND 9` |
-| **Expiring Soon** | Items expiring/disposing within warning threshold | Consumables: 180 days (6 months), Non-consumables: 90 days (3 months) |
+| **Expiring Soon** | Items with expiration/disposal dates in the next 30 days | Date <= today + 30 days |
 | **Ongoing Reqs** | Requisitions in requested/active/overdue status | `COUNT(*) WHERE status IN ('requested', 'active', 'overdue')` |
 | **Requested Reqs** | Requisitions awaiting fulfillment | `COUNT(*) WHERE status = 'requested'` |
 | **Active Reqs** | Requisitions currently checked out | `COUNT(*) WHERE status = 'active'` |
@@ -29,6 +29,7 @@ The dashboard displays nine metric cards providing instant insight into system s
 - Loading state is displayed while metrics compute in the background
 - Total Stock excludes disposed batches and accounts for consumptions, disposals, and returns
 - Low Stock metric uses absolute threshold (1-9); percentage-based thresholds are used in reports only
+- The Expiring Soon metric card is a 30-day snapshot; the Critical Alerts panel uses longer warning windows (180/90 days).
 
 ### Activity Panel
 

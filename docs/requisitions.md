@@ -36,7 +36,7 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 
 ## Workflow
 
-- Create requisitions with requester selection and item selection. The system performs stock validation and reservations. Requisition creation uses `DatabaseConnection.transaction(immediate=True)` to re-check and reserve stock atomically (this uses an immediate transaction to prevent concurrent oversubscription). Stock availability and reservation logic relies on the centralized `stock_calculation_service` which implements the two-phase requested-quantity logic (active requisitions reduce available stock via REQUEST/RESERVATION movements; finalized requisitions do not). For performance, selection lists and expensive queries may be cached with `cached_query`; cache entries should be invalidated after writes using `db.invalidate_cache_for_table(...)` or `db.clear_query_cache()`.
+- Create requisitions by selecting a requester and adding items. The system checks stock before saving and reserves quantities so the same stock is not double-allocated.
 
 - Available items in requisition dialogs load asynchronously to keep the dialog responsive during item searches.
 

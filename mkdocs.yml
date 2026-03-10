@@ -3,8 +3,18 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - User Guide: usage.md
+  - Instruction Manual: instruction-manual.md
   - System Overview: architecture.md
   - Services: api.md
+  - Dashboard: dashboard.md
+  - Inventory: inventory.md
+  - Importing Items: importing_items.md
+  - Requisitions: requisitions.md
+  - Requesters: requesters.md
+  - Reports: reports.md
+  - Settings: settings.md
+  - General Help: help-general.md
+  - Reference: reference.md
   - Development: development.md
   - Known Limitations: limitations.md
 
