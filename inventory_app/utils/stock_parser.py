@@ -5,7 +5,7 @@ Single-purpose functions for parsing free-form 'stocks' cells from imported Exce
 
 Behavior summary:
 - Numeric-only values -> treated as integer quantity (floats coerced to int).
-- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a single container: quantity=1 and size=<matched substring>.
+- Values with size units (ml, l, g, kg, mg, gal, etc), either attached to the number (e.g., "900ml") or separated by space ("1 L") -> treated as a usable quantity: quantity=<numeric part> and size=<matched substring>.
 - Leading counts with words ("2 sets", "10 boxes (100pcs)") -> leading integer is used as quantity; parenthetical or trailing detail is returned as notes.
 - Empty / None -> quantity 0.
 - If no numeric information is present, a ValueError is raised (same behavior as previous importer: invalid stock value skips the row).
@@ -27,7 +27,9 @@ _SIZE_UNITS = {
     "mg",
     "gal",
     "liter",
+    "liters",
     "litre",
+    "litres",
     "ltr",
 }
 
@@ -70,16 +72,19 @@ def parse_stock_value(raw: Any) -> Dict[str, Any]:
 
     lowered = s.lower()
 
-    # First try to find a number with a recognized size unit anywhere in the string
-    # Prefer the earliest match that has a known size unit (volume/mass)
+    # First try to find a number with a recognized size unit anywhere in the string.
+    # For values like '900ml', use the numeric part as stock quantity so
+    # consumables can be requested/returned in partial usable amounts.
     for m in _RE_NUMBER_WITH_UNIT.finditer(s):
         unit = m.group(2)
         if unit.lower() in _SIZE_UNITS:
-            # size found — treat this as a single container (quantity=1) and
-            # use the exact substring matched from the original string (preserving spaces/case close to input)
+            # Use the exact substring matched from the original string
+            # (preserving spaces/case close to input) for the size field.
             start, end = m.span()
             size_substr = s[start:end]
-            return {"quantity": 1, "size": size_substr.strip(), "notes": None}
+            qty_raw = m.group(1)
+            quantity = int(float(qty_raw))
+            return {"quantity": quantity, "size": size_substr.strip(), "notes": None}
 
     # If no size units found, try for a leading integer quantity
     m_lead = _RE_LEADING_INT.search(s)

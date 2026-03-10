@@ -72,7 +72,7 @@ After creation the requisition is visible in the table and requests/reservations
 
 1. Select the requisition and click **↩️ Return Items**.
 2. Read the warning: this is a ONE-TIME, FINAL process. Once you click 'Process Returns' the requisition will be LOCKED and cannot be edited.
-3. For **Consumables:** specify how many were returned unused (any remainder is considered consumed).
+3. For **Consumables:** specify how many were returned unused (any remainder is considered consumed). Quantities are integer-based, so volume/mass consumables should use usable stock units (example: `900ml` import becomes quantity `900`) to allow partial amounts like `100` or `250`.
 4. For **Non-Consumables:** specify how many were lost/damaged and how many were defective/broken. For defective items:
    - Enter the quantity of defective/broken items
    - Add notes describing the defect (required when defective quantity > 0)

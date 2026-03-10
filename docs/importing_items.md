@@ -46,9 +46,9 @@ The import can be cancelled while in progress by clicking the Cancel button.
 - **Name**: Required — rows with missing or empty names are skipped and reported.
 - **Stocks**: The importer accepts a variety of free-form `stocks` values. Parsing rules are:
   - **Numeric counts** (e.g., `2`, `10`) are parsed as integer quantities (floats coerced to int).
-  - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **single containers**: the importer sets `quantity = 1` and records the matched `size` (the parsed size will be used as the item `size` when the explicit `size` column is empty).
+  - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **usable quantity with size**: the importer sets `quantity = numeric part` and records the matched `size` (the parsed size will be used as the item `size` when the explicit `size` column is empty).
 
-  - **Supported size units** include common volume/mass units such as: `ml`, `l`, `g`, `kg`, `mg`, `gal`, `liter`, `litre`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
+  - **Supported size units** include common volume/mass units such as: `ml`, `l`, `g`, `kg`, `mg`, `gal`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
 
   - **Leading counts with extra info** (e.g., `10 boxes (100pcs)`, `1 set of 8 pieces`) — the leading integer is used as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
   - **Empty / missing** stocks values result in `quantity = 0`.
@@ -69,10 +69,16 @@ Notes
 
 ### Stocks parsing examples
 
-- `900ml` → quantity=1, size=`900ml`
-- `1.1 L` → quantity=1, size=`1.1 L`
+- `900ml` → quantity=900, size=`900ml`
+- `1.1 L` → quantity=1, size=`1.1 L` (decimal quantities are coerced to int)
 - `10 boxes (100pcs)` → quantity=10, notes=`(100pcs)` appended to `other_specifications`
 - `1 set of 8 pieces` → quantity=1, notes captured as `of 8 pieces`
+
+### Consumables rule (important)
+
+- Requisition and return dialogs use integer quantities. To support partial-use consumables (for example, borrowing 100 out of 900 ml), ensure stocks represent usable units.
+- If the `stocks` cell contains `900ml`, the importer now converts it to `stocks = 900` and keeps `size = 900ml`.
+- This allows users to request/return values like `100`, `250`, etc. instead of being limited to whole-container `1`.
 
 ---
 

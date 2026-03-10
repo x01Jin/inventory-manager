@@ -243,9 +243,9 @@ def import_items_from_excel(
                 skipped += 1
                 continue
             # Parse the free-form stocks cell. This may extract quantity, a size string
-            # (e.g. '900ml', '1 L') and an optional notes string. We treat size-bearing
-            # entries (volume/mass) as a single container (quantity=1) and prefer the
-            # parsed size if an explicit `size` column was not provided.
+            # (e.g. '900ml', '1 L') and an optional notes string. For size-bearing
+            # entries (volume/mass), quantity comes from the numeric part so consumables
+            # can be requested/returned in partial usable amounts.
             size_from_stocks = None
             try:
                 from inventory_app.utils.stock_parser import parse_stock_value

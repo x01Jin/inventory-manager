@@ -119,7 +119,8 @@ class ImportItemsDialog(QDialog):
         info_layout.addWidget(example)
 
         notes = QLabel(
-            "Notes: Missing text values will be set to 'N/A'. Empty dates will be treated as 'N/A'."
+            "Notes: Missing text values will be set to 'N/A'. Empty dates will be treated as 'N/A'. "
+            "For consumables, unit-bearing stocks like '900ml' are auto-read as quantity 900 (size keeps '900ml')."
         )
         notes.setWordWrap(True)
         info_layout.addWidget(notes)

@@ -22,7 +22,7 @@ def test_stock_string_parsing():
 
     # Combined quantity and size
     info = parse_stock_value("900ml")
-    assert info["quantity"] == 1
+    assert info["quantity"] == 900
     assert info["size"] == "900ml"
 
     info = parse_stock_value("10 boxes")
@@ -66,9 +66,25 @@ def test_excel_importer_logic(temp_db, tmp_path):
     assert rows[1]["name"] == "Item B"
     assert "500ml" in rows[1]["size"]
 
+    # Item B: Batch quantity should use the numeric part from stocks (500ml -> 500)
+    item_b_qty = db.execute_query(
+        """
+        SELECT ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name = ?
+        ORDER BY ib.id DESC
+        LIMIT 1
+        """,
+        ("Item B",),
+    )
+    assert item_b_qty
+    assert item_b_qty[0]["quantity_received"] == 500
+
     # Item C: Equipment (Not consumable)
     assert rows[2]["name"] == "Item C"
     assert rows[2]["is_consumable"] == 0
+
 
 def test_importer_edge_cases(temp_db, tmp_path):
     """Verify importer behavior with duplicate items and missing categories."""
@@ -77,25 +93,29 @@ def test_importer_edge_cases(temp_db, tmp_path):
     ws = wb.active
     assert ws is not None
     ws.append(["name", "stocks", "item type", "category"])
-    
+
     # Duplicate items: Should be imported as separate batches or update existing?
     # Based on current implementation, it likely creates separate items if names are exactly same
     # or fails if there is a unique constraint (which there isn't in schema).
     ws.append(["Duplicate", "10", "Consumables", "Consumables"])
     ws.append(["Duplicate", "20", "Consumables", "Consumables"])
-    
+
     # Missing category: Should default to 'Uncategorized'
     ws.append(["NoCat", "5", "Consumables", ""])
-    
+
     wb.save(excel_path)
-    
-    imported_count, messages = import_items_from_excel(str(excel_path), editor_name="tester")
+
+    imported_count, messages = import_items_from_excel(
+        str(excel_path), editor_name="tester"
+    )
     assert imported_count == 3
-    
+
     # Verify Uncategorized
     nocat = db.execute_query("SELECT category_id FROM Items WHERE name = 'NoCat'")
     assert len(nocat) == 1
-    
+
     # Get Uncategorized ID
-    uncat_id = db.execute_query("SELECT id FROM Categories WHERE name = 'Uncategorized'")[0]["id"]
+    uncat_id = db.execute_query(
+        "SELECT id FROM Categories WHERE name = 'Uncategorized'"
+    )[0]["id"]
     assert nocat[0]["category_id"] == uncat_id

@@ -42,6 +42,8 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 
 - Returns and partial returns supported with logging of consumed or lost items.
 
+- Consumables are processed using integer usable quantities. For unit-based items (like `ml`), import stocks as usable units so partial borrowing/returning is possible (example: `900ml` in import is parsed to stock quantity `900`).
+
 - Filtering and status: the requisitions UI supports filtering by status and the dashboard/statistics include requested requisitions in their summaries. Filters include search (by requester name, activity, items), requester dropdown, status dropdown, and date range.
 
 - Returns UX: return flows present clear summaries, confirmation prompts, and validation to reduce errors during return processing. Returned requisitions are rendered using a consistent theme color to make returned status easy to identify in lists and previews.

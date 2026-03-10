@@ -195,10 +195,10 @@ class SettingsPage(QWidget):
 
         # Restart notice
         self.restart_notice = QLabel(
-            "⚠️ Theme changes will take effect after restarting the application."
+            "⚠️ RESTART REQUIRED: Close and reopen the app to fully apply theme colors."
         )
         self.restart_notice.setStyleSheet(
-            "color: #f59e0b; padding: 10px; font-style: italic;"
+            "color: #92400e; background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; padding: 10px; font-weight: bold;"
         )
         self.restart_notice.setVisible(False)
         layout.addWidget(self.restart_notice)
@@ -225,12 +225,12 @@ class SettingsPage(QWidget):
             if app and isinstance(app, QApplication):
                 theme_manager.apply_theme(app)
 
-            QMessageBox.information(
+            QMessageBox.warning(
                 self,
-                "Theme Changed",
-                f"Theme has been changed to {new_theme.title()} Mode.\n\n"
-                "The theme has been applied. Some UI elements may require "
-                "a restart to fully update.",
+                "Theme Changed - Restart Required",
+                f"Theme changed to {new_theme.title()} Mode.\n\n"
+                "Restart the application now to fully update all pages.\n"
+                "If you continue without restart, some screens may still show old colors.",
             )
 
     def create_sizes_tab(self):
