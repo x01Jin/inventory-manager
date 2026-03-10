@@ -1,31 +1,55 @@
-# API & Services
+# Services Reference
 
-This section documents the primary services and interfaces used throughout the Inventory Manager.
+This project does not expose a public HTTP API.
+When this document says "API", it means internal Python services used by the GUI.
 
-Database
+## Database Layer
 
-- `inventory_app.database.connection.DatabaseConnection` — context-managed SQLite connection with query helpers: `execute_query`, `execute_update`, `execute_script`. Use `execute_update(..., return_last_id=True)` to obtain `lastrowid` from the same connection used for the INSERT.
-- `DatabaseConnection.transaction()` — context manager for atomic multi-step DB operations (used in `Item.save()`, requisition creation and deletion flows).
+- `inventory_app.database.connection.DatabaseConnection`
+- Main helper methods: `execute_query`, `execute_update`, `execute_script`, `transaction`
+- Default DB file: `inventory.db`
 
-Services
+Use `transaction()` for multi-step writes so changes commit together or roll back together.
 
-- `inventory_app.services.item_service` — operations related to item creation, editing, searching and stock aggregation.
-- `inventory_app.services.movement_types.MovementType` — the canonical enum of movement types (CONSUMPTION, RESERVATION, RETURN, DISPOSAL, REQUEST). Services, GUI and models should use this enum to avoid divergent string values and the DB schema enforces valid values via a `CHECK` constraint.
-- `inventory_app.services.stock_movement_service` — creates/updates `Stock_Movements` records and reconciles item quantities.
-- `inventory_app.services.requesters_activity` — logs and manages requester activities and audit trail.
-- `inventory_app.services.requisition_service` — centralizes business logic for the requisition lifecycle (creation, status updates, and return processing).
-- `inventory_app.services.requisition_activity` — handles logging and audit trails for requisition events.
-- `inventory_app.services.alert_engine` — computes expiration, low stock, and calibration alerts for dashboard viewing.
+## Main Services
 
-GUI Interfaces
+- `inventory_app.services.item_service`
+Purpose: item lookup and stock-related item operations.
 
-- GUI modules primarily live under `inventory_app.gui.*` and expose controllers and models which call into the `services` layer.
+- `inventory_app.services.requisition_service.RequisitionService`
+Purpose: create requisitions, update status, and process returns.
 
-Best Practices
+- `inventory_app.services.stock_movement_service.StockMovementService`
+Purpose: maintain stock movement records (consume, reserve, return, dispose, request).
 
-- All data operations are handled through service layers rather than direct DB calls from GUI modules.
-- Editor names must be provided for operations that modify persistent data for auditability.
+- `inventory_app.services.alert_engine`
+Purpose: compute dashboard alerts (low stock, expiry, calibration).
 
-Maintenance utilities
+- `inventory_app.services.summary_tables`
+Purpose: maintain denormalized summary tables for fast dashboard/report reads.
 
-- The `ActivityLogger` utility (see `inventory_app.utils.activity_logger`) provides `cleanup_old_activities(days_to_keep)` and `maintain_activity_limit(max_activities)` for pruning the activity log. A helper script is available at `scripts/maintenance.py` to schedule/automate these operations on servers or workstations.
+- `inventory_app.services.validation_service`
+Purpose: centralized payload validation helpers.
+
+## Shared Domain Enum
+
+- `inventory_app.services.movement_types.MovementType`
+Valid movement types:
+
+- `CONSUMPTION`
+- `RESERVATION`
+- `RETURN`
+- `DISPOSAL`
+- `REQUEST`
+
+The schema enforces valid movement values through a `CHECK` constraint.
+
+## GUI to Service Contract
+
+GUI modules should call services for business actions instead of writing SQL directly.
+This keeps business behavior in one place and reduces duplicated logic.
+
+## Maintenance Utility
+
+- `scripts/maintenance.py`
+Purpose: prune old activity records and keep activity table size bounded.

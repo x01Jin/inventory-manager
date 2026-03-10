@@ -1,11 +1,12 @@
 site_name: Inventory Manager Documentation
 nav:
-  - Home: docs/index.md
-  - Installation: docs/installation.md
-  - Usage: docs/usage.md
-  - Architecture: docs/architecture.md
-  - API: docs/api.md
-  - Development: docs/development.md
+  - Home: index.md
+  - Installation: installation.md
+  - User Guide: usage.md
+  - System Overview: architecture.md
+  - Services: api.md
+  - Development: development.md
+  - Known Limitations: limitations.md
 
 theme:
   name: material

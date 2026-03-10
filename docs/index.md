@@ -1,26 +1,48 @@
 # Inventory Manager Documentation
 
-Welcome to the Inventory Manager documentation. This documentation captures installation, usage, architecture, and development information for the laboratory inventory monitoring system.
+This project is a desktop app for laboratory inventory and requisition tracking.
+These docs are written to be understandable for:
 
-Table of contents
+- Non-technical stakeholders who want to understand what the system does
+- Junior developers who need to work in the codebase safely
+- Maintainers who need clear limits and risks before making changes
 
-- [Installation](installation.md)
-  - [Maintenance](installation.md#maintenance)
-- [Quick Start](usage.md#quick-start)
-- [User Interface Overview](usage.md#user-interface)
+## Start Here
+
+If this is your first time in the project, read in this order:
+
+1. [Installation](installation.md)
+2. [User Guide](usage.md)
+3. [System Overview](architecture.md)
+4. [Services](api.md)
+5. [Development](development.md)
+6. [Known Limitations](limitations.md)
+
+## One-Page Summary
+
+- The app is a PyQt6 desktop application.
+- Data is stored in a local SQLite database (`inventory.db`).
+- Core business logic is in `inventory_app/services`.
+- UI pages live in `inventory_app/gui`.
+- Database schema is in `inventory_app/database/schema.sql`.
+
+## Detailed Feature Docs
+
+If you want feature-by-feature pages, these are still available:
+
 - [Dashboard](dashboard.md)
 - [Inventory](inventory.md)
 - [Requisitions](requisitions.md)
 - [Requesters](requesters.md)
 - [Reports](reports.md)
 - [Settings](settings.md)
-- [Architecture & Code Overview](architecture.md)
-- [Developer Guide](development.md)
-- [API & Services](api.md)
+- [General Help](help-general.md)
 
-For the full feature list and release notes, see the project repository on GitHub.
+## View Docs Locally
 
-View docs locally
+```powershell
+pip install mkdocs mkdocs-material
+mkdocs serve
+```
 
-- Install MkDocs and the Material theme (optional): `pip install mkdocs mkdocs-material`
-- Serve locally: `mkdocs serve` (then open <http://127.0.0.1:8000>)
+Then open `http://127.0.0.1:8000`.

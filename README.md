@@ -11,6 +11,7 @@ Quick links
 - Architecture: [docs/architecture.md](docs/architecture.md)
 - Developer guide: [docs/development.md](docs/development.md)
 - API & Services: [docs/api.md](docs/api.md)
+- Known limitations: [docs/limitations.md](docs/limitations.md)
 
 ## Want to help or contribute?
 
