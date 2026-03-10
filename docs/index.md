@@ -16,7 +16,6 @@ If this is your first time in the project, read in this order:
 3. [System Overview](architecture.md)
 4. [Services](api.md)
 5. [Development](development.md)
-6. [Known Limitations](limitations.md)
 
 ## One-Page Summary
 

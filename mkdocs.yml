@@ -16,7 +16,6 @@ nav:
   - General Help: help-general.md
   - Reference: reference.md
   - Development: development.md
-  - Known Limitations: limitations.md
 
 theme:
   name: material
