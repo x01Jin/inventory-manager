@@ -60,6 +60,8 @@ class WordWrapDelegate(QStyledItemDelegate):
 class ActivityManager:
     """Manager for dashboard activity display."""
 
+    LATEST_ACTIVITY_MIN_HEIGHT = 35
+
     def __init__(self):
         pass
 
@@ -162,7 +164,26 @@ class ActivityManager:
             table.setItem(row, 2, time_item)
 
         table.resizeRowsToContents()
+        if table_group.title() == "Latest Activity":
+            self._adjust_latest_activity_height(table)
         logger.debug(f"Populated table with {len(activities)} rows")
+
+    def _adjust_latest_activity_height(self, table: QTableWidget):
+        """Set Latest Activity table height to fit wrapped row content."""
+        row_count = table.rowCount()
+        frame_height = table.frameWidth() * 2
+        margins = table.contentsMargins()
+        margins_height = margins.top() + margins.bottom()
+
+        if row_count > 0:
+            content_height = sum(table.rowHeight(row) for row in range(row_count))
+            target_height = content_height + frame_height + margins_height + 4
+        else:
+            target_height = self.LATEST_ACTIVITY_MIN_HEIGHT
+
+        target_height = max(target_height, self.LATEST_ACTIVITY_MIN_HEIGHT)
+        table.setMinimumHeight(target_height)
+        table.setMaximumHeight(target_height)
 
     def _clear_tables(self):
         """Clear both tables (defensive - handles deleted or missing widgets)."""
@@ -179,6 +200,8 @@ class ActivityManager:
             table = table_group.findChild(QTableWidget)
             if table:
                 table.setRowCount(0)
+                if table_group.title() == "Latest Activity":
+                    self._adjust_latest_activity_height(table)
         except RuntimeError as e:
             # Widget may have been deleted on teardown; ignore and log
             logger.warning(f"Could not clear table (widget deleted): {e}")
@@ -224,7 +247,7 @@ class ActivityManager:
         table.setColumnCount(3)
         table.setHorizontalHeaderLabels(["Description", "User", "Time"])
         if title == "Latest Activity":
-            table.setMaximumHeight(35)
+            table.setMinimumHeight(self.LATEST_ACTIVITY_MIN_HEIGHT)
 
         # Configure table properties
         table.setAlternatingRowColors(True)

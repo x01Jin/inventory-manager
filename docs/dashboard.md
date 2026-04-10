@@ -37,6 +37,7 @@ The Activity panel provides an audit trail of recent system events:
 
 - **Latest Activity**: Single most recent activity with full description, user, and timestamp
 - **Activity History**: Table showing recent activities (limited to ~20 entries by system policy)
+- Latest Activity row height auto-adjusts to wrapped description text so long entries are fully visible.
 
 **Activity Types Logged:**
 

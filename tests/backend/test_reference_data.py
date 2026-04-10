@@ -1,6 +1,7 @@
 import pytest
 from inventory_app.database.connection import db
 from inventory_app.database.models import Supplier, Size, Brand, Item
+from inventory_app.services.reference_merge_service import merge_suppliers, merge_brands
 
 
 @pytest.fixture
@@ -138,3 +139,79 @@ def test_item_save_supplier_fk_validation_and_blank_normalization(temp_db):
         name="UnknownSupplier", category_id=1, supplier_id=999999
     )
     assert unknown_supplier_item.save(editor_name="tester") is False
+
+
+def test_merge_suppliers_reassigns_items_and_logs_activity(temp_db):
+    """Supplier merge should move item FK references and remove source records."""
+    target = Supplier(name="Task8 Supplier Main")
+    source = Supplier(name="Task8 Supplier Duplicate")
+    assert target.save()[0] is True
+    assert source.save()[0] is True
+    assert target.id is not None
+    assert source.id is not None
+
+    item = Item(name="Hydrochloric Acid", category_id=1, supplier_id=source.id)
+    assert item.save(editor_name="tester") is True
+
+    success, message, updated = merge_suppliers(
+        target.id, [source.id], editor_name="Jin"
+    )
+    assert success is True
+    assert "updated 1 item" in message.lower()
+    assert updated == 1
+
+    refreshed = Item.get_by_id(item.id or 0)
+    assert refreshed is not None
+    assert refreshed.supplier_id == target.id
+    assert Supplier.get_by_id(source.id) is None
+
+    activity_rows = db.execute_query(
+        """
+        SELECT activity_type, entity_type, user_name, description
+        FROM Activity_Log
+        WHERE activity_type = 'REFERENCE_MERGED'
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    assert len(activity_rows) == 1
+    assert activity_rows[0]["entity_type"] == "supplier"
+    assert activity_rows[0]["user_name"] == "Jin"
+    assert "task8 supplier duplicate" in activity_rows[0]["description"].lower()
+
+
+def test_merge_brands_updates_item_text_and_logs_activity(temp_db):
+    """Brand merge should rewrite item text values case-insensitively."""
+    target = Brand(name="Pyrex")
+    source = Brand(name="PYREX-Legacy")
+    assert target.save()[0] is True
+    assert source.save()[0] is True
+    assert target.id is not None
+    assert source.id is not None
+
+    item = Item(name="Beaker", category_id=1, brand="pyrex-legacy")
+    assert item.save(editor_name="tester") is True
+
+    success, message, updated = merge_brands(target.id, [source.id], editor_name="Jin")
+    assert success is True
+    assert "updated 1 item" in message.lower()
+    assert updated == 1
+
+    refreshed = Item.get_by_id(item.id or 0)
+    assert refreshed is not None
+    assert refreshed.brand == "Pyrex"
+    assert Brand.get_by_id(source.id) is None
+
+    activity_rows = db.execute_query(
+        """
+        SELECT activity_type, entity_type, user_name, description
+        FROM Activity_Log
+        WHERE activity_type = 'REFERENCE_MERGED'
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    assert len(activity_rows) == 1
+    assert activity_rows[0]["entity_type"] == "brand"
+    assert activity_rows[0]["user_name"] == "Jin"
+    assert "pyrex-legacy" in activity_rows[0]["description"].lower()

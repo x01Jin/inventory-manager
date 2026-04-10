@@ -204,6 +204,9 @@ class InventoryTable(QTableWidget):
             prev_sorting = self.isSortingEnabled()
             self.setSortingEnabled(False)
 
+            # Remove any existing inline row widgets before rebinding row data.
+            self._clear_name_column_widgets()
+
             self.setRowCount(len(items))
             logger.debug(
                 f"Populating table with {len(items)} items (skip_styling={skip_styling})"
@@ -245,6 +248,12 @@ class InventoryTable(QTableWidget):
     def populate_row(self, row: int, item: Dict[str, Any], skip_styling: bool = False):
         """Populate a single row with item data."""
         try:
+            existing_name_widget = self.cellWidget(row, 1)
+            if existing_name_widget is not None:
+                self.removeCellWidget(row, 1)
+                existing_name_widget.setParent(None)
+                existing_name_widget.deleteLater()
+
             item_id = item.get("id")
             name = item.get("name", "N/A")
             size = item.get("size", "")
@@ -503,10 +512,21 @@ class InventoryTable(QTableWidget):
 
     def clear_table(self):
         """Clear all items from the table."""
+        self._clear_name_column_widgets()
         self.setRowCount(0)
         self._styled_rows.clear()
         self._row_status_cache.clear()
         logger.debug("Table cleared")
+
+    def _clear_name_column_widgets(self) -> None:
+        """Clear inline widgets from the Name column to prevent stale overlays."""
+        for row in range(self.rowCount()):
+            widget = self.cellWidget(row, 1)
+            if widget is None:
+                continue
+            self.removeCellWidget(row, 1)
+            widget.setParent(None)
+            widget.deleteLater()
 
     def get_row_count(self) -> int:
         """Get the number of rows in the table."""

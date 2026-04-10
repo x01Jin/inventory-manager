@@ -1,6 +1,7 @@
-from inventory_app.gui.settings.settings_page import SettingsPage
+from inventory_app.gui.settings.settings_page import SettingsPage, MergeReferenceDialog
 from inventory_app.database.models import Size, Brand, Supplier
 from PyQt6.QtWidgets import QLabel, QTableWidget, QPushButton
+from PyQt6.QtCore import Qt
 
 
 def _patch_reference_data(monkeypatch):
@@ -145,3 +146,65 @@ def test_categories_tab_is_read_only_and_has_required_note(qtbot, monkeypatch):
         button.text().lower() for button in categories_tab.findChildren(QPushButton)
     ]
     assert not any("category" in text for text in category_buttons)
+
+
+def test_settings_brands_and_suppliers_have_merge_buttons(qtbot, monkeypatch):
+    """Brands and Suppliers tabs should expose merge actions for duplicate cleanup."""
+    _patch_reference_data(monkeypatch)
+
+    page = SettingsPage()
+    qtbot.addWidget(page)
+
+    brand_widget = page.tab_widget.widget(2)
+    assert brand_widget is not None
+    brand_buttons = [button.text() for button in brand_widget.findChildren(QPushButton)]
+    supplier_widget = page.tab_widget.widget(3)
+    assert supplier_widget is not None
+    supplier_buttons = [
+        button.text() for button in supplier_widget.findChildren(QPushButton)
+    ]
+
+    assert "Merge Brands" in brand_buttons
+    assert "Merge Suppliers" in supplier_buttons
+
+
+def test_merge_reference_dialog_excludes_target_and_collects_sources(qtbot):
+    """Merge dialog should exclude target from source list and collect checked source IDs."""
+    entries = [
+        {"id": 1, "name": "ATR", "usage_count": 4},
+        {"id": 2, "name": "ATR Trading", "usage_count": 2},
+        {"id": 3, "name": "ATR Trading System", "usage_count": 1},
+    ]
+
+    dialog = MergeReferenceDialog("Supplier", entries)
+    qtbot.addWidget(dialog)
+
+    dialog.target_combo.setCurrentIndex(1)  # target id 2
+    target_id = dialog.target_combo.currentData()
+    assert target_id == 2
+
+    # Ensure target is not present in sources
+    source_ids = []
+    for row in range(dialog.sources_list.count()):
+        item = dialog.sources_list.item(row)
+        data = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if data and isinstance(data.get("id"), int):
+            source_ids.append(data["id"])
+    assert 2 not in source_ids
+
+    first_source = dialog.sources_list.item(0)
+    assert first_source is not None
+    first_source.setCheckState(Qt.CheckState.Checked)
+
+    third_source = dialog.sources_list.item(1)
+    assert third_source is not None
+    third_source.setCheckState(Qt.CheckState.Checked)
+    dialog.editor_input.setText("Jin")
+
+    dialog._on_accept()
+    chosen_target, source_ids, estimated_usage, editor_name = dialog.get_selection()
+
+    assert chosen_target == 2
+    assert sorted(source_ids) == [1, 3]
+    assert estimated_usage == 5
+    assert editor_name == "Jin"

@@ -62,6 +62,7 @@ Categories are fixed by system configuration and determine default item type/dat
 - SDS files are stored locally in an `sds/` folder beside the running application.
 - In Add/Edit Item, chemical categories expose optional SDS file and SDS notes fields.
 - In the inventory table, only chemical rows display the SDS action button for quick external open.
+- During table refreshes after edits/filter changes, inline SDS name widgets are fully rebuilt per row so stale labels do not overlap other rows.
 - Selecting a chemical row reveals a toolbar `SDS Settings` button. Use this button to upload, update, or remove SDS entries.
 - All SDS save/update/remove actions require editor attribution and are logged to `Update_History`.
 

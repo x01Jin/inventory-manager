@@ -6,8 +6,8 @@ The Settings page controls app-wide preferences and lookup lists used in forms.
 
 - Preferences: theme selection (Light or Dark).
 - Sizes: manage size labels.
-- Brands: manage brand labels.
-- Suppliers: manage supplier records.
+- Brands: manage and merge brand labels.
+- Suppliers: manage and merge supplier records.
 - Categories: read-only lifecycle rules and category policy reference.
 
 ## Preferences Tab
@@ -18,6 +18,8 @@ The Settings page controls app-wide preferences and lookup lists used in forms.
 ## Sizes, Brands, and Suppliers
 
 Each tab has Add, Edit, and Delete actions.
+
+Brands and Suppliers also include a Merge action for duplicate cleanup.
 
 General behavior:
 
@@ -30,6 +32,15 @@ Delete behavior:
 - Size, Brand, and Supplier deletion is blocked if any item is using that value.
 - Entries that are in use are tagged as `NON-DELETABLE` and display the usage count.
 - Delete buttons are disabled when the selected entry is currently in use.
+
+Merge behavior:
+
+- Click `Merge Brands` or `Merge Suppliers`.
+- Enter your name/initials for audit logging.
+- Select one target entry (the value to keep).
+- Check one or more source entries (the duplicate values to consolidate).
+- Review the estimated affected item count, then confirm.
+- The merge updates item references and deletes merged source entries.
 
 ## Categories Note
 

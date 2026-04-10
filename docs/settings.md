@@ -6,8 +6,8 @@ The Settings page controls app-wide lookup values and appearance preferences.
 
 - Preferences tab: switch between Light and Dark theme.
 - Sizes tab: add, rename, or delete size values.
-- Brands tab: add, rename, or delete brand values.
-- Suppliers tab: add, rename, or delete suppliers.
+- Brands tab: add, rename, delete, or merge duplicate brand values.
+- Suppliers tab: add, rename, delete, or merge duplicate suppliers.
 
 These values are reused across Inventory forms, filters, and related dialogs.
 
@@ -34,6 +34,24 @@ Delete behavior differs by type:
 - Sizes, Brands, and Suppliers: deletion is blocked if currently used by any item.
 - Each table row shows usage count in `Usage` and either `Unused` or `NON-DELETABLE` in `Status`.
 - Rows that are in use are marked `NON-DELETABLE`, and the delete button is disabled for the selected row.
+
+Merge behavior for Brands and Suppliers:
+
+- Use `Merge Brands` or `Merge Suppliers` in the corresponding tab.
+- Enter your name/initials when prompted. This is recorded in the activity log for audit tracking.
+- Select one target entry (the main value you want to keep).
+- Select one or more source entries (duplicate values to merge into the target).
+- The dialog shows an estimated affected item count before confirmation.
+- After confirmation:
+  - Supplier merge rewires all affected item `supplier_id` values to the target supplier.
+  - Brand merge rewrites matching item `brand` text values (case-insensitive) to the target brand.
+  - Source entries are removed from the reference table.
+
+Example cleanup:
+
+- Keep target: `ATR Trading System`
+- Merge sources: `ATR`, `ATR Trading`
+- Result: all affected items now reference `ATR Trading System`.
 
 ## Fixed Categories
 

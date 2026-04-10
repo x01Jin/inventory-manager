@@ -1,9 +1,11 @@
 import pytest
 import time
 from datetime import date
+from PyQt6.QtWidgets import QApplication, QWidget
 from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.inventory.inventory_controller import InventoryController
 from inventory_app.gui.inventory.inventory_model import ItemRow
+from inventory_app.gui.inventory.inventory_table import InventoryTable
 
 
 @pytest.fixture
@@ -459,3 +461,62 @@ def test_sds_settings_toolbar_button_visible_for_selected_chemical(qtbot, monkey
     page.table.selectRow(1)
     page._on_table_selection_changed()
     assert page.sds_settings_button.isHidden() is True
+
+
+def test_sds_inline_widgets_do_not_overlay_after_repopulate(qtbot):
+    """Repopulating rows should not leave stale SDS inline widgets behind."""
+    table = InventoryTable()
+    qtbot.addWidget(table)
+
+    first_data = [
+        {
+            "id": 1,
+            "name": "Dishwashing liquid",
+            "category_name": "Chemicals-Liquid",
+            "size": "250mL",
+            "brand": "N/A",
+            "supplier_name": "N/A",
+            "other_specifications": None,
+            "expiration_date": None,
+            "calibration_date": None,
+            "acquisition_date": None,
+            "last_modified": None,
+            "has_sds": 0,
+            "is_consumable": True,
+            "total_stock": 10,
+            "available_stock": 10,
+        }
+    ]
+    table.populate_table(first_data, statuses={}, skip_styling=True)
+    QApplication.processEvents()
+
+    assert table.cellWidget(0, 1) is not None
+    assert len(table.findChildren(QWidget, "sdsInlineWrapper")) == 1
+
+    second_data = [
+        {
+            "id": 2,
+            "name": "Acetone",
+            "category_name": "Apparatus",
+            "size": "500mL",
+            "brand": "N/A",
+            "supplier_name": "N/A",
+            "other_specifications": None,
+            "expiration_date": None,
+            "calibration_date": None,
+            "acquisition_date": None,
+            "last_modified": None,
+            "has_sds": 0,
+            "is_consumable": False,
+            "total_stock": 10,
+            "available_stock": 10,
+        }
+    ]
+    table.populate_table(second_data, statuses={}, skip_styling=True)
+    QApplication.processEvents()
+
+    name_item = table.item(0, 1)
+    assert table.cellWidget(0, 1) is None
+    assert name_item is not None
+    assert name_item.text() == "Acetone"
+    assert len(table.findChildren(QWidget, "sdsInlineWrapper")) == 0

@@ -22,11 +22,15 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QAbstractItemView,
+    QListWidget,
+    QListWidgetItem,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt
 
 from inventory_app.database.models import Size, Brand, Supplier
 from inventory_app.services.category_config import DEFAULT_CATEGORIES
+from inventory_app.services.reference_merge_service import merge_brands, merge_suppliers
 from inventory_app.gui.styles import ThemeManager, DarkTheme, LightTheme
 
 
@@ -302,6 +306,10 @@ class SettingsPage(QWidget):
         self.delete_brand_btn.setEnabled(False)
         button_layout.addWidget(self.delete_brand_btn)
 
+        merge_btn = QPushButton("Merge Brands")
+        merge_btn.clicked.connect(self.merge_brand_entries)
+        button_layout.addWidget(merge_btn)
+
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
@@ -338,6 +346,10 @@ class SettingsPage(QWidget):
         self.delete_supplier_btn.clicked.connect(self.delete_supplier)
         self.delete_supplier_btn.setEnabled(False)
         button_layout.addWidget(self.delete_supplier_btn)
+
+        merge_btn = QPushButton("Merge Suppliers")
+        merge_btn.clicked.connect(self.merge_supplier_entries)
+        button_layout.addWidget(merge_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
@@ -758,6 +770,57 @@ class SettingsPage(QWidget):
                 else:
                     QMessageBox.warning(self, "Cannot Delete", message)
 
+    def merge_brand_entries(self):
+        """Merge multiple brands into a single target brand."""
+        brands = Brand.get_all()
+        if len(brands) < 2:
+            QMessageBox.information(
+                self,
+                "Not Enough Brands",
+                "At least two brand entries are needed before you can merge duplicates.",
+            )
+            return
+
+        options = [
+            {
+                "id": b.id,
+                "name": b.name,
+                "usage_count": b.get_usage_count(),
+            }
+            for b in brands
+            if b.id is not None
+        ]
+
+        dialog = MergeReferenceDialog("Brand", options, self)
+        if not dialog.exec():
+            return
+
+        target_id, source_ids, estimated_usage, editor_name = dialog.get_selection()
+        if target_id is None:
+            QMessageBox.warning(self, "Invalid Selection", "Select a target brand.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Brand Merge",
+            (
+                f"This will merge {len(source_ids)} selected brand entr"
+                f"{'y' if len(source_ids) == 1 else 'ies'} into the target value.\n\n"
+                f"Estimated affected items: {estimated_usage}\n"
+                "This action cannot be undone. Continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        success, message, _ = merge_brands(target_id, source_ids, editor_name.strip())
+        if success:
+            self.populate_brands_list()
+            QMessageBox.information(self, "Merge Complete", message)
+        else:
+            QMessageBox.warning(self, "Merge Failed", message)
+
     def add_supplier(self):
         """Add a new supplier."""
         dialog = NameDialog("Add Supplier", self)
@@ -837,6 +900,218 @@ class SettingsPage(QWidget):
                     )
                 else:
                     QMessageBox.warning(self, "Cannot Delete", message)
+
+    def merge_supplier_entries(self):
+        """Merge multiple suppliers into a single target supplier."""
+        suppliers = Supplier.get_all()
+        if len(suppliers) < 2:
+            QMessageBox.information(
+                self,
+                "Not Enough Suppliers",
+                "At least two supplier entries are needed before you can merge duplicates.",
+            )
+            return
+
+        options = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "usage_count": s.get_usage_count(),
+            }
+            for s in suppliers
+            if s.id is not None
+        ]
+
+        dialog = MergeReferenceDialog("Supplier", options, self)
+        if not dialog.exec():
+            return
+
+        target_id, source_ids, estimated_usage, editor_name = dialog.get_selection()
+        if target_id is None:
+            QMessageBox.warning(self, "Invalid Selection", "Select a target supplier.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Supplier Merge",
+            (
+                f"This will merge {len(source_ids)} selected supplier entr"
+                f"{'y' if len(source_ids) == 1 else 'ies'} into the target value.\n\n"
+                f"Estimated affected items: {estimated_usage}\n"
+                "This action cannot be undone. Continue?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        success, message, _ = merge_suppliers(
+            target_id, source_ids, editor_name.strip()
+        )
+        if success:
+            self.populate_suppliers_list()
+            QMessageBox.information(self, "Merge Complete", message)
+        else:
+            QMessageBox.warning(self, "Merge Failed", message)
+
+
+class MergeReferenceDialog(QDialog):
+    """Dialog for selecting target and source entries to merge."""
+
+    def __init__(self, entity_label: str, entries: list[dict], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Merge {entity_label} Entries")
+        self.setModal(True)
+        self.entries = entries
+
+        self._target_id: int | None = None
+        self._source_ids: list[int] = []
+        self._estimated_usage: int = 0
+        self._editor_name: str = ""
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+
+        info = QLabel(
+            f"Choose the main {entity_label.lower()} entry as target, then check duplicate entries to merge into it."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        target_label = QLabel(f"Target {entity_label}:")
+        layout.addWidget(target_label)
+
+        self.target_combo = QComboBox()
+        for entry in self.entries:
+            self.target_combo.addItem(
+                f"{entry['name']} ({entry['usage_count']} item(s))", entry["id"]
+            )
+        self.target_combo.currentIndexChanged.connect(self._sync_checked_sources)
+        layout.addWidget(self.target_combo)
+
+        sources_label = QLabel(f"Source {entity_label} entries to merge:")
+        layout.addWidget(sources_label)
+
+        self.sources_list = QListWidget()
+        self.sources_list.itemChanged.connect(self._refresh_preview)
+        for entry in self.entries:
+            item = QListWidgetItem(f"{entry['name']} ({entry['usage_count']} item(s))")
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            self.sources_list.addItem(item)
+        layout.addWidget(self.sources_list)
+
+        self.preview_label = QLabel("Estimated affected items: 0")
+        layout.addWidget(self.preview_label)
+
+        editor_label = QLabel("Editor name/initials (required for audit):")
+        layout.addWidget(editor_label)
+        self.editor_input = QLineEdit()
+        self.editor_input.setPlaceholderText("e.g., JDL")
+        layout.addWidget(self.editor_input)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._sync_checked_sources()
+
+    def _current_target_id(self) -> int | None:
+        target = self.target_combo.currentData()
+        return target if isinstance(target, int) else None
+
+    def _sync_checked_sources(self):
+        """Keep source list in sync so selected target is excluded from sources."""
+        target_id = self._current_target_id()
+
+        # Preserve currently checked sources while rebuilding the list.
+        checked_ids: set[int] = set(self._source_ids)
+        for index in range(self.sources_list.count()):
+            item = self.sources_list.item(index)
+            if item is None or item.checkState() != Qt.CheckState.Checked:
+                continue
+            data = item.data(Qt.ItemDataRole.UserRole) or {}
+            entry_id = data.get("id")
+            if isinstance(entry_id, int):
+                checked_ids.add(entry_id)
+
+        self.sources_list.blockSignals(True)
+        self.sources_list.clear()
+        for entry in self.entries:
+            entry_id = entry.get("id")
+            if entry_id == target_id:
+                continue
+
+            item = QListWidgetItem(f"{entry['name']} ({entry['usage_count']} item(s))")
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if isinstance(entry_id, int) and entry_id in checked_ids
+                else Qt.CheckState.Unchecked
+            )
+            self.sources_list.addItem(item)
+        self.sources_list.blockSignals(False)
+
+        self._refresh_preview()
+
+    def _refresh_preview(self):
+        source_ids: list[int] = []
+        estimated_usage = 0
+        for index in range(self.sources_list.count()):
+            item = self.sources_list.item(index)
+            if item is None or item.checkState() != Qt.CheckState.Checked:
+                continue
+            data = item.data(Qt.ItemDataRole.UserRole) or {}
+            entry_id = data.get("id")
+            if isinstance(entry_id, int):
+                source_ids.append(entry_id)
+                estimated_usage += int(data.get("usage_count", 0))
+
+        self._source_ids = source_ids
+        self._estimated_usage = estimated_usage
+        self.preview_label.setText(f"Estimated affected items: {estimated_usage}")
+
+    def _on_accept(self):
+        self._target_id = self._current_target_id()
+        self._refresh_preview()
+        self._editor_name = self.editor_input.text().strip()
+
+        if self._target_id is None:
+            QMessageBox.warning(self, "Invalid Selection", "Select a target entry.")
+            return
+
+        if not self._source_ids:
+            QMessageBox.warning(
+                self,
+                "Invalid Selection",
+                "Select at least one source entry to merge.",
+            )
+            return
+
+        if not self._editor_name:
+            QMessageBox.warning(
+                self,
+                "Editor Required",
+                "Enter your name/initials to continue with merge audit logging.",
+            )
+            return
+
+        self.accept()
+
+    def get_selection(self) -> tuple[int | None, list[int], int, str]:
+        """Return selected target, source list, and estimated usage count."""
+        return (
+            self._target_id,
+            self._source_ids,
+            self._estimated_usage,
+            self._editor_name,
+        )
 
 
 class NameDialog(QDialog):
