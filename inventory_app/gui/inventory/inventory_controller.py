@@ -50,6 +50,7 @@ class InventoryController:
                 i.id,
                 i.name,
                 c.name as category_name,
+                i.item_type,
                 i.size,
                 i.brand,
                 s.name as supplier_name,
@@ -128,7 +129,7 @@ class InventoryController:
             query = (
                 """
             SELECT
-                i.id, i.name, c.name as category_name, i.size, i.brand,
+                i.id, i.name, c.name as category_name, i.item_type, i.size, i.brand,
                 s.name as supplier_name, i.other_specifications, i.po_number,
                 i.expiration_date, i.calibration_date, i.is_consumable,
                 i.acquisition_date, i.last_modified,

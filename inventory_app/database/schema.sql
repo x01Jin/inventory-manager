@@ -55,6 +55,7 @@ CREATE TABLE Items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     category_id INTEGER NOT NULL,
+    item_type TEXT,
     size TEXT,
     brand TEXT,
     other_specifications TEXT,

@@ -50,10 +50,44 @@ def initialize_laboratory_database() -> bool:
                 logger.error("Database creation returned failure state")
                 return False
         else:
-            logger.info("Existing database detected; schema verification skipped")
+            logger.info("Existing database detected; running lightweight schema checks")
+
+        if not ensure_development_schema_compatibility():
+            logger.error("Schema compatibility checks failed")
+            return False
         return True
     except Exception:
         logger.exception("Failed to initialize Laboratory Inventory database")
+        return False
+
+
+def ensure_development_schema_compatibility() -> bool:
+    """Apply lightweight compatibility updates for development databases.
+
+    This avoids migration churn during active development while keeping older
+    local databases usable when new non-breaking columns are introduced.
+    """
+    try:
+        columns = db.execute_query("PRAGMA table_info(Items)")
+        item_columns = {row.get("name") for row in columns}
+
+        if "item_type" not in item_columns:
+            logger.info("Adding missing Items.item_type column for compatibility")
+            db.execute_update("ALTER TABLE Items ADD COLUMN item_type TEXT")
+            db.execute_update(
+                """
+                UPDATE Items
+                SET item_type = CASE
+                    WHEN is_consumable = 1 THEN 'Consumable'
+                    ELSE 'Non-consumable'
+                END
+                WHERE item_type IS NULL OR TRIM(item_type) = ''
+                """
+            )
+
+        return True
+    except Exception:
+        logger.exception("Failed to apply development schema compatibility updates")
         return False
 
 

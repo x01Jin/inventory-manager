@@ -69,6 +69,8 @@ Notes
   - Leading vendor prefixes like `TA,` are stripped when present (case-insensitive).
   - Values containing `consum`, `consumable`, `consumables`, `reagent`, `reagents`, or `chemical` are treated as **Consumable**.
   - Values containing `non` or `not` together with `consum` (e.g., `non consumable`, `TA, non consumable`) are treated as **Non-Consumable**. When ambiguous, the importer conservatively defaults to **Non-Consumable**.
+  - The normalized result is stored in `Items.item_type` as a display value (`Consumable`, `Non-consumable`, or `TA, non-consumable`) and also mapped to `is_consumable` for stock behavior.
+- **Supplier**: When a supplier name is provided, the importer resolves it to `Suppliers.id` case-insensitively. If it does not exist yet, the supplier is created automatically and linked to the item.
 - **Text fields** (category, size, brand, supplier, other specifications, po number): If empty, they are stored as `N/A` (or left blank in the DB where appropriate). Note: if `stocks` contains a size and the explicit `size` column is empty the parsed size will be used instead.
 - **Dates** (expiration, calibration, acquisition): Parsed to date objects when possible; unparseable or empty values become `None` (displayed as `N/A` in the UI).
 

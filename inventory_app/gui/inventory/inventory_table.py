@@ -249,13 +249,16 @@ class InventoryTable(QTableWidget):
             calibration_date = self.format_date(item.get("calibration_date"))
             acquisition_date = self.format_date(item.get("acquisition_date"))
             is_consumable = item.get("is_consumable", False)
+            item_type_text = item.get("item_type")
             last_modified = self.format_datetime(item.get("last_modified"))
 
             total_stock = item.get("total_stock", 0)
             available_stock = item.get("available_stock", 0)
             stock_display = f"{total_stock}/{available_stock}"
 
-            item_type = "Consumable" if is_consumable else "Non-Consumable"
+            item_type = item_type_text or (
+                "Consumable" if is_consumable else "Non-consumable"
+            )
 
             item_status = None
             if item_id:

@@ -38,6 +38,12 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 
 Categories are fixed by system configuration and determine default item type/date behavior.
 
+## Inventory Fields
+
+- Brand, Supplier, Other Specifications, Expiry/Disposal Date, Item Type, and Acquisition Date are supported in add/edit and import flows.
+- Supplier values are stored by `supplier_id` and resolved from supplier names during import.
+- Item type is persisted as text in `Items.item_type` (`Consumable`, `Non-consumable`, or `TA, non-consumable`) and synchronized with `is_consumable` for stock behavior.
+
 ## Auto-Calculated Dates
 
 When category and acquisition date are set, default dates are auto-filled:

@@ -373,6 +373,7 @@ class Item:
     id: Optional[int] = None
     name: str = ""
     category_id: int = 0
+    item_type: Optional[str] = None
     size: Optional[str] = None
     brand: Optional[str] = None
     other_specifications: Optional[str] = None
@@ -404,7 +405,7 @@ class Item:
 
                     # Update item
                     query = """
-                    UPDATE Items SET name = ?, category_id = ?, size = ?, brand = ?,
+                    UPDATE Items SET name = ?, category_id = ?, item_type = ?, size = ?, brand = ?,
                     other_specifications = ?, po_number = ?, supplier_id = ?,
                     expiration_date = ?, calibration_date = ?, is_consumable = ?,
                     acquisition_date = ?, last_modified = ? WHERE id = ?
@@ -412,6 +413,7 @@ class Item:
                     params = (
                         self.name,
                         self.category_id,
+                        self.item_type,
                         self.size,
                         self.brand,
                         self.other_specifications,
@@ -437,13 +439,14 @@ class Item:
                 else:
                     # Insert new item
                     query = """
-                    INSERT INTO Items (name, category_id, size, brand, other_specifications,
+                    INSERT INTO Items (name, category_id, item_type, size, brand, other_specifications,
                     po_number, supplier_id, expiration_date, calibration_date, is_consumable,
-                    acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """
                     params = (
                         self.name,
                         self.category_id,
+                        self.item_type,
                         self.size,
                         self.brand,
                         self.other_specifications,
@@ -1164,9 +1167,9 @@ class ItemBulkCreator:
         try:
             with db.transaction():
                 item_query = """
-                INSERT INTO Items (name, category_id, size, brand, other_specifications,
+                INSERT INTO Items (name, category_id, item_type, size, brand, other_specifications,
                 po_number, supplier_id, expiration_date, calibration_date, is_consumable,
-                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                acquisition_date, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 item_params = []
                 for item in items_data:
@@ -1174,6 +1177,7 @@ class ItemBulkCreator:
                         (
                             item.get("name"),
                             item.get("category_id"),
+                            item.get("item_type"),
                             item.get("size"),
                             item.get("brand"),
                             item.get("other_specifications"),
@@ -1213,6 +1217,7 @@ class ItemBulkCreator:
                         id=item_ids[i],
                         name=item_data.get("name", ""),
                         category_id=item_data.get("category_id", 0),
+                        item_type=item_data.get("item_type"),
                         size=item_data.get("size"),
                         brand=item_data.get("brand"),
                         other_specifications=item_data.get("other_specifications"),

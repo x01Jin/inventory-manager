@@ -73,13 +73,25 @@ def test_excel_importer_logic(temp_db, tmp_path):
     wb = Workbook()
     ws = wb.active
     assert ws is not None
-    ws.append(["name", "stocks", "item type", "category"])
-    ws.append(["Item A", "1", "Consumables", "Chemicals-Solid"])
-    ws.append(["Item B", "500ml", "TA, Consumables", "Chemicals-Liquid"])
-    ws.append(["Item C", "5", "Equipment", "Equipment"])
-    ws.append(["Item D", "1 box (100pcs)", "Consumables", "Consumables"])
-    ws.append(["Item E", "1 kilo", "Consumables", "Chemicals-Solid"])
-    ws.append(["Item F", "2.5 L", "Consumables", "Chemicals-Liquid"])
+    ws.append(["name", "stocks", "item type", "category", "supplier"])
+    ws.append(["Item A", "1", "Consumables", "Chemicals-Solid", "Malcor Chemicals"])
+    ws.append(
+        ["Item B", "500ml", "TA, Consumables", "Chemicals-Liquid", "ATR Trading System"]
+    )
+    ws.append(
+        ["Item C", "5", "TA, non consumable", "Equipment", "RNJ Medical Equipment"]
+    )
+    ws.append(["Item D", "1 box (100pcs)", "Consumables", "Consumables", "Dalkem"])
+    ws.append(["Item E", "1 kilo", "Consumables", "Chemicals-Solid", "Instruchem Inc."])
+    ws.append(
+        [
+            "Item F",
+            "2.5 L",
+            "Consumables",
+            "Chemicals-Liquid",
+            "Brightway Trading School",
+        ]
+    )
     wb.save(excel_path)
 
     # Run import
@@ -90,16 +102,27 @@ def test_excel_importer_logic(temp_db, tmp_path):
     assert imported_count == 6
 
     # Verify DB state
-    rows = db.execute_query("SELECT name, is_consumable, size FROM Items ORDER BY name")
+    rows = db.execute_query(
+        """
+        SELECT i.name, i.is_consumable, i.item_type, i.size, s.name AS supplier_name
+        FROM Items i
+        LEFT JOIN Suppliers s ON s.id = i.supplier_id
+        ORDER BY i.name
+        """
+    )
     assert len(rows) == 6
 
     # Item A: Consumable = 1
     assert rows[0]["name"] == "Item A"
     assert rows[0]["is_consumable"] == 1
+    assert rows[0]["item_type"] == "Consumable"
+    assert rows[0]["supplier_name"] == "Malcor Chemicals"
 
     # Item B: Size extracted from stocks string
     assert rows[1]["name"] == "Item B"
     assert "500ml" in rows[1]["size"]
+    assert rows[1]["item_type"] == "Consumable"
+    assert rows[1]["supplier_name"] == "ATR Trading System"
 
     # Item B: Batch quantity should use the numeric part from stocks (500ml -> 500)
     item_b_qty = db.execute_query(
@@ -116,9 +139,11 @@ def test_excel_importer_logic(temp_db, tmp_path):
     assert item_b_qty
     assert item_b_qty[0]["quantity_received"] == 500
 
-    # Item C: Equipment (Not consumable)
+    # Item C: TA non-consumable (Not consumable)
     assert rows[2]["name"] == "Item C"
     assert rows[2]["is_consumable"] == 0
+    assert rows[2]["item_type"] == "TA, non-consumable"
+    assert rows[2]["supplier_name"] == "RNJ Medical Equipment"
 
     # Item D: Boxed piece count converts to usable quantity.
     item_d_qty = db.execute_query(

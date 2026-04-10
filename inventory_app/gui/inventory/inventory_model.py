@@ -12,9 +12,11 @@ from inventory_app.utils.logger import logger
 @dataclass
 class ItemRow:
     """Data structure for a single inventory item row in the table."""
+
     id: Optional[int]
     name: str
     category_name: str
+    item_type: Optional[str]
     size: Optional[str]
     brand: Optional[str]
     supplier_name: Optional[str]
@@ -86,12 +88,17 @@ class InventoryModel:
 
         search_lower = search_term.lower()
         self.filtered_items = [
-            item for item in self.items
-            if (search_lower in item.name.lower() or
-                search_lower in item.category_name.lower() or
-                (item.supplier_name and search_lower in item.supplier_name.lower()))
+            item
+            for item in self.items
+            if (
+                search_lower in item.name.lower()
+                or search_lower in item.category_name.lower()
+                or (item.supplier_name and search_lower in item.supplier_name.lower())
+            )
         ]
-        logger.debug(f"Filtered to {len(self.filtered_items)} items with search term: {search_term}")
+        logger.debug(
+            f"Filtered to {len(self.filtered_items)} items with search term: {search_term}"
+        )
 
     def filter_by_category(self, category: str) -> None:
         """Filter items by category."""
@@ -100,10 +107,11 @@ class InventoryModel:
             return
 
         self.filtered_items = [
-            item for item in self.items
-            if item.category_name == category
+            item for item in self.items if item.category_name == category
         ]
-        logger.debug(f"Filtered to {len(self.filtered_items)} items in category: {category}")
+        logger.debug(
+            f"Filtered to {len(self.filtered_items)} items in category: {category}"
+        )
 
     def filter_by_supplier(self, supplier: str) -> None:
         """Filter items by supplier."""
@@ -112,10 +120,11 @@ class InventoryModel:
             return
 
         self.filtered_items = [
-            item for item in self.items
-            if item.supplier_name == supplier
+            item for item in self.items if item.supplier_name == supplier
         ]
-        logger.debug(f"Filtered to {len(self.filtered_items)} items from supplier: {supplier}")
+        logger.debug(
+            f"Filtered to {len(self.filtered_items)} items from supplier: {supplier}"
+        )
 
     def get_unique_categories(self) -> List[str]:
         """Get list of unique category names."""

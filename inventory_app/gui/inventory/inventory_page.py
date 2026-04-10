@@ -252,6 +252,7 @@ class InventoryPage(QWidget):
                     id=row.get("id"),
                     name=row.get("name", ""),
                     category_name=row.get("category_name", "Uncategorized"),
+                    item_type=row.get("item_type"),
                     size=row.get("size"),
                     brand=row.get("brand"),
                     supplier_name=row.get("supplier_name"),

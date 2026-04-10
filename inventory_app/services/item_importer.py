@@ -90,6 +90,58 @@ def _normalize_item_type(raw_item_type: Any) -> str:
     return re.sub(r"^\s*ta,\s*", "", raw_type_text, flags=re.I).strip().lower()
 
 
+def _to_canonical_item_type(raw_item_type: Any) -> str:
+    """Map raw item type text to canonical stored values."""
+    raw_text = "" if raw_item_type is None else str(raw_item_type)
+    stripped = raw_text.strip()
+    lowered = stripped.lower()
+
+    if (
+        "ta" in lowered
+        and ("non" in lowered or "not" in lowered)
+        and "consum" in lowered
+    ):
+        return "TA, non-consumable"
+
+    if _is_consumable_type(raw_item_type):
+        return "Consumable"
+
+    if ("non" in lowered or "not" in lowered) and "consum" in lowered:
+        return "Non-consumable"
+
+    return stripped or "Non-consumable"
+
+
+def _resolve_supplier_id(raw_supplier: Any) -> Optional[int]:
+    """Resolve supplier text into Suppliers.id, creating a record when missing."""
+    if raw_supplier is None:
+        return None
+
+    supplier_name = str(raw_supplier).strip()
+    if supplier_name == "" or supplier_name.upper() == "N/A":
+        return None
+
+    try:
+        existing = db.execute_query(
+            "SELECT id FROM Suppliers WHERE name = ? COLLATE NOCASE",
+            (supplier_name,),
+        )
+        if existing:
+            return int(existing[0]["id"])
+
+        db.execute_update("INSERT INTO Suppliers (name) VALUES (?)", (supplier_name,))
+        created = db.execute_query(
+            "SELECT id FROM Suppliers WHERE name = ? COLLATE NOCASE",
+            (supplier_name,),
+        )
+        if created:
+            return int(created[0]["id"])
+    except Exception as exc:
+        logger.warning(f"Could not resolve supplier '{supplier_name}': {exc}")
+
+    return None
+
+
 def _is_consumable_type(raw_item_type: Any) -> bool:
     """Return True when raw item type text resolves to consumable."""
     cleaned = _normalize_item_type(raw_item_type)
@@ -394,6 +446,7 @@ def import_items_from_excel(
             # Some vendor spreadsheets include a leading code like 'TA, ' before the
             # actual item type (e.g., 'TA, non consumable'). Strip such prefixes
             # case-insensitively and robustly detect consumable vs non-consumable.
+            canonical_item_type = _to_canonical_item_type(item_type_raw)
             is_consumable = 1 if _is_consumable_type(item_type_raw) else 0
 
             # Optional fields (text fields default to 'N/A'; date fields return date objects or None)
@@ -423,6 +476,7 @@ def import_items_from_excel(
             expiration_date = _parse_date(row_data.get("expiration_date"))
             calibration_date = _parse_date(row_data.get("calibration_date"))
             acquisition_date = _parse_date(row_data.get("acquisition_date"))
+            supplier_id = _resolve_supplier_id(row_data.get("supplier"))
 
             # Resolve category: try to match existing Category by name (case-insensitive).
             # Categories are fixed and read-only (as of v0.7.0b); unknown categories are
@@ -488,13 +542,14 @@ def import_items_from_excel(
             item = Item(
                 name=str(name).strip(),
                 category_id=category_id,
+                item_type=canonical_item_type,
                 size=size if size != "" else None,
                 brand=brand if brand != "" else None,
                 other_specifications=other_specifications
                 if other_specifications != ""
                 else None,
                 po_number=po_number if po_number != "" else None,
-                supplier_id=None,
+                supplier_id=supplier_id,
                 expiration_date=expiration_date,
                 calibration_date=calibration_date,
                 is_consumable=is_consumable,
@@ -511,6 +566,7 @@ def import_items_from_excel(
                     item.other_specifications,
                     item.po_number,
                     item.supplier_id,
+                    item.item_type,
                     item.expiration_date,
                     item.calibration_date,
                     item.is_consumable,

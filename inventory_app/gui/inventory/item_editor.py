@@ -122,6 +122,7 @@ class ItemEditor(QDialog):
         self.item_type_combo = QComboBox()
         self.item_type_combo.addItem("Consumable", "consumable")
         self.item_type_combo.addItem("Non-Consumable", "non_consumable")
+        self.item_type_combo.addItem("TA, Non-Consumable", "ta_non_consumable")
         self.item_type_combo.setCurrentIndex(0)  # Default to consumable
         self.item_type_combo.currentIndexChanged.connect(self.on_item_type_changed)
         dates_grid_layout.addWidget(self.item_type_combo, 0, 1)
@@ -473,10 +474,15 @@ class ItemEditor(QDialog):
                 self.acquisition_date.setDate(qdate)
 
             # Set item type based on is_consumable
-            if self.existing_item.is_consumable == 1:
-                self.item_type_combo.setCurrentIndex(0)  # Consumable
+            item_type_text = (self.existing_item.item_type or "").strip().lower()
+            if item_type_text == "consumable":
+                self.item_type_combo.setCurrentIndex(0)
+            elif item_type_text == "ta, non-consumable":
+                self.item_type_combo.setCurrentIndex(2)
+            elif self.existing_item.is_consumable == 1:
+                self.item_type_combo.setCurrentIndex(0)
             else:
-                self.item_type_combo.setCurrentIndex(1)  # Non-Consumable
+                self.item_type_combo.setCurrentIndex(1)
 
             # Update the layout based on the loaded item type
             self.on_item_type_changed()
@@ -528,6 +534,7 @@ class ItemEditor(QDialog):
 
             if item_type == "consumable":
                 item.is_consumable = 1
+                item.item_type = "Consumable"
                 # Set expiration date from the variable_input field
                 exp_date = self.variable_input.date()
                 if (
@@ -540,8 +547,12 @@ class ItemEditor(QDialog):
                         exp_date.year(), exp_date.month(), exp_date.day()
                     )
                 item.calibration_date = None  # Clear calibration date for consumables
-            else:  # non_consumable
+            else:  # non_consumable or ta_non_consumable
                 item.is_consumable = 0
+                if item_type == "ta_non_consumable":
+                    item.item_type = "TA, non-consumable"
+                else:
+                    item.item_type = "Non-consumable"
                 # Set calibration date from the variable_input field
                 cal_date = self.variable_input.date()
                 if (
