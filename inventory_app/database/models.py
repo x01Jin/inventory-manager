@@ -150,50 +150,47 @@ class Supplier:
             logger.error(f"Failed to get suppliers: {e}")
             return []
 
-    def delete(self, force: bool = False) -> Tuple[bool, str]:
-        """Delete the supplier.
+    def get_usage_count(self) -> int:
+        """Return number of items currently using this supplier."""
+        if not self.id:
+            return 0
 
-        Per beta test requirement #18: Suppliers can be deleted from dropdown.
-        When force=True, nullifies the supplier_id on any items using this supplier.
-
-        Args:
-            force: If True, remove supplier references from items before deletion
-
-        Returns:
-            Tuple of (success, message)
-        """
         try:
-            if not self.id:
-                return False, "Supplier has no ID"
-
-            # Check if supplier is being used by any items
             usage_check = db.execute_query(
                 "SELECT COUNT(*) as count FROM Items WHERE supplier_id = ?", (self.id,)
             )
-            items_using = usage_check[0]["count"] if usage_check else 0
+            return usage_check[0]["count"] if usage_check else 0
+        except Exception as e:
+            logger.error(f"Failed to count usage for supplier {self.id}: {e}")
+            return 0
+
+    def delete(self) -> Tuple[bool, str, int]:
+        """Delete the supplier if it is not used by any item.
+
+        Returns:
+            Tuple of (success, message, usage_count)
+        """
+        try:
+            if not self.id:
+                return False, "Supplier has no ID", 0
+
+            items_using = self.get_usage_count()
 
             if items_using > 0:
-                if not force:
-                    return (
-                        False,
-                        f"Supplier is being used by {items_using} item(s). "
-                        "Would you like to remove this supplier from those items and delete it?",
-                    )
-
-                # Force deletion: nullify supplier_id on items first
-                db.execute_update(
-                    "UPDATE Items SET supplier_id = NULL WHERE supplier_id = ?",
-                    (self.id,),
+                logger.warning(
+                    f"Cannot delete supplier {self.id}: supplier is being used by items"
                 )
-                logger.info(
-                    f"Nullified supplier_id on {items_using} items before deleting supplier {self.id}"
+                return (
+                    False,
+                    f"Cannot delete supplier '{self.name}' because it is currently used by {items_using} item(s).",
+                    items_using,
                 )
 
             db.execute_update("DELETE FROM Suppliers WHERE id = ?", (self.id,))
-            return True, "Supplier deleted successfully"
+            return True, "Supplier deleted successfully", 0
         except Exception as e:
             logger.error(f"Failed to delete supplier {self.id}: {e}")
-            return False, str(e)
+            return False, str(e), 0
 
     @classmethod
     def get_by_id(cls, supplier_id: int) -> Optional["Supplier"]:
@@ -254,27 +251,47 @@ class Size:
             logger.error(f"Failed to get sizes: {e}")
             return []
 
-    def delete(self) -> bool:
-        """Delete the size."""
+    def get_usage_count(self) -> int:
+        """Return number of items currently using this size (case-insensitive)."""
+        if not self.name:
+            return 0
+
+        try:
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE LOWER(COALESCE(size, '')) = LOWER(?)",
+                (self.name,),
+            )
+            return usage_check[0]["count"] if usage_check else 0
+        except Exception as e:
+            logger.error(f"Failed to count usage for size {self.id}: {e}")
+            return 0
+
+    def delete(self) -> Tuple[bool, str, int]:
+        """Delete the size if it is not used by any item.
+
+        Returns:
+            Tuple of (success, message, usage_count)
+        """
         try:
             if not self.id:
-                return False
+                return False, "Size has no ID", 0
 
-            # Check if size is being used by any items
-            usage_check = db.execute_query(
-                "SELECT COUNT(*) as count FROM Items WHERE size = ?", (self.name,)
-            )
-            if usage_check and usage_check[0]["count"] > 0:
+            usage_count = self.get_usage_count()
+            if usage_count > 0:
                 logger.warning(
                     f"Cannot delete size {self.id}: size is being used by items"
                 )
-                return False
+                return (
+                    False,
+                    f"Cannot delete size '{self.name}' because it is currently used by {usage_count} item(s).",
+                    usage_count,
+                )
 
             db.execute_update("DELETE FROM Sizes WHERE id = ?", (self.id,))
-            return True
+            return True, "Size deleted successfully", 0
         except Exception as e:
             logger.error(f"Failed to delete size {self.id}: {e}")
-            return False
+            return False, str(e), 0
 
     @classmethod
     def get_by_id(cls, size_id: int) -> Optional["Size"]:
@@ -333,27 +350,47 @@ class Brand:
             logger.error(f"Failed to get brands: {e}")
             return []
 
-    def delete(self) -> bool:
-        """Delete the brand."""
+    def get_usage_count(self) -> int:
+        """Return number of items currently using this brand (case-insensitive)."""
+        if not self.name:
+            return 0
+
+        try:
+            usage_check = db.execute_query(
+                "SELECT COUNT(*) as count FROM Items WHERE LOWER(COALESCE(brand, '')) = LOWER(?)",
+                (self.name,),
+            )
+            return usage_check[0]["count"] if usage_check else 0
+        except Exception as e:
+            logger.error(f"Failed to count usage for brand {self.id}: {e}")
+            return 0
+
+    def delete(self) -> Tuple[bool, str, int]:
+        """Delete the brand if it is not used by any item.
+
+        Returns:
+            Tuple of (success, message, usage_count)
+        """
         try:
             if not self.id:
-                return False
+                return False, "Brand has no ID", 0
 
-            # Check if brand is being used by any items
-            usage_check = db.execute_query(
-                "SELECT COUNT(*) as count FROM Items WHERE brand = ?", (self.name,)
-            )
-            if usage_check and usage_check[0]["count"] > 0:
+            usage_count = self.get_usage_count()
+            if usage_count > 0:
                 logger.warning(
                     f"Cannot delete brand {self.id}: brand is being used by items"
                 )
-                return False
+                return (
+                    False,
+                    f"Cannot delete brand '{self.name}' because it is currently used by {usage_count} item(s).",
+                    usage_count,
+                )
 
             db.execute_update("DELETE FROM Brands WHERE id = ?", (self.id,))
-            return True
+            return True, "Brand deleted successfully", 0
         except Exception as e:
             logger.error(f"Failed to delete brand {self.id}: {e}")
-            return False
+            return False, str(e), 0
 
     @classmethod
     def get_by_id(cls, brand_id: int) -> Optional["Brand"]:

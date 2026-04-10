@@ -31,6 +31,8 @@ def test_category_config_and_dates(temp_db):
     categories = get_all_category_names()
     assert "Chemicals-Solid" in categories
     assert "Equipment" in categories
+    assert "Others" in categories
+    assert "Uncategorized" in categories
 
     # Chemicals-Solid: 24 months
     config = get_category_config("Chemicals-Solid")
@@ -46,6 +48,15 @@ def test_category_config_and_dates(temp_db):
     assert disp_date == date(2030, 1, 1)
     cal_date = eq_config.calculate_calibration_date(acq_date)
     assert cal_date == date(2026, 1, 1)
+
+    # Others and Uncategorized: no auto lifecycle date
+    others_config = get_category_config("Others")
+    assert others_config is not None
+    assert others_config.calculate_expiration_date(acq_date) is None
+
+    uncategorized_config = get_category_config("Uncategorized")
+    assert uncategorized_config is not None
+    assert uncategorized_config.calculate_expiration_date(acq_date) is None
 
 
 def test_duplicate_prevention(temp_db):

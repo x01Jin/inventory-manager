@@ -39,6 +39,7 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 - Delete: requires editor attribution and reason; blocked for currently requested items.
 - Add/Edit validation: Name, Category, and Editor Name/Initials are required before save.
 - Supplier is optional, but if provided it must be selected from the Supplier dropdown.
+- Supplier, Size, Brand, and Category reference values are managed through Settings; in-use Size/Brand/Supplier values are non-deletable and display usage state there.
 - If optional dropdowns are left blank (Supplier, Size, Brand), a confirmation dialog lists them before save. Users can proceed or go back to fill entries.
 
 Double-clicking an inventory row opens the item usage history dialog. Use the `Edit Item` button for field edits.

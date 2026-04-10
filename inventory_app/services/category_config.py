@@ -106,7 +106,7 @@ DEFAULT_CATEGORIES: List[CategoryConfig] = [
     CategoryConfig(
         name="Others",
         is_consumable=False,
-        disposal_years=5,
+        disposal_years=None,
         has_calibration=False,
     ),
     # For imports without category

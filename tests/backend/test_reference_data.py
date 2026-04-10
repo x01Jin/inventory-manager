@@ -13,7 +13,7 @@ def temp_db(tmp_path):
 
 
 def test_supplier_deletion_logic(temp_db):
-    """Verify supplier deletion behavior (force vs no-force)."""
+    """Verify supplier deletion is blocked while in use and allowed when unused."""
     # Create supplier and item
     s = Supplier(name="Unique Test Supplier")
     s.save()
@@ -22,26 +22,25 @@ def test_supplier_deletion_logic(temp_db):
     item = Item(name="Test Item", category_id=1, supplier_id=s.id)
     item.save(editor_name="tester", batch_quantity=10)
 
-    # 1. Deletion without force should fail if used
-    success, msg = s.delete(force=False)
+    # 1. Deletion should fail if used
+    success, msg, usage_count = s.delete()
     assert success is False
-    assert "being used" in msg.lower()
+    assert "currently used" in msg.lower()
+    assert usage_count == 1
 
     # Verify supplier still exists
     assert Supplier.get_by_id(s.id) is not None
 
-    # 2. Deletion with force should succeed and nullify item reference
-    success, msg = s.delete(force=True)
+    # 2. Unlink supplier, then deletion should succeed
+    item.supplier_id = None
+    item.save(editor_name="tester")
+
+    success, msg, usage_count = s.delete()
     assert success is True
+    assert usage_count == 0
 
     # Verify supplier is gone
     assert Supplier.get_by_id(s.id) is None
-
-    # Verify item's supplier_id is NULL
-    assert item.id is not None
-    retrieved_item = Item.get_by_id(item.id)
-    assert retrieved_item is not None
-    assert retrieved_item.supplier_id is None
 
 
 def test_size_deletion_logic(temp_db):
@@ -55,8 +54,10 @@ def test_size_deletion_logic(temp_db):
     item.save(editor_name="tester")
 
     # Deletion should be blocked
-    success = sz.delete()
+    success, msg, usage_count = sz.delete()
     assert success is False
+    assert usage_count == 1
+    assert "currently used" in msg.lower()
     assert Size.get_by_id(sz.id) is not None
 
     # Unlink size from item
@@ -64,8 +65,9 @@ def test_size_deletion_logic(temp_db):
     item.save(editor_name="tester")
 
     # Deletion should succeed now
-    success = sz.delete()
+    success, msg, usage_count = sz.delete()
     assert success is True
+    assert usage_count == 0
     assert Size.get_by_id(sz.id) is None
 
 
@@ -80,8 +82,10 @@ def test_brand_deletion_logic(temp_db):
     item.save(editor_name="tester")
 
     # Deletion should be blocked
-    success = b.delete()
+    success, msg, usage_count = b.delete()
     assert success is False
+    assert usage_count == 1
+    assert "currently used" in msg.lower()
     assert Brand.get_by_id(b.id) is not None
 
     # Unlink brand
@@ -89,8 +93,9 @@ def test_brand_deletion_logic(temp_db):
     item.save(editor_name="tester")
 
     # Deletion should succeed
-    success = b.delete()
+    success, msg, usage_count = b.delete()
     assert success is True
+    assert usage_count == 0
     assert Brand.get_by_id(b.id) is None
 
 

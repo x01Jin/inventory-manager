@@ -8,7 +8,6 @@ from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QListWidget,
     QPushButton,
     QTabWidget,
     QDialog,
@@ -20,9 +19,14 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QGroupBox,
     QApplication,
+    QTableWidget,
+    QTableWidgetItem,
+    QAbstractItemView,
 )
+from PyQt6.QtCore import Qt
 
 from inventory_app.database.models import Size, Brand, Supplier
+from inventory_app.services.category_config import DEFAULT_CATEGORIES
 from inventory_app.gui.styles import ThemeManager, DarkTheme, LightTheme
 
 
@@ -62,6 +66,9 @@ class SettingsPage(QWidget):
 
         # Suppliers tab
         self.create_suppliers_tab()
+
+        # Categories tab (read-only)
+        self.create_categories_tab()
 
     def create_preferences_tab(self):
         """Create the preferences tab for theme selection."""
@@ -238,10 +245,10 @@ class SettingsPage(QWidget):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # List
-        self.sizes_list = QListWidget()
-        self.populate_sizes_list()
-        layout.addWidget(self.sizes_list)
+        # Table
+        self.sizes_table = self._create_reference_table()
+        self.sizes_table.cellDoubleClicked.connect(lambda *_: self.edit_size())
+        layout.addWidget(self.sizes_table)
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -253,12 +260,20 @@ class SettingsPage(QWidget):
         edit_btn.clicked.connect(self.edit_size)
         button_layout.addWidget(edit_btn)
 
-        delete_btn = QPushButton("Delete Size")
-        delete_btn.clicked.connect(self.delete_size)
-        button_layout.addWidget(delete_btn)
+        self.delete_size_btn = QPushButton("Delete Size")
+        self.delete_size_btn.clicked.connect(self.delete_size)
+        self.delete_size_btn.setEnabled(False)
+        button_layout.addWidget(self.delete_size_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+        self.size_usage_label = QLabel("Select a size to view usage status.")
+        self.size_usage_label.setWordWrap(True)
+        layout.addWidget(self.size_usage_label)
+
+        self.sizes_table.itemSelectionChanged.connect(self.on_size_selection_changed)
+        self.populate_sizes_list()
 
         self.tab_widget.addTab(tab, "Sizes")
 
@@ -267,10 +282,10 @@ class SettingsPage(QWidget):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # List
-        self.brands_list = QListWidget()
-        self.populate_brands_list()
-        layout.addWidget(self.brands_list)
+        # Table
+        self.brands_table = self._create_reference_table()
+        self.brands_table.cellDoubleClicked.connect(lambda *_: self.edit_brand())
+        layout.addWidget(self.brands_table)
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -282,12 +297,20 @@ class SettingsPage(QWidget):
         edit_btn.clicked.connect(self.edit_brand)
         button_layout.addWidget(edit_btn)
 
-        delete_btn = QPushButton("Delete Brand")
-        delete_btn.clicked.connect(self.delete_brand)
-        button_layout.addWidget(delete_btn)
+        self.delete_brand_btn = QPushButton("Delete Brand")
+        self.delete_brand_btn.clicked.connect(self.delete_brand)
+        self.delete_brand_btn.setEnabled(False)
+        button_layout.addWidget(self.delete_brand_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+        self.brand_usage_label = QLabel("Select a brand to view usage status.")
+        self.brand_usage_label.setWordWrap(True)
+        layout.addWidget(self.brand_usage_label)
+
+        self.brands_table.itemSelectionChanged.connect(self.on_brand_selection_changed)
+        self.populate_brands_list()
 
         self.tab_widget.addTab(tab, "Brands")
 
@@ -296,10 +319,10 @@ class SettingsPage(QWidget):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # List
-        self.suppliers_list = QListWidget()
-        self.populate_suppliers_list()
-        layout.addWidget(self.suppliers_list)
+        # Table
+        self.suppliers_table = self._create_reference_table()
+        self.suppliers_table.cellDoubleClicked.connect(lambda *_: self.edit_supplier())
+        layout.addWidget(self.suppliers_table)
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -311,35 +334,277 @@ class SettingsPage(QWidget):
         edit_btn.clicked.connect(self.edit_supplier)
         button_layout.addWidget(edit_btn)
 
-        delete_btn = QPushButton("Delete Supplier")
-        delete_btn.clicked.connect(self.delete_supplier)
-        button_layout.addWidget(delete_btn)
+        self.delete_supplier_btn = QPushButton("Delete Supplier")
+        self.delete_supplier_btn.clicked.connect(self.delete_supplier)
+        self.delete_supplier_btn.setEnabled(False)
+        button_layout.addWidget(self.delete_supplier_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
+        self.supplier_usage_label = QLabel("Select a supplier to view usage status.")
+        self.supplier_usage_label.setWordWrap(True)
+        layout.addWidget(self.supplier_usage_label)
+
+        self.suppliers_table.itemSelectionChanged.connect(
+            self.on_supplier_selection_changed
+        )
+        self.populate_suppliers_list()
+
         self.tab_widget.addTab(tab, "Suppliers")
+
+    def create_categories_tab(self):
+        """Create a read-only categories tab with lifecycle rules."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        intro = QLabel(
+            "Categories are fixed system values and are used to drive item lifecycle calculations."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        categories_table = QTableWidget(len(DEFAULT_CATEGORIES), 4)
+        categories_table.setHorizontalHeaderLabels(
+            ["Category", "Item Type", "Lifecycle Rule", "Calibration"]
+        )
+        categories_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        categories_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+
+        for row, category in enumerate(DEFAULT_CATEGORIES):
+            is_special_no_type = category.name in {"Others", "Uncategorized"}
+            item_type = (
+                "N/A"
+                if is_special_no_type
+                else "Consumable"
+                if category.is_consumable
+                else "Non-consumable"
+            )
+            if category.expiry_months:
+                lifecycle_rule = (
+                    f"Expiration = acquisition + {category.expiry_months} months"
+                )
+            elif category.disposal_years:
+                lifecycle_rule = (
+                    f"Disposal = acquisition + {category.disposal_years} years"
+                )
+            else:
+                lifecycle_rule = "No auto lifecycle date"
+
+            calibration = "Yearly" if category.has_calibration else "No"
+
+            categories_table.setItem(row, 0, QTableWidgetItem(category.name))
+            categories_table.setItem(row, 1, QTableWidgetItem(item_type))
+            categories_table.setItem(row, 2, QTableWidgetItem(lifecycle_rule))
+            categories_table.setItem(row, 3, QTableWidgetItem(calibration))
+
+        categories_table.resizeColumnsToContents()
+        header = categories_table.horizontalHeader()
+        if header is not None:
+            header.setStretchLastSection(True)
+        layout.addWidget(categories_table, 1)
+
+        note = QLabel(
+            "these categories are fixed and is essential on how an item's lifecycle is categorized. changing or adding categories would require a calculation of it's lifecycle and and other core functions to become a proper item category."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            "background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; padding: 10px; color: #1f2937; font-weight: 500;"
+        )
+        layout.addWidget(note)
+        self.tab_widget.addTab(tab, "Categories")
+
+    def _create_reference_table(self) -> QTableWidget:
+        """Create a shared table layout for settings reference data."""
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(["Name", "Usage", "Status"])
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setAlternatingRowColors(True)
+        vertical_header = table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setVisible(False)
+
+        header = table.horizontalHeader()
+        if header is not None:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, header.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, header.ResizeMode.ResizeToContents)
+        return table
+
+    @staticmethod
+    def _selected_reference_data(table: QTableWidget):
+        """Return selected row metadata for a settings table."""
+        selected_items = table.selectedItems()
+        if not selected_items:
+            return None
+
+        row = selected_items[0].row()
+        name_item = table.item(row, 0)
+        if name_item is None:
+            return None
+        return name_item.data(Qt.ItemDataRole.UserRole) or {}
 
     def populate_sizes_list(self):
         """Populate the sizes list."""
-        self.sizes_list.clear()
+        self.sizes_table.setRowCount(0)
         sizes = Size.get_all()
         for s in sizes:
-            self.sizes_list.addItem(s.name)
+            usage_count = s.get_usage_count()
+            row = self.sizes_table.rowCount()
+            self.sizes_table.insertRow(row)
+
+            name_item = QTableWidgetItem(s.name)
+            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
+            status_item = QTableWidgetItem(
+                "NON-DELETABLE" if usage_count > 0 else "Unused"
+            )
+
+            name_item.setData(
+                Qt.ItemDataRole.UserRole,
+                {"id": s.id, "name": s.name, "usage_count": usage_count},
+            )
+
+            self.sizes_table.setItem(row, 0, name_item)
+            self.sizes_table.setItem(row, 1, usage_item)
+            self.sizes_table.setItem(row, 2, status_item)
+
+            if usage_count > 0:
+                muted = self.palette().color(self.foregroundRole()).darker(150)
+                name_item.setForeground(muted)
+                usage_item.setForeground(muted)
+                status_item.setForeground(muted)
+
+        if self.sizes_table.rowCount() > 0:
+            self.sizes_table.selectRow(0)
+        else:
+            self.on_size_selection_changed()
 
     def populate_brands_list(self):
         """Populate the brands list."""
-        self.brands_list.clear()
+        self.brands_table.setRowCount(0)
         brands = Brand.get_all()
         for b in brands:
-            self.brands_list.addItem(b.name)
+            usage_count = b.get_usage_count()
+            row = self.brands_table.rowCount()
+            self.brands_table.insertRow(row)
+
+            name_item = QTableWidgetItem(b.name)
+            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
+            status_item = QTableWidgetItem(
+                "NON-DELETABLE" if usage_count > 0 else "Unused"
+            )
+
+            name_item.setData(
+                Qt.ItemDataRole.UserRole,
+                {"id": b.id, "name": b.name, "usage_count": usage_count},
+            )
+
+            self.brands_table.setItem(row, 0, name_item)
+            self.brands_table.setItem(row, 1, usage_item)
+            self.brands_table.setItem(row, 2, status_item)
+
+            if usage_count > 0:
+                muted = self.palette().color(self.foregroundRole()).darker(150)
+                name_item.setForeground(muted)
+                usage_item.setForeground(muted)
+                status_item.setForeground(muted)
+
+        if self.brands_table.rowCount() > 0:
+            self.brands_table.selectRow(0)
+        else:
+            self.on_brand_selection_changed()
 
     def populate_suppliers_list(self):
         """Populate the suppliers list."""
-        self.suppliers_list.clear()
+        self.suppliers_table.setRowCount(0)
         suppliers = Supplier.get_all()
         for s in suppliers:
-            self.suppliers_list.addItem(s.name)
+            usage_count = s.get_usage_count()
+            row = self.suppliers_table.rowCount()
+            self.suppliers_table.insertRow(row)
+
+            name_item = QTableWidgetItem(s.name)
+            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
+            status_item = QTableWidgetItem(
+                "NON-DELETABLE" if usage_count > 0 else "Unused"
+            )
+
+            name_item.setData(
+                Qt.ItemDataRole.UserRole,
+                {"id": s.id, "name": s.name, "usage_count": usage_count},
+            )
+
+            self.suppliers_table.setItem(row, 0, name_item)
+            self.suppliers_table.setItem(row, 1, usage_item)
+            self.suppliers_table.setItem(row, 2, status_item)
+
+            if usage_count > 0:
+                muted = self.palette().color(self.foregroundRole()).darker(150)
+                name_item.setForeground(muted)
+                usage_item.setForeground(muted)
+                status_item.setForeground(muted)
+
+        if self.suppliers_table.rowCount() > 0:
+            self.suppliers_table.selectRow(0)
+        else:
+            self.on_supplier_selection_changed()
+
+    def on_size_selection_changed(self):
+        """Update delete state and usage helper text for size selection."""
+        data = self._selected_reference_data(self.sizes_table)
+        if not data:
+            self.delete_size_btn.setEnabled(False)
+            self.size_usage_label.setText("Select a size to view usage status.")
+            return
+
+        usage_count = data.get("usage_count", 0)
+        name = data.get("name", "")
+        self.delete_size_btn.setEnabled(usage_count == 0)
+        if usage_count > 0:
+            self.size_usage_label.setText(
+                f"'{name}' is currently used by {usage_count} item(s) and cannot be deleted."
+            )
+        else:
+            self.size_usage_label.setText(f"'{name}' is unused and can be deleted.")
+
+    def on_brand_selection_changed(self):
+        """Update delete state and usage helper text for brand selection."""
+        data = self._selected_reference_data(self.brands_table)
+        if not data:
+            self.delete_brand_btn.setEnabled(False)
+            self.brand_usage_label.setText("Select a brand to view usage status.")
+            return
+
+        usage_count = data.get("usage_count", 0)
+        name = data.get("name", "")
+        self.delete_brand_btn.setEnabled(usage_count == 0)
+        if usage_count > 0:
+            self.brand_usage_label.setText(
+                f"'{name}' is currently used by {usage_count} item(s) and cannot be deleted."
+            )
+        else:
+            self.brand_usage_label.setText(f"'{name}' is unused and can be deleted.")
+
+    def on_supplier_selection_changed(self):
+        """Update delete state and usage helper text for supplier selection."""
+        data = self._selected_reference_data(self.suppliers_table)
+        if not data:
+            self.delete_supplier_btn.setEnabled(False)
+            self.supplier_usage_label.setText("Select a supplier to view usage status.")
+            return
+
+        usage_count = data.get("usage_count", 0)
+        name = data.get("name", "")
+        self.delete_supplier_btn.setEnabled(usage_count == 0)
+        if usage_count > 0:
+            self.supplier_usage_label.setText(
+                f"'{name}' is currently used by {usage_count} item(s) and cannot be deleted."
+            )
+        else:
+            self.supplier_usage_label.setText(f"'{name}' is unused and can be deleted.")
 
     def add_size(self):
         """Add a new size."""
@@ -357,12 +622,12 @@ class SettingsPage(QWidget):
 
     def edit_size(self):
         """Edit the selected size."""
-        current_item = self.sizes_list.currentItem()
-        if not current_item:
+        data = self._selected_reference_data(self.sizes_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a size to edit")
             return
 
-        old_name = current_item.text()
+        old_name = data.get("name", "")
         dialog = NameDialog("Edit Size", self, old_name)
         if dialog.exec():
             new_name = dialog.get_name()
@@ -382,12 +647,21 @@ class SettingsPage(QWidget):
 
     def delete_size(self):
         """Delete the selected size."""
-        current_item = self.sizes_list.currentItem()
-        if not current_item:
+        data = self._selected_reference_data(self.sizes_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a size to delete")
             return
 
-        name = current_item.text()
+        name = data.get("name", "")
+        usage_count = data.get("usage_count", 0)
+        if usage_count > 0:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete",
+                f"Cannot delete size '{name}' because it is currently being used by {usage_count} item(s).",
+            )
+            return
+
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
@@ -398,19 +672,14 @@ class SettingsPage(QWidget):
             sizes = Size.get_all()
             size_to_delete = next((s for s in sizes if s.name == name), None)
             if size_to_delete:
-                if size_to_delete.delete():
+                success, message, _ = size_to_delete.delete()
+                if success:
                     self.populate_sizes_list()
                     QMessageBox.information(
                         self, "Success", "Size deleted successfully!"
                     )
                 else:
-                    # Provide informative error message about why deletion failed
-                    QMessageBox.warning(
-                        self,
-                        "Cannot Delete",
-                        f"Cannot delete size '{name}' because it is currently being used by one or more items.\n\n"
-                        "Please remove this size from all items before deleting it.",
-                    )
+                    QMessageBox.warning(self, "Cannot Delete", message)
 
     def add_brand(self):
         """Add a new brand."""
@@ -430,12 +699,12 @@ class SettingsPage(QWidget):
 
     def edit_brand(self):
         """Edit the selected brand."""
-        current_item = self.brands_list.currentItem()
-        if not current_item:
+        data = self._selected_reference_data(self.brands_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a brand to edit")
             return
 
-        old_name = current_item.text()
+        old_name = data.get("name", "")
         dialog = NameDialog("Edit Brand", self, old_name)
         if dialog.exec():
             new_name = dialog.get_name()
@@ -455,12 +724,21 @@ class SettingsPage(QWidget):
 
     def delete_brand(self):
         """Delete the selected brand."""
-        current_item = self.brands_list.currentItem()
-        if not current_item:
+        data = self._selected_reference_data(self.brands_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a brand to delete")
             return
 
-        name = current_item.text()
+        name = data.get("name", "")
+        usage_count = data.get("usage_count", 0)
+        if usage_count > 0:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete",
+                f"Cannot delete brand '{name}' because it is currently being used by {usage_count} item(s).",
+            )
+            return
+
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
@@ -471,19 +749,14 @@ class SettingsPage(QWidget):
             brands = Brand.get_all()
             brand_to_delete = next((b for b in brands if b.name == name), None)
             if brand_to_delete:
-                if brand_to_delete.delete():
+                success, message, _ = brand_to_delete.delete()
+                if success:
                     self.populate_brands_list()
                     QMessageBox.information(
                         self, "Success", "Brand deleted successfully!"
                     )
                 else:
-                    # Provide informative error message about why deletion failed
-                    QMessageBox.warning(
-                        self,
-                        "Cannot Delete",
-                        f"Cannot delete brand '{name}' because it is currently being used by one or more items.\n\n"
-                        "Please remove this brand from all items before deleting it.",
-                    )
+                    QMessageBox.warning(self, "Cannot Delete", message)
 
     def add_supplier(self):
         """Add a new supplier."""
@@ -503,12 +776,12 @@ class SettingsPage(QWidget):
 
     def edit_supplier(self):
         """Edit the selected supplier."""
-        current_item = self.suppliers_list.currentItem()
-        if not current_item:
+        data = self._selected_reference_data(self.suppliers_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a supplier to edit")
             return
 
-        old_name = current_item.text()
+        old_name = data.get("name", "")
         dialog = NameDialog("Edit Supplier", self, old_name)
         if dialog.exec():
             new_name = dialog.get_name()
@@ -529,17 +802,22 @@ class SettingsPage(QWidget):
                         QMessageBox.critical(self, "Error", message)
 
     def delete_supplier(self):
-        """Delete the selected supplier.
-
-        Per beta test requirement #18: Suppliers can be deleted from dropdown.
-        If the supplier is in use, prompts user to confirm force deletion.
-        """
-        current_item = self.suppliers_list.currentItem()
-        if not current_item:
+        """Delete the selected supplier if it is not used by any item."""
+        data = self._selected_reference_data(self.suppliers_table)
+        if not data:
             QMessageBox.warning(self, "Warning", "Please select a supplier to delete")
             return
 
-        name = current_item.text()
+        name = data.get("name", "")
+        usage_count = data.get("usage_count", 0)
+        if usage_count > 0:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete",
+                f"Cannot delete supplier '{name}' because it is currently being used by {usage_count} item(s).",
+            )
+            return
+
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
@@ -550,19 +828,7 @@ class SettingsPage(QWidget):
             suppliers = Supplier.get_all()
             supplier_to_delete = next((s for s in suppliers if s.name == name), None)
             if supplier_to_delete:
-                # First try without force
-                success, message = supplier_to_delete.delete(force=False)
-
-                if not success and "being used by" in message:
-                    # Supplier is in use - ask if user wants to force delete
-                    force_reply = QMessageBox.question(
-                        self,
-                        "Supplier In Use",
-                        f"{message}\n\nItems will have their supplier set to 'None'.",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    )
-                    if force_reply == QMessageBox.StandardButton.Yes:
-                        success, message = supplier_to_delete.delete(force=True)
+                success, message, _ = supplier_to_delete.delete()
 
                 if success:
                     self.populate_suppliers_list()
@@ -570,11 +836,7 @@ class SettingsPage(QWidget):
                         self, "Success", "Supplier deleted successfully!"
                     )
                 else:
-                    QMessageBox.warning(
-                        self,
-                        "Cannot Delete",
-                        f"Cannot delete supplier '{name}'.\n\n{message}",
-                    )
+                    QMessageBox.warning(self, "Cannot Delete", message)
 
 
 class NameDialog(QDialog):

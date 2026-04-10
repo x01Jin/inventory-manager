@@ -26,15 +26,18 @@ Behavior is consistent across tabs:
 - Input is trimmed and cannot be blank.
 - Case-insensitive duplicate checks are enforced (for example, `250ml` and `250mL` are treated as duplicates).
 - Edit/Delete requires selecting an existing entry first.
+- Entries are displayed in a 3-column table: `Name`, `Usage`, and `Status`.
+- You can double-click a row to open the Edit dialog for that entry.
 
 Delete behavior differs by type:
 
-- Sizes and Brands: deletion is blocked if currently used by any item.
-- Suppliers: if in use, the app can force-delete and set affected item supplier values to `None`.
+- Sizes, Brands, and Suppliers: deletion is blocked if currently used by any item.
+- Each table row shows usage count in `Usage` and either `Unused` or `NON-DELETABLE` in `Status`.
+- Rows that are in use are marked `NON-DELETABLE`, and the delete button is disabled for the selected row.
 
 ## Fixed Categories
 
-Categories are not managed in Settings and are fixed by system configuration (`inventory_app/services/category_config.py`).
+Settings includes a read-only Categories tab. Categories are fixed by system configuration (`inventory_app/services/category_config.py`) and cannot be added, edited, or deleted in the UI.
 
 | Category | Item Type | Auto Date Rule | Calibration |
 | --- | --- | --- | --- |
@@ -45,7 +48,11 @@ Categories are not managed in Settings and are fixed by system configuration (`i
 | Equipment | Non-consumable | Disposal = acquisition + 5 years | Yes, yearly |
 | Apparatus | Non-consumable | Disposal = acquisition + 3 years | No |
 | Lab Models | Non-consumable | Disposal = acquisition + 5 years | No |
-| Others | Non-consumable | Disposal = acquisition + 5 years | No |
-| Uncategorized | Non-consumable | No auto date rule | No |
+| Others | N/A | No auto date rule | No |
+| Uncategorized | N/A | No auto date rule | No |
 
 When creating or editing an item, category selection auto-fills item type and date defaults. Users can still manually adjust dates before saving.
+
+The Settings page includes this fixed-category note:
+
+"these categories are fixed and is essential on how an item's lifecycle is categorized. changing or adding categories would require a calculation of it's life cycle and and other core functions to become a proper item category. please contact the developer if you want to change or add categories as it is not a simple addition and it requires a deep understanding of the program's core functions and data structure."
