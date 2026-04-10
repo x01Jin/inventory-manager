@@ -26,6 +26,7 @@ from PyQt6.QtCore import Qt, QDate
 
 from inventory_app.gui.reports.ui_components import ReportUIUpdater
 from inventory_app.gui.reports.report_worker import ReportWorker
+from inventory_app.services.category_config import get_all_category_names
 from inventory_app.utils.logger import logger
 from inventory_app.gui.widgets.date_selector import DateRangeSelector
 from inventory_app.gui.styles import ThemeManager
@@ -573,19 +574,19 @@ class ReportsPage(QWidget):
         return status_widget
 
     def load_categories(self, combo_box=None):
-        """Load categories from database."""
+        """Load canonical categories into a combo box."""
         if combo_box is None:
             combo_box = self.category_combo
 
         try:
-            from inventory_app.database.connection import db
+            while combo_box.count() > 1:
+                combo_box.removeItem(1)
 
-            categories = db.execute_query("SELECT name FROM Categories ORDER BY name")
             if combo_box.count() == 0:
                 combo_box.addItem("All Categories")
-            if categories:
-                for cat in categories:
-                    combo_box.addItem(cat["name"])
+
+            for category in get_all_category_names():
+                combo_box.addItem(category)
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
 

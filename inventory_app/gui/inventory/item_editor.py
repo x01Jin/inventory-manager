@@ -342,7 +342,9 @@ class ItemEditor(QDialog):
         acq_qdate = self.acquisition_date.date()
         acquisition_date = date(acq_qdate.year(), acq_qdate.month(), acq_qdate.day())
 
-        # Set item type based on category
+        # Set item type based on category.
+        # Preserve explicit TA non-consumable selection across non-consumable categories.
+        current_item_type = self.item_type_combo.currentData()
         if cat_config.is_consumable:
             # Find and select "Consumable"
             for i in range(self.item_type_combo.count()):
@@ -350,11 +352,12 @@ class ItemEditor(QDialog):
                     self.item_type_combo.setCurrentIndex(i)
                     break
         else:
-            # Find and select "Non-Consumable"
-            for i in range(self.item_type_combo.count()):
-                if self.item_type_combo.itemData(i) == "non_consumable":
-                    self.item_type_combo.setCurrentIndex(i)
-                    break
+            if current_item_type != "ta_non_consumable":
+                # Find and select "Non-Consumable"
+                for i in range(self.item_type_combo.count()):
+                    if self.item_type_combo.itemData(i) == "non_consumable":
+                        self.item_type_combo.setCurrentIndex(i)
+                        break
 
         # Calculate and set dates based on category
         # For consumables: set expiration date

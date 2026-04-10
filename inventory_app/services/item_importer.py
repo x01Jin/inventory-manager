@@ -11,6 +11,7 @@ from typing import Dict, List, Set, Tuple, Any, Optional, Callable
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from inventory_app.database.models import Item
+from inventory_app.services.category_config import get_all_category_names
 from inventory_app.utils.logger import logger
 from inventory_app.database.connection import db
 from datetime import datetime, date
@@ -67,6 +68,36 @@ NAME_VARIANTS = [
     "names",
 ]
 NAME_NORMALIZED = {_normalize_key_for_map(v) for v in NAME_VARIANTS}
+
+
+def _normalize_category_for_match(raw_category: Any) -> str:
+    """Normalize category label for alias-insensitive matching."""
+    raw = "" if raw_category is None else str(raw_category)
+    return "".join(ch for ch in raw.lower() if ch.isalnum())
+
+
+def _to_canonical_category_name(raw_category: Any) -> Optional[str]:
+    """Map raw category text to a canonical category name when possible."""
+    if raw_category is None:
+        return None
+
+    raw_text = str(raw_category).strip()
+    if raw_text == "" or raw_text.upper() == "N/A":
+        return None
+
+    canonical_names = get_all_category_names()
+    canonical_by_normalized = {
+        _normalize_category_for_match(name): name for name in canonical_names
+    }
+
+    normalized = _normalize_category_for_match(raw_text)
+    if normalized in canonical_by_normalized:
+        return canonical_by_normalized[normalized]
+
+    if "ta" in normalized and "non" in normalized and "consum" in normalized:
+        return "Others"
+
+    return raw_text
 
 
 def _normalize_header(h: Any) -> str:
@@ -485,21 +516,20 @@ def import_items_from_excel(
             raw_category = row_data.get("category")
             try:
                 category_id = None
-                if raw_category and str(raw_category).strip().upper() not in (
-                    "",
-                    "N/A",
-                ):
-                    cat_name = str(raw_category).strip()
+                canonical_category_name = _to_canonical_category_name(raw_category)
+                if canonical_category_name:
                     rows = db.execute_query(
                         "SELECT id FROM Categories WHERE name = ? COLLATE NOCASE",
-                        (cat_name,),
+                        (canonical_category_name,),
                     )
                     if rows:
                         category_id = rows[0]["id"]
                     else:
                         # Category doesn't exist; log and map to Uncategorized
                         logger.debug(
-                            f"Category '{cat_name}' not found; mapping to 'Uncategorized'"
+                            "Category "
+                            f"'{canonical_category_name}' (raw='{raw_category}') "
+                            "not found; mapping to 'Uncategorized'"
                         )
 
                 # If no category was matched or if the provided category doesn't exist,

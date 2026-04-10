@@ -21,6 +21,7 @@ try:
     from .database.connection import db
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
+    from .services.category_sync_service import sync_development_categories
     from .services.summary_tables import summary_tables_service
 except Exception:
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +31,7 @@ except Exception:
     from inventory_app.database.connection import db
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
+    from inventory_app.services.category_sync_service import sync_development_categories
     from inventory_app.services.summary_tables import summary_tables_service
 
 
@@ -84,6 +86,10 @@ def ensure_development_schema_compatibility() -> bool:
                 WHERE item_type IS NULL OR TRIM(item_type) = ''
                 """
             )
+
+        if not sync_development_categories():
+            logger.error("Failed to synchronize canonical categories")
+            return False
 
         return True
     except Exception:

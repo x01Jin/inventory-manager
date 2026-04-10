@@ -5,8 +5,14 @@ Provides search input and filter dropdowns.
 
 from typing import List
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QLineEdit, QComboBox, QPushButton, QGroupBox
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QPushButton,
+    QGroupBox,
 )
 from PyQt6.QtCore import pyqtSignal
 from inventory_app.utils.logger import logger
@@ -16,17 +22,16 @@ class InventoryFilters(QWidget):
     """Widget for inventory search and filtering controls."""
 
     # Signals
-    search_changed = pyqtSignal(str)          # Search term changed
-    category_filter_changed = pyqtSignal(str) # Category filter changed
-    supplier_filter_changed = pyqtSignal(str) # Supplier filter changed
-    clear_filters_requested = pyqtSignal()    # Clear all filters
+    search_changed = pyqtSignal(str)  # Search term changed
+    category_filter_changed = pyqtSignal(str)  # Category filter changed
+    supplier_filter_changed = pyqtSignal(str)  # Supplier filter changed
+    clear_filters_requested = pyqtSignal()  # Clear all filters
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.categories: List[str] = []
         self.suppliers: List[str] = []
         self.setup_ui()
-
 
     def setup_ui(self):
         """Setup the filter controls UI."""
@@ -96,8 +101,8 @@ class InventoryFilters(QWidget):
         while self.category_combo.count() > 1:
             self.category_combo.removeItem(1)
 
-        # Add categories
-        for category in sorted(categories):
+        # Add categories in canonical order
+        for category in categories:
             self.category_combo.addItem(category, category)
 
         logger.debug(f"Set {len(categories)} categories for filtering")

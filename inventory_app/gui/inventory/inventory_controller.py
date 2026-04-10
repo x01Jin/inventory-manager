@@ -6,6 +6,7 @@ Handles database operations and data loading for inventory items.
 from typing import List, Optional, Dict, Any
 from datetime import date
 from inventory_app.database.connection import db
+from inventory_app.services.category_config import get_all_category_names
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.services.stock_calculation_service import stock_calculation_service
 from inventory_app.utils.logger import logger
@@ -318,10 +319,7 @@ class InventoryController:
     def get_categories(self) -> List[str]:
         """Get list of unique categories."""
         try:
-            rows = db.execute_query(
-                "SELECT DISTINCT name FROM Categories ORDER BY name"
-            )
-            return [row["name"] for row in rows]
+            return get_all_category_names()
         except Exception as e:
             logger.error(f"Failed to get categories: {e}")
             return []

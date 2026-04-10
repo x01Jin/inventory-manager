@@ -10,6 +10,7 @@ from inventory_app.services.category_config import (
     get_category_config,
     get_all_category_names,
 )
+from inventory_app.services.category_sync_service import sync_development_categories
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.services.validation_service import ValidationService
 
@@ -321,3 +322,46 @@ def test_non_calibration_category_ignores_calibration_alerts(temp_db):
     assert status is not None
     assert "CAL_WARNING" not in status.status
     assert "CAL_DUE" not in status.status
+
+
+def test_category_sync_remaps_legacy_labels(temp_db):
+    """Legacy category labels should be remapped to canonical categories."""
+    result = db.execute_update(
+        "INSERT INTO Categories (name) VALUES (?)",
+        ("Chemicals - Solid",),
+        return_last_id=True,
+    )
+    assert isinstance(result, tuple)
+    _, legacy_category_id = result
+    assert legacy_category_id is not None
+
+    item_result = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Legacy Cat Item", legacy_category_id, 1),
+        return_last_id=True,
+    )
+    assert isinstance(item_result, tuple)
+    _, item_id = item_result
+    assert item_id is not None
+
+    assert sync_development_categories() is True
+
+    legacy_rows = db.execute_query(
+        "SELECT id FROM Categories WHERE name = ?",
+        ("Chemicals - Solid",),
+    )
+    assert not legacy_rows
+
+    canonical_rows = db.execute_query(
+        "SELECT id FROM Categories WHERE name = ?",
+        ("Chemicals-Solid",),
+    )
+    assert canonical_rows
+    canonical_id = canonical_rows[0]["id"]
+
+    item_rows = db.execute_query(
+        "SELECT category_id FROM Items WHERE id = ?",
+        (item_id,),
+    )
+    assert item_rows
+    assert item_rows[0]["category_id"] == canonical_id

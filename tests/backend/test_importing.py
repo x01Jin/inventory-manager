@@ -307,3 +307,29 @@ def test_importer_applies_unit_overrides_and_skip_rows(temp_db, tmp_path):
 
     acetone = db.execute_query("SELECT id FROM Items WHERE name = ?", ("Acetone",))
     assert not acetone
+
+
+def test_importer_normalizes_spaced_category_aliases(temp_db, tmp_path):
+    """Importer should normalize spaced chemical category labels to canonical names."""
+    excel_path = tmp_path / "category_alias_import.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(["name", "stocks", "item type", "category"])
+    ws.append(["AliasChem", "50", "Consumable", "Chemicals - Solid"])
+    wb.save(excel_path)
+
+    imported_count, _ = import_items_from_excel(str(excel_path), editor_name="tester")
+    assert imported_count == 1
+
+    rows = db.execute_query(
+        """
+        SELECT c.name as category_name
+        FROM Items i
+        JOIN Categories c ON c.id = i.category_id
+        WHERE i.name = ?
+        """,
+        ("AliasChem",),
+    )
+    assert rows
+    assert rows[0]["category_name"] == "Chemicals-Solid"

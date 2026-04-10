@@ -13,8 +13,8 @@ from inventory_app.gui.reports.report_utils import date_formatter
 
 # Category display order matching sample reports
 CATEGORY_ORDER = [
-    "Apparatus",
     "Equipment",
+    "Apparatus",
     "Lab Models",
     "Chemicals-Solid",
     "Chemicals-Liquid",
@@ -26,8 +26,8 @@ CATEGORY_ORDER = [
 
 # Category display names for report headers
 CATEGORY_DISPLAY_NAMES = {
-    "Apparatus": "APPARATUSES",
     "Equipment": "EQUIPMENT",
+    "Apparatus": "APPARATUSES",
     "Lab Models": "LAB MODELS",
     "Chemicals-Solid": "CHEMICALS - SOLID",
     "Chemicals-Liquid": "CHEMICALS - LIQUID",
