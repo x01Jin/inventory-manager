@@ -45,6 +45,11 @@ The system updates inventory in one save flow to avoid partial changes.
 
 After return processing, the requisition is finalized and treated as closed.
 
+Stock behavior after returns:
+
+- Consumables: returned-unused quantity is added back and used quantity is permanently deducted.
+- Non-consumables: borrow/return does not permanently deduct stock; only lost or disposed quantity is permanently deducted.
+
 ### Import Items from Excel
 
 1. Open Inventory.

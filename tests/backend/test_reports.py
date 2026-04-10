@@ -8,6 +8,7 @@ from inventory_app.gui.reports.report_generator import ReportGenerator
 from inventory_app.gui.reports.query_builder import ReportQueryBuilder
 from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
+    get_stock_levels_data,
 )
 
 
@@ -152,3 +153,62 @@ def test_update_history_report_integrity(temp_db):
     )
     assert len(history) >= 1
     assert history[0]["editor_name"] == "RefactorTester"
+
+
+def test_task10_stock_levels_data_policy(temp_db):
+    """Task 10: stock report reflects consumable depletion and non-consumable disposal only."""
+    consumable_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Report Consumable", 1, 1),
+        return_last_id=True,
+    )[1]
+    non_consumable_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Report NonConsumable", 1, 0),
+        return_last_id=True,
+    )[1]
+
+    consumable_batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (consumable_id, 1, 50, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    non_consumable_batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (non_consumable_id, 1, 20, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+
+    # Consumable final stock: 50 - 12 - 3 + 2 = 37
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "CONSUMPTION", 12, "2025-01-02"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "DISPOSAL", 3, "2025-01-03"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "RETURN", 2, "2025-01-04"),
+    )
+
+    # Non-consumable final stock: 20 - 5 = 15 (REQUEST/RETURN must not change stock)
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "REQUEST", 7, "2025-01-02"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "RETURN", 7, "2025-01-03"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "DISPOSAL", 5, "2025-01-05"),
+    )
+
+    rows = get_stock_levels_data()
+    by_name = {row["Item Name"]: row for row in rows}
+
+    assert by_name["Report Consumable"]["Current Stock"] == 37
+    assert by_name["Report NonConsumable"]["Current Stock"] == 15

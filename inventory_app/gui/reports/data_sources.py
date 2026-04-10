@@ -102,11 +102,11 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
 
     Per beta test requirements:
     - Consumables: deduct consumed quantity from original stock
-    - Non-consumables: retain original count (items are returned after use)
+    - Non-consumables: borrow/return does not affect stock baseline; only disposal/loss deducts stock
 
     The 'Current Stock' column shows:
     - For consumables: Original - Consumed - Disposed + Returned
-    - For non-consumables: Original stock (unchanged, as items are returned)
+    - For non-consumables: Original - Disposed
     """
     try:
         # Compute both original (received) and current stock (consumption/disposal/returns)
@@ -117,24 +117,40 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
-                COALESCE(SUM(ib.quantity_received), 0) AS "Original Stock",
-                CASE 
+                COALESCE(stock.original_stock, 0) AS "Original Stock",
+                CASE
                     WHEN i.is_consumable = 1 THEN
                         -- Consumables: deduct consumed/disposed, add returned
-                        COALESCE(SUM(ib.quantity_received), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0)
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
                     ELSE
-                        -- Non-consumables: retain original stock (items are returned after use)
-                        COALESCE(SUM(ib.quantity_received), 0)
+                        -- Non-consumables: requests/returns are availability only; disposal/loss is permanent
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.disposed_qty, 0)
                 END AS "Current Stock",
                 i.other_specifications AS "Specifications",
                 i.is_consumable AS "Is Consumable"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
-            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
-            LEFT JOIN Stock_Movements sm ON sm.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    COALESCE(SUM(ib.quantity_received), 0) AS original_stock
+                FROM Item_Batches ib
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+            ) stock ON stock.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS consumed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS disposed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON movements.item_id = i.id
             """
 
         params = [
@@ -146,7 +162,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
 
         # Filter out items with 0 current stock (depleted/disposed items)
         query += ' HAVING "Current Stock" > 0'

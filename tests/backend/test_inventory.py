@@ -250,6 +250,146 @@ def test_varied_stock_movements(temp_db):
         assert rows[i]["quantity"] == qty
 
 
+def test_task10_stock_calculation_service_behavior(temp_db):
+    """Task 10: consumables deplete permanently; non-consumables only lose stock on disposal."""
+    from inventory_app.services.stock_calculation_service import (
+        stock_calculation_service,
+    )
+
+    consumable_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Task10 Consumable", 1, 1),
+        return_last_id=True,
+    )[1]
+    assert consumable_id is not None
+    consumable_batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (consumable_id, 1, 100, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    assert consumable_batch_id is not None
+
+    non_consumable_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Task10 NonConsumable", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert non_consumable_id is not None
+    non_consumable_batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (non_consumable_id, 1, 10, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    assert non_consumable_batch_id is not None
+
+    # Consumable: reservation does not affect stock, but consumption/disposal do.
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "RESERVATION", 15, "2025-01-02"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "CONSUMPTION", 25, "2025-01-03"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "RETURN", 5, "2025-01-04"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (consumable_id, consumable_batch_id, "DISPOSAL", 3, "2025-01-05"),
+    )
+
+    # Non-consumable: request/return are temporary, disposal is permanent.
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "REQUEST", 4, "2025-01-02"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "RETURN", 4, "2025-01-03"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (non_consumable_id, non_consumable_batch_id, "DISPOSAL", 2, "2025-01-04"),
+    )
+
+    assert stock_calculation_service.calculate_total_stock(consumable_id) == 77
+    assert stock_calculation_service.calculate_batch_stock(consumable_batch_id) == 77
+
+    assert stock_calculation_service.calculate_total_stock(non_consumable_id) == 8
+    assert stock_calculation_service.calculate_batch_stock(non_consumable_batch_id) == 8
+
+
+def test_task10_inventory_stats_total_stock_deducts_finalized_usage(temp_db):
+    """Inventory quick stats total stock should permanently deduct finalized consumable usage."""
+    from inventory_app.gui.inventory.inventory_controller import InventoryController
+    from inventory_app.gui.requisitions.requisition_management.return_processor import (
+        ReturnItem,
+        ReturnProcessor,
+    )
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Stats Tester",),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Stats Consumable", 1, 1),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+    batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 100, "2026-01-01"),
+        return_last_id=True,
+    )[1]
+    assert batch_id is not None
+
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-02 09:00:00",
+            "2026-01-02 12:00:00",
+            "active",
+            "Stats Lab",
+            "2026-01-02",
+        ),
+        return_last_id=True,
+    )[1]
+    assert requisition_id is not None
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_id, 10),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, batch_id, "RESERVATION", 10, "2026-01-02", requisition_id),
+    )
+
+    processor = ReturnProcessor()
+    ok = processor.process_returns(
+        requisition_id,
+        [
+            ReturnItem(
+                item_id=item_id,
+                batch_id=batch_id,
+                quantity_requested=10,
+                quantity_returned=0,
+                is_consumable=True,
+            )
+        ],
+        editor_name="tester",
+    )
+    assert ok is True
+
+    stats = InventoryController().get_batch_statistics()
+    assert stats["total_stock"] == 90
+
+
 def test_non_consumable_disposal_uses_category_config(temp_db):
     """Status fallback disposal date must follow category_config policy per category."""
     today = date.today()

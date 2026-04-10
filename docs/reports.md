@@ -153,7 +153,9 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 
 - Inventory reports are generated via `ReportGenerator.generate_inventory_report(report_type, start_date, end_date, ...)`.
 - Implemented inventory report types (UI and code):
-  - Stock Levels Report — aggregates `Item_Batches` receipts minus `Stock_Movements` consumption/disposal to compute current stock.
+  - Stock Levels Report:
+    - Consumables: `Original - Consumption - Disposal + Return`
+    - Non-consumables: `Original - Disposal` (active borrow/request affects availability, not baseline stock)
   - Expiration Report — items with `expiration_date` within the given range. Addresses beta test requirement #10 for expiration alerts.
   - Calibration Due Report — items in calibration-enabled categories with `calibration_date` within the range (default policy: Equipment). Addresses beta test requirement #11 for calibration alerts.
   - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.

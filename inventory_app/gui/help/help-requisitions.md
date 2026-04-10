@@ -78,6 +78,11 @@ After creation the requisition is visible in the table and requests/reservations
    - Add notes describing the defect (required when defective quantity > 0)
 5. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption), defective items (if any), and locks the requisition.
 
+Stock result summary:
+
+- Consumables permanently deplete by the quantity consumed.
+- Non-consumables remain at baseline when borrowed and returned; only lost/disposed quantity permanently reduces stock.
+
 Tips:
 
 - Ensure every requested quantity is accounted for before processing (returned + lost + defective = requested). The dialog summarizes these counts to help.

@@ -30,7 +30,9 @@ class StockCalculationService:
     def get_stock_calculation_subquery(self, item_id: Optional[int] = None) -> str:
         """
         Get consistent stock calculation SQL subquery.
-        Accounts for all stock movements: CONSUMPTION, DISPOSAL, RETURN.
+        Applies Task 10 stock policy:
+        - Consumables: Original - Consumption - Disposal + Return
+        - Non-consumables: Original - Disposal (borrow/request is availability, not stock)
 
         Args:
             item_id: Optional item ID filter for single item calculations
@@ -41,15 +43,23 @@ class StockCalculationService:
         base_query = """
             SELECT
                 ib.item_id,
+                i.is_consumable,
                 SUM(ib.quantity_received) as original_stock,
                 COALESCE(movements.consumed_qty, 0) as consumed_qty,
                 COALESCE(movements.disposed_qty, 0) as disposed_qty,
                 COALESCE(movements.returned_qty, 0) as returned_qty,
-                SUM(ib.quantity_received) -
-                COALESCE(movements.consumed_qty, 0) -
-                COALESCE(movements.disposed_qty, 0) +
-                COALESCE(movements.returned_qty, 0) as total_stock
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        SUM(ib.quantity_received) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        SUM(ib.quantity_received) -
+                        COALESCE(movements.disposed_qty, 0)
+                END as total_stock
             FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
             LEFT JOIN (
                 SELECT
                     sm.item_id,
@@ -64,7 +74,7 @@ class StockCalculationService:
         if item_id is not None:
             base_query += f" WHERE ib.item_id = {item_id}"
 
-        base_query += " GROUP BY ib.item_id"
+        base_query += " GROUP BY ib.item_id, i.is_consumable"
 
         return base_query
 
@@ -147,14 +157,21 @@ class StockCalculationService:
         """
         return """
             SELECT ib.item_id,
-                    SUM(ib.quantity_received) -
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
-                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) as current_stock
+                    CASE
+                        WHEN i.is_consumable = 1 THEN
+                            SUM(ib.quantity_received) -
+                            COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
+                            COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
+                            COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0)
+                        ELSE
+                            SUM(ib.quantity_received) -
+                            COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0)
+                    END as current_stock
             FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
             LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
             WHERE ib.disposal_date IS NULL
-            GROUP BY ib.item_id
+            GROUP BY ib.item_id, i.is_consumable
             HAVING current_stock < ? AND current_stock > 0
         """
 
@@ -164,6 +181,7 @@ class StockCalculationService:
             MovementType.CONSUMPTION.value,
             MovementType.DISPOSAL.value,
             MovementType.RETURN.value,
+            MovementType.DISPOSAL.value,
             threshold,
         )
 
@@ -178,11 +196,18 @@ class StockCalculationService:
         return """
             SELECT
                 ib.item_id,
-                SUM(ib.quantity_received) -
-                COALESCE(movements.consumed_qty, 0) -
-                COALESCE(movements.disposed_qty, 0) +
-                COALESCE(movements.returned_qty, 0) as total_stock
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        SUM(ib.quantity_received) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        SUM(ib.quantity_received) -
+                        COALESCE(movements.disposed_qty, 0)
+                END as total_stock
             FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
             LEFT JOIN (
                 SELECT
                     sm.item_id,
@@ -192,7 +217,7 @@ class StockCalculationService:
                 FROM Stock_Movements sm
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
-            GROUP BY ib.item_id
+            GROUP BY ib.item_id, i.is_consumable
         """
 
     def get_item_status_stock_params(self) -> Tuple:
@@ -216,15 +241,23 @@ class StockCalculationService:
         try:
             query = """
             SELECT
+                i.is_consumable,
                 COALESCE(SUM(ib.quantity_received), 0) as original_stock,
                 COALESCE(movements.consumed_qty, 0) as consumed_qty,
                 COALESCE(movements.disposed_qty, 0) as disposed_qty,
                 COALESCE(movements.returned_qty, 0) as returned_qty,
-                COALESCE(SUM(ib.quantity_received), 0) -
-                COALESCE(movements.consumed_qty, 0) -
-                COALESCE(movements.disposed_qty, 0) +
-                COALESCE(movements.returned_qty, 0) as total_stock
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        COALESCE(SUM(ib.quantity_received), 0) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        COALESCE(SUM(ib.quantity_received), 0) -
+                        COALESCE(movements.disposed_qty, 0)
+                END as total_stock
             FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
             LEFT JOIN (
                 SELECT
                     sm.item_id,
@@ -236,6 +269,7 @@ class StockCalculationService:
                 GROUP BY sm.item_id
             ) movements ON ib.item_id = movements.item_id
             WHERE ib.item_id = ?
+            GROUP BY i.is_consumable, movements.consumed_qty, movements.disposed_qty, movements.returned_qty
             """
             params = (
                 MovementType.CONSUMPTION.value,
@@ -263,15 +297,23 @@ class StockCalculationService:
         try:
             query = """
             SELECT
+                i.is_consumable,
                 ib.quantity_received,
                 COALESCE(movements.consumed_qty, 0) as consumed_qty,
                 COALESCE(movements.disposed_qty, 0) as disposed_qty,
                 COALESCE(movements.returned_qty, 0) as returned_qty,
-                ib.quantity_received -
-                COALESCE(movements.consumed_qty, 0) -
-                COALESCE(movements.disposed_qty, 0) +
-                COALESCE(movements.returned_qty, 0) as total_stock
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        ib.quantity_received -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        ib.quantity_received -
+                        COALESCE(movements.disposed_qty, 0)
+                END as total_stock
             FROM Item_Batches ib
+            JOIN Items i ON i.id = ib.item_id
             LEFT JOIN (
                 SELECT
                     sm.batch_id,

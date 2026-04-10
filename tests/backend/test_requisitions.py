@@ -119,52 +119,101 @@ def test_item_po_field_persistence(temp_db):
     row2 = db.execute_query("SELECT po_number FROM Items WHERE id = ?", (item_id2,))[0]
     assert row2["po_number"] is None
 
+
 def test_requisition_lifecycle(temp_db):
     """Verify requisition state transitions and stock movements."""
     from inventory_app.services.requisition_service import RequisitionService
     from inventory_app.services.movement_types import MovementType
-    
+    from inventory_app.services.item_service import ItemService
+    from inventory_app.services.stock_calculation_service import (
+        stock_calculation_service,
+    )
+
     svc = RequisitionService()
-    
+
     # 1. Setup Requester, Item and Batch
-    reqr_id = db.execute_update("INSERT INTO Requesters (name) VALUES (?)", ("Prof. X",), return_last_id=True)[1]
+    reqr_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)", ("Prof. X",), return_last_id=True
+    )[1]
     assert reqr_id is not None
     # Retrieve existing category IDs
-    cat_id = db.execute_query("SELECT id FROM Categories WHERE name = 'Chemicals-Solid'")[0]["id"]
-    asset_cat_id = db.execute_query("SELECT id FROM Categories WHERE name = 'Equipment'")[0]["id"]
-    
+    cat_id = db.execute_query(
+        "SELECT id FROM Categories WHERE name = 'Chemicals-Solid'"
+    )[0]["id"]
+    asset_cat_id = db.execute_query(
+        "SELECT id FROM Categories WHERE name = 'Equipment'"
+    )[0]["id"]
+
     # Consumable
-    item_id = db.execute_update("INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)", ("Ethanol", cat_id, 1), return_last_id=True)[1]
-    batch_id = db.execute_update("INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)", (item_id, 1, 10, "2025-01-01"), return_last_id=True)[1]
-    
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Ethanol", cat_id, 1),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+    batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 10, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    assert batch_id is not None
+
     # Non-consumable
-    asset_id = db.execute_update("INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)", ("Beaker", asset_cat_id, 0), return_last_id=True)[1]
-    asset_batch_id = db.execute_update("INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)", (asset_id, 1, 5, "2025-01-01"), return_last_id=True)[1]
+    asset_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Beaker", asset_cat_id, 0),
+        return_last_id=True,
+    )[1]
+    assert asset_id is not None
+    asset_batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (asset_id, 1, 5, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    assert asset_batch_id is not None
 
     # 2. Create Requisition (Requested)
     items_data = [
         {"item_id": item_id, "batch_id": batch_id, "quantity": 2},
-        {"item_id": asset_id, "batch_id": asset_batch_id, "quantity": 3}
+        {"item_id": asset_id, "batch_id": asset_batch_id, "quantity": 3},
     ]
-    
+
     req_id = svc.create_requisition(
         requester_id=reqr_id,
         items=items_data,
         expected_request=datetime.now(),
         expected_return=datetime.now(),
         lab_activity_name="Chemistry",
-        user_name="tester"
+        user_name="tester",
     )
     assert req_id is not None
-    
+
     # Verify reservation and request movements
-    movements = db.execute_query("SELECT item_id, movement_type, quantity FROM Stock_Movements WHERE source_id = ?", (req_id,))
-    assert any(m["item_id"] == item_id and m["movement_type"] == MovementType.RESERVATION.value and m["quantity"] == 2 for m in movements)
-    assert any(m["item_id"] == asset_id and m["movement_type"] == MovementType.REQUEST.value and m["quantity"] == 3 for m in movements)
-    
+    movements = db.execute_query(
+        "SELECT item_id, movement_type, quantity FROM Stock_Movements WHERE source_id = ?",
+        (req_id,),
+    )
+    assert any(
+        m["item_id"] == item_id
+        and m["movement_type"] == MovementType.RESERVATION.value
+        and m["quantity"] == 2
+        for m in movements
+    )
+    assert any(
+        m["item_id"] == asset_id
+        and m["movement_type"] == MovementType.REQUEST.value
+        and m["quantity"] == 3
+        for m in movements
+    )
+
     # 3. Update status to active
     assert svc.update_status(req_id, "active", user_name="tester") is True
-    
+
+    # Task 10: availability drops while requested/borrowed, stock baseline remains policy-based.
+    item_service = ItemService()
+    assert item_service._get_available_stock_for_batch(batch_id) == 8
+    assert item_service._get_available_stock_for_batch(asset_batch_id) == 2
+
     # 4. Finalize Return (Returned)
     # Consumable: Consume 1, Return 1
     # Asset: Return 2, Lose 1
@@ -174,27 +223,50 @@ def test_requisition_lifecycle(temp_db):
             "batch_id": batch_id,
             "quantity_requested": 2,
             "quantity_returned": 1,
-            "is_consumable": True
+            "is_consumable": True,
         },
         {
             "item_id": asset_id,
             "batch_id": asset_batch_id,
             "quantity_requested": 3,
             "quantity_lost": 1,
-            "is_consumable": False
-        }
+            "is_consumable": False,
+        },
     ]
     assert svc.process_return(req_id, return_items, user_name="tester") is True
-    
+
     # Verify final state
-    req_row = db.execute_query("SELECT status FROM Requisitions WHERE id = ?", (req_id,))[0]
+    req_row = db.execute_query(
+        "SELECT status FROM Requisitions WHERE id = ?", (req_id,)
+    )[0]
     assert req_row["status"] == "returned"
-    
+
     # Verify movements are replaced correctly
-    movements = db.execute_query("SELECT item_id, movement_type, quantity FROM Stock_Movements WHERE source_id = ?", (req_id,))
+    movements = db.execute_query(
+        "SELECT item_id, movement_type, quantity FROM Stock_Movements WHERE source_id = ?",
+        (req_id,),
+    )
     # No RESERVATION or REQUEST anymore
-    assert not any(m["movement_type"] in [MovementType.RESERVATION.value, MovementType.REQUEST.value] for m in movements)
+    assert not any(
+        m["movement_type"]
+        in [MovementType.RESERVATION.value, MovementType.REQUEST.value]
+        for m in movements
+    )
     # 1 CONSUMPTION for ethanol
-    assert any(m["item_id"] == item_id and m["movement_type"] == MovementType.CONSUMPTION.value and m["quantity"] == 1 for m in movements)
+    assert any(
+        m["item_id"] == item_id
+        and m["movement_type"] == MovementType.CONSUMPTION.value
+        and m["quantity"] == 1
+        for m in movements
+    )
     # 1 DISPOSAL for beaker
-    assert any(m["item_id"] == asset_id and m["movement_type"] == MovementType.DISPOSAL.value and m["quantity"] == 1 for m in movements)
+    assert any(
+        m["item_id"] == asset_id
+        and m["movement_type"] == MovementType.DISPOSAL.value
+        and m["quantity"] == 1
+        for m in movements
+    )
+
+    # Task 10 stock assertions after final return processing
+    assert stock_calculation_service.calculate_total_stock(item_id) == 9
+    assert stock_calculation_service.calculate_total_stock(asset_id) == 4

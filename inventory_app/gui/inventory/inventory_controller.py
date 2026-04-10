@@ -246,37 +246,29 @@ class InventoryController:
     def get_batch_statistics(self) -> Dict[str, int]:
         """Get overall batch statistics for the inventory."""
         try:
-            # Get consistent stock calculations and requested quantities
-            stock_query = """
-            SELECT
-                COUNT(DISTINCT ib.id) as total_batches,
-                COALESCE(SUM(ib.quantity_received), 0) as original_total_stock,
-                COALESCE(movements.total_consumed, 0) as total_consumed,
-                COALESCE(movements.total_disposed, 0) as total_disposed,
-                COALESCE(movements.total_returned, 0) as total_returned,
-                COALESCE(SUM(ib.quantity_received), 0) -
-                COALESCE(movements.total_consumed, 0) -
-                COALESCE(movements.total_disposed, 0) +
-                COALESCE(movements.total_returned, 0) as total_stock
+            total_batches_query = """
+            SELECT COALESCE(COUNT(DISTINCT ib.id), 0) AS total_batches
             FROM Item_Batches ib
-            LEFT JOIN (
-                SELECT
-                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_consumed,
-                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_disposed,
-                    SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END) as total_returned
-                FROM Stock_Movements sm
-            ) movements ON 1=1
+            WHERE ib.disposal_date IS NULL
             """
-            stock_params = (
-                MovementType.CONSUMPTION.value,
-                MovementType.DISPOSAL.value,
-                MovementType.RETURN.value,
+            batch_rows = db.execute_query(total_batches_query)
+            total_batches = batch_rows[0]["total_batches"] if batch_rows else 0
+
+            stock_subquery = stock_calculation_service.get_stock_calculation_subquery()
+            stock_query = f"""
+            SELECT COALESCE(SUM(stock.total_stock), 0) AS total_stock
+            FROM (
+                {stock_subquery}
+            ) stock
+            """
+            stock_rows = db.execute_query(
+                stock_query,
+                stock_calculation_service.get_stock_calculation_params(),
             )
-            stock_rows = db.execute_query(stock_query, stock_params)
             if not stock_rows:
                 return {"total_batches": 0, "total_stock": 0, "available_stock": 0}
 
-            batch_stats = stock_rows[0]
+            total_stock = stock_rows[0]["total_stock"] or 0
 
             # Calculate available stock using new two-phase logic
             available_query = """
@@ -305,11 +297,9 @@ class InventoryController:
             )
 
             return {
-                "total_batches": batch_stats["total_batches"] or 0,
-                "total_stock": batch_stats["total_stock"] or 0,
-                "available_stock": max(
-                    0, (batch_stats["total_stock"] or 0) - total_requested
-                ),
+                "total_batches": total_batches,
+                "total_stock": total_stock,
+                "available_stock": max(0, total_stock - total_requested),
             }
 
         except Exception as e:
@@ -342,27 +332,13 @@ class InventoryController:
             # Get alert counts from status service
             alert_counts = item_status_service.get_alert_counts()
 
-            # Get low stock count
-            low_stock_query = """
-            SELECT COUNT(*) as count FROM (
-                SELECT ib.item_id,
-                        SUM(ib.quantity_received) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) -
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) +
-                        COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) as current_stock
-                FROM Item_Batches ib
-                LEFT JOIN Stock_Movements sm ON sm.item_id = ib.item_id
-                WHERE ib.disposal_date IS NULL
-                GROUP BY ib.item_id
-                HAVING current_stock < 10 AND current_stock > 0
+            # Get low stock count using centralized stock policy logic.
+            low_stock_subquery = stock_calculation_service.get_low_stock_subquery()
+            low_stock_query = f"SELECT COUNT(*) as count FROM ({low_stock_subquery})"
+            low_stock_result = db.execute_query(
+                low_stock_query,
+                stock_calculation_service.get_low_stock_params(threshold=10),
             )
-            """
-            low_stock_params = (
-                MovementType.CONSUMPTION.value,
-                MovementType.DISPOSAL.value,
-                MovementType.RETURN.value,
-            )
-            low_stock_result = db.execute_query(low_stock_query, low_stock_params)
             low_stock_count = low_stock_result[0]["count"] if low_stock_result else 0
 
             # Combine all statistics

@@ -132,7 +132,9 @@ The Quick Statistics block shows several counts and small alerts:
 
 ## **How available stock is calculated (brief, factual)**
 
-- `Total Stock` is computed from received batches minus consumed and disposed movements plus returns.
+- `Total Stock` follows item-type rules:
+  - Consumables: `received - consumption - disposal + return`
+  - Non-consumables: `received - disposal` (borrow/request and return do not permanently change stock)
 - `Available Stock` subtracts active reservations/requests so it reflects what can actually be allocated now.
 
 ## **Common tasks / quick recipes**

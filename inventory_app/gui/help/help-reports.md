@@ -29,7 +29,9 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 
 - **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, WEEK 1-4, and Total Usage. Professional layout matching laboratory standards.
 - **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels). Filtered by category.
-- **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits. Shows separate counts for consumables (with consumption deduction) and non-consumables (showing original stock).
+- **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits:
+  - Consumables: `Original - Consumption - Disposal + Return`
+  - Non-consumables: `Original - Disposal` (borrow/request affects availability, not baseline stock)
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).

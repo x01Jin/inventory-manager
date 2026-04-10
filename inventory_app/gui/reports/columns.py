@@ -23,7 +23,13 @@ INVENTORY_BASE_COLUMNS: List[str] = [
     'c.name AS "Category"',
     'i.size AS "Size"',
     'i.brand AS "Brand"',
-    'COALESCE(SUM(ib.quantity_received), 0) - COALESCE(SUM(sm.quantity), 0) AS "Current Stock"',
+    "CASE WHEN i.is_consumable = 1 "
+    "THEN COALESCE(SUM(ib.quantity_received), 0) "
+    '- COALESCE(SUM(CASE WHEN sm.movement_type = "CONSUMPTION" THEN sm.quantity ELSE 0 END), 0) '
+    '- COALESCE(SUM(CASE WHEN sm.movement_type = "DISPOSAL" THEN sm.quantity ELSE 0 END), 0) '
+    '+ COALESCE(SUM(CASE WHEN sm.movement_type = "RETURN" THEN sm.quantity ELSE 0 END), 0) '
+    "ELSE COALESCE(SUM(ib.quantity_received), 0) "
+    '- COALESCE(SUM(CASE WHEN sm.movement_type = "DISPOSAL" THEN sm.quantity ELSE 0 END), 0) END AS "Current Stock"',
     'i.other_specifications AS "Specifications"',
 ]
 
