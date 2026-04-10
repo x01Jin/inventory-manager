@@ -22,6 +22,7 @@ try:
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
     from .services.summary_tables import summary_tables_service
+    from .services.reference_merge_service import normalize_reference_values_for_startup
 except Exception:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
@@ -31,6 +32,9 @@ except Exception:
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
     from inventory_app.services.summary_tables import summary_tables_service
+    from inventory_app.services.reference_merge_service import (
+        normalize_reference_values_for_startup,
+    )
 
 
 def initialize_laboratory_database() -> bool:
@@ -136,6 +140,20 @@ def main() -> int:
         if not run_migrations_with_splash(app):
             logger.error("Application startup failed: migration error")
             return 1
+
+        try:
+            success, message, summary = normalize_reference_values_for_startup(
+                editor_name="System"
+            )
+            if success:
+                logger.info(message)
+                logger.debug(f"Reference normalization summary: {summary}")
+            else:
+                logger.warning(message)
+        except Exception as e:
+            logger.warning(
+                f"Reference normalization skipped due to unexpected error: {e}"
+            )
 
         if not verify_components():
             logger.warning(

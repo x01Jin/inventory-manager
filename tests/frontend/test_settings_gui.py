@@ -1,3 +1,5 @@
+import sys
+import inventory_app.gui.settings.settings_page as settings_page_module
 from inventory_app.gui.settings.settings_page import SettingsPage, MergeReferenceDialog
 from inventory_app.database.models import Size, Brand, Supplier
 from PyQt6.QtWidgets import QLabel, QTableWidget, QPushButton
@@ -6,6 +8,37 @@ from PyQt6.QtCore import Qt
 
 def _patch_reference_data(monkeypatch):
     """Patch settings reference data to deterministic test values."""
+
+    def _run_in_background_immediate(
+        fn,
+        *args,
+        on_result=None,
+        on_error=None,
+        on_finished=None,
+        **kwargs,
+    ):
+        class _DummyWorker:
+            def cancel(self):
+                return None
+
+        try:
+            result = fn(*args, **kwargs)
+            if on_result:
+                on_result(result)
+        except Exception:
+            if on_error:
+                on_error(sys.exc_info())
+        finally:
+            if on_finished:
+                on_finished()
+
+        return _DummyWorker()
+
+    monkeypatch.setattr(
+        settings_page_module,
+        "run_in_background",
+        _run_in_background_immediate,
+    )
 
     monkeypatch.setattr(
         Size,
@@ -166,6 +199,33 @@ def test_settings_brands_and_suppliers_have_merge_buttons(qtbot, monkeypatch):
 
     assert "Merge Brands" in brand_buttons
     assert "Merge Suppliers" in supplier_buttons
+
+
+def test_settings_refresh_data_syncs_all_reference_tables(qtbot, monkeypatch):
+    """Refreshing settings should sync once and repopulate all reference tables together."""
+    _patch_reference_data(monkeypatch)
+
+    sync_calls = {"count": 0}
+
+    def _fake_sync(editor_name="System"):
+        sync_calls["count"] += 1
+        return True, "ok", {}
+
+    monkeypatch.setattr(
+        settings_page_module, "sync_reference_values_from_items", _fake_sync
+    )
+
+    page = SettingsPage()
+    qtbot.addWidget(page)
+
+    # One sync occurs during initial SettingsPage refresh.
+    assert sync_calls["count"] == 1
+
+    page.refresh_data()
+    assert sync_calls["count"] == 2
+    assert page.sizes_table.rowCount() == 2
+    assert page.brands_table.rowCount() == 2
+    assert page.suppliers_table.rowCount() == 2
 
 
 def test_merge_reference_dialog_excludes_target_and_collects_sources(qtbot):

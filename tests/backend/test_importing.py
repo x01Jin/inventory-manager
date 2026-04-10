@@ -120,7 +120,7 @@ def test_excel_importer_logic(temp_db, tmp_path):
 
     # Item B: Size extracted from stocks string
     assert rows[1]["name"] == "Item B"
-    assert "500ml" in rows[1]["size"]
+    assert rows[1]["size"] == "500 mL"
     assert rows[1]["item_type"] == "Consumable"
     assert rows[1]["supplier_name"] == "ATR Trading System"
 
@@ -170,7 +170,7 @@ def test_excel_importer_logic(temp_db, tmp_path):
     # Item E: Alternate metric alias in stocks should populate size and stock quantity.
     item_e = db.execute_query("SELECT size FROM Items WHERE name = ?", ("Item E",))
     assert item_e
-    assert "kilo" in (item_e[0]["size"] or "").lower()
+    assert item_e[0]["size"] == "1 kg"
 
     item_e_qty = db.execute_query(
         """

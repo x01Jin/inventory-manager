@@ -86,3 +86,18 @@ def test_main_window_help_refresh_targets_help_page(qtbot, monkeypatch):
     window._refresh_page_data(6)
 
     assert len(help_calls) == 1
+
+
+def test_main_window_settings_refresh_targets_settings_page(qtbot, monkeypatch):
+    """Settings page refresh should trigger settings refresh hook on index 5."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    settings_calls = []
+    monkeypatch.setattr(
+        window.settings_page, "refresh_data", lambda: settings_calls.append(1)
+    )
+
+    window._refresh_page_data(5)
+
+    assert len(settings_calls) == 1

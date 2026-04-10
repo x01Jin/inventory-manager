@@ -1,7 +1,13 @@
 import pytest
 from inventory_app.database.connection import db
 from inventory_app.database.models import Supplier, Size, Brand, Item
-from inventory_app.services.reference_merge_service import merge_suppliers, merge_brands
+from inventory_app.services.reference_merge_service import (
+    merge_brands,
+    merge_sizes,
+    merge_suppliers,
+    normalize_reference_values_for_startup,
+    sync_reference_values_from_items,
+)
 
 
 @pytest.fixture
@@ -115,6 +121,14 @@ def test_reference_data_duplicate_prevention(temp_db):
     assert "already exists" in msg.lower()
 
 
+def test_size_save_normalizes_metric_casing(temp_db):
+    """Sizes should persist in canonical metric casing for consistent display."""
+    size = Size(name="500ml")
+    success, _ = size.save()
+    assert success is True
+    assert size.name == "500 mL"
+
+
 def test_item_save_rejects_invalid_category_fk(temp_db):
     """Item save should fail fast when category FK is invalid/missing."""
     item_missing = Item(name="NoCategory", category_id=0)
@@ -215,3 +229,121 @@ def test_merge_brands_updates_item_text_and_logs_activity(temp_db):
     assert activity_rows[0]["entity_type"] == "brand"
     assert activity_rows[0]["user_name"] == "Jin"
     assert "pyrex-legacy" in activity_rows[0]["description"].lower()
+
+
+def test_merge_sizes_updates_item_text_and_logs_activity(temp_db):
+    """Size merge should rewrite item size values using normalized matching."""
+    target_size_id = db.execute_update(
+        "INSERT INTO Sizes (name) VALUES (?)",
+        ("500 mL",),
+        return_last_id=True,
+    )[1]
+    source_size_id = db.execute_update(
+        "INSERT INTO Sizes (name) VALUES (?)",
+        ("500ml",),
+        return_last_id=True,
+    )[1]
+    assert isinstance(target_size_id, int)
+    assert isinstance(source_size_id, int)
+
+    item = Item(name="Graduated Cylinder", category_id=1, size="500ml")
+    assert item.save(editor_name="tester") is True
+
+    success, message, updated = merge_sizes(
+        target_size_id,
+        [source_size_id],
+        editor_name="Jin",
+    )
+    assert success is True
+    assert "updated 1 item" in message.lower()
+    assert updated == 1
+
+    refreshed = Item.get_by_id(item.id or 0)
+    assert refreshed is not None
+    assert refreshed.size == "500 mL"
+    assert Size.get_by_id(source_size_id) is None
+
+    activity_rows = db.execute_query(
+        """
+        SELECT activity_type, entity_type, user_name, description
+        FROM Activity_Log
+        WHERE activity_type = 'REFERENCE_MERGED'
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    assert len(activity_rows) == 1
+    assert activity_rows[0]["entity_type"] == "size"
+    assert activity_rows[0]["user_name"] == "Jin"
+    assert "500ml" in activity_rows[0]["description"].lower()
+
+
+def test_startup_reference_normalization_merges_duplicate_sizes(temp_db):
+    """Startup normalization should canonicalize item sizes and merge duplicate size refs."""
+    db.execute_update(
+        "INSERT INTO Sizes (name) VALUES (?)",
+        ("10mL",),
+    )
+    db.execute_update(
+        "INSERT INTO Sizes (name) VALUES (?)",
+        ("10 ml",),
+    )
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, size) VALUES (?, ?, ?)",
+        ("Task3 Item", 1, "10ml"),
+        return_last_id=True,
+    )[1]
+    assert isinstance(item_id, int)
+
+    success, _, summary = normalize_reference_values_for_startup(editor_name="System")
+    assert success is True
+    assert summary["item_sizes_normalized"] >= 1
+    assert summary["size_groups_merged"] >= 1
+
+    item_row = db.execute_query("SELECT size FROM Items WHERE id = ?", (item_id,))
+    assert item_row
+    assert item_row[0]["size"] == "10 mL"
+
+    size_rows = db.execute_query(
+        "SELECT id, name FROM Sizes WHERE LOWER(REPLACE(name, ' ', '')) = '10ml'"
+    )
+    assert len(size_rows) == 1
+    assert size_rows[0]["name"] == "10 mL"
+
+
+def test_sync_reference_values_from_items_adds_missing_size_and_brand(temp_db):
+    """Sync should register missing size/brand references from existing item rows."""
+    expected_size = "7777 mL"
+    expected_brand = "Acme Lab Unique"
+
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, size, brand) VALUES (?, ?, ?, ?)",
+        ("Legacy Import Item", 1, "7777ml", expected_brand),
+        return_last_id=True,
+    )[1]
+    assert isinstance(item_id, int)
+
+    success, _, summary = sync_reference_values_from_items(editor_name="Settings")
+    assert success is True
+    assert summary["item_sizes_normalized"] >= 1
+    assert summary["sizes_added"] >= 1
+    assert summary["brands_added"] >= 1
+
+    item_row = db.execute_query("SELECT size FROM Items WHERE id = ?", (item_id,))
+    assert item_row
+    assert item_row[0]["size"] == expected_size
+
+    size_rows = db.execute_query(
+        "SELECT name FROM Sizes WHERE LOWER(REPLACE(name, ' ', '')) = '7777ml'",
+        use_cache=False,
+    )
+    assert len(size_rows) == 1
+    assert size_rows[0]["name"] == expected_size
+
+    brand_rows = db.execute_query(
+        "SELECT name FROM Brands WHERE LOWER(name) = ?",
+        (expected_brand.lower(),),
+        use_cache=False,
+    )
+    assert len(brand_rows) == 1
+    assert brand_rows[0]["name"] == expected_brand

@@ -25,13 +25,20 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QComboBox,
+    QProgressBar,
 )
 from PyQt6.QtCore import Qt
 
 from inventory_app.database.models import Size, Brand, Supplier
 from inventory_app.services.category_config import DEFAULT_CATEGORIES
-from inventory_app.services.reference_merge_service import merge_brands, merge_suppliers
+from inventory_app.services.reference_merge_service import (
+    merge_brands,
+    merge_suppliers,
+    sync_reference_values_from_items,
+)
 from inventory_app.gui.styles import ThemeManager, DarkTheme, LightTheme
+from inventory_app.gui.utils.worker import run_in_background, Worker
+from inventory_app.utils.logger import logger
 
 
 class SettingsPage(QWidget):
@@ -42,6 +49,8 @@ class SettingsPage(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._current_worker: Worker | None = None
+        self._is_loading = False
         self.setup_ui()
 
     def setup_ui(self):
@@ -50,10 +59,23 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # Title
+        header_layout = QHBoxLayout()
         title = QLabel("⚙️ Settings")
         title.setStyleSheet("font-size: 18pt; font-weight: bold;")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        self.refresh_button = QPushButton("🔄 Refresh")
+        self.refresh_button.clicked.connect(self.refresh_data)
+        header_layout.addWidget(self.refresh_button)
+        layout.addLayout(header_layout)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("Refreshing settings references...")
+        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
 
         # Tab widget
         self.tab_widget = QTabWidget()
@@ -73,6 +95,8 @@ class SettingsPage(QWidget):
 
         # Categories tab (read-only)
         self.create_categories_tab()
+
+        self.refresh_data()
 
     def create_preferences_tab(self):
         """Create the preferences tab for theme selection."""
@@ -277,7 +301,6 @@ class SettingsPage(QWidget):
         layout.addWidget(self.size_usage_label)
 
         self.sizes_table.itemSelectionChanged.connect(self.on_size_selection_changed)
-        self.populate_sizes_list()
 
         self.tab_widget.addTab(tab, "Sizes")
 
@@ -318,7 +341,6 @@ class SettingsPage(QWidget):
         layout.addWidget(self.brand_usage_label)
 
         self.brands_table.itemSelectionChanged.connect(self.on_brand_selection_changed)
-        self.populate_brands_list()
 
         self.tab_widget.addTab(tab, "Brands")
 
@@ -361,7 +383,6 @@ class SettingsPage(QWidget):
         self.suppliers_table.itemSelectionChanged.connect(
             self.on_supplier_selection_changed
         )
-        self.populate_suppliers_list()
 
         self.tab_widget.addTab(tab, "Suppliers")
 
@@ -459,35 +480,163 @@ class SettingsPage(QWidget):
             return None
         return name_item.data(Qt.ItemDataRole.UserRole) or {}
 
-    def populate_sizes_list(self):
-        """Populate the sizes list."""
-        self.sizes_table.setRowCount(0)
-        sizes = Size.get_all()
-        for s in sizes:
-            usage_count = s.get_usage_count()
-            row = self.sizes_table.rowCount()
-            self.sizes_table.insertRow(row)
-
-            name_item = QTableWidgetItem(s.name)
-            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
-            status_item = QTableWidgetItem(
-                "NON-DELETABLE" if usage_count > 0 else "Unused"
+    @staticmethod
+    def _build_size_rows() -> list[dict]:
+        rows: list[dict] = []
+        for size in Size.get_all():
+            usage_count = size.get_usage_count()
+            rows.append(
+                {
+                    "id": size.id,
+                    "name": size.name,
+                    "usage_count": usage_count,
+                    "status": "NON-DELETABLE" if usage_count > 0 else "Unused",
+                    "in_use": usage_count > 0,
+                }
             )
+        return rows
+
+    @staticmethod
+    def _build_brand_rows() -> list[dict]:
+        rows: list[dict] = []
+        for brand in Brand.get_all():
+            usage_count = brand.get_usage_count()
+            rows.append(
+                {
+                    "id": brand.id,
+                    "name": brand.name,
+                    "usage_count": usage_count,
+                    "status": "NON-DELETABLE" if usage_count > 0 else "Unused",
+                    "in_use": usage_count > 0,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _build_supplier_rows() -> list[dict]:
+        rows: list[dict] = []
+        for supplier in Supplier.get_all():
+            usage_count = supplier.get_usage_count()
+            rows.append(
+                {
+                    "id": supplier.id,
+                    "name": supplier.name,
+                    "usage_count": usage_count,
+                    "status": "NON-DELETABLE" if usage_count > 0 else "Unused",
+                    "in_use": usage_count > 0,
+                }
+            )
+        return rows
+
+    def _load_reference_data_background(self) -> dict:
+        """Sync and load settings reference data in background thread."""
+        sync_reference_values_from_items(editor_name="Settings")
+        return {
+            "sizes": self._build_size_rows(),
+            "brands": self._build_brand_rows(),
+            "suppliers": self._build_supplier_rows(),
+        }
+
+    def refresh_data(self):
+        """Refresh all reference tables in the background to prevent UI freeze."""
+        if self._is_loading:
+            logger.debug("Settings refresh already in progress, skipping")
+            return
+
+        if self._current_worker:
+            self._current_worker.cancel()
+
+        self._is_loading = True
+        self._set_loading_state(True)
+
+        self._current_worker = run_in_background(
+            self._load_reference_data_background,
+            on_result=self._on_reference_data_loaded,
+            on_error=self._on_reference_data_error,
+            on_finished=self._on_reference_data_finished,
+        )
+
+    def _on_reference_data_loaded(self, data: dict):
+        """Apply loaded reference rows to settings tables on the main thread."""
+        self._populate_reference_table(self.sizes_table, data.get("sizes", []))
+        self._populate_reference_table(self.brands_table, data.get("brands", []))
+        self._populate_reference_table(self.suppliers_table, data.get("suppliers", []))
+
+        if self.sizes_table.rowCount() > 0:
+            self.sizes_table.selectRow(0)
+        else:
+            self.on_size_selection_changed()
+
+        if self.brands_table.rowCount() > 0:
+            self.brands_table.selectRow(0)
+        else:
+            self.on_brand_selection_changed()
+
+        if self.suppliers_table.rowCount() > 0:
+            self.suppliers_table.selectRow(0)
+        else:
+            self.on_supplier_selection_changed()
+
+    def _on_reference_data_error(self, error_tuple: tuple):
+        """Handle async refresh errors and keep the page responsive."""
+        _, value, tb = error_tuple
+        logger.error(f"Failed to refresh settings references: {value}\n{tb}")
+        QMessageBox.warning(
+            self,
+            "Settings Refresh Failed",
+            f"Failed to refresh settings reference data:\n{value}",
+        )
+
+    def _on_reference_data_finished(self):
+        """Finalize loading state after async refresh completes."""
+        self._is_loading = False
+        self._current_worker = None
+        self._set_loading_state(False)
+
+    def _set_loading_state(self, is_loading: bool):
+        """Update top progress/loading controls state."""
+        self.progress_bar.setVisible(is_loading)
+        if is_loading:
+            self.progress_bar.setRange(0, 0)
+        else:
+            self.progress_bar.setRange(0, 100)
+
+        self.refresh_button.setEnabled(not is_loading)
+
+    def _populate_reference_table(self, table: QTableWidget, rows: list[dict]):
+        """Render precomputed reference rows to a settings table."""
+        table.setRowCount(0)
+        for row_data in rows:
+            row = table.rowCount()
+            table.insertRow(row)
+
+            usage_count = int(row_data.get("usage_count", 0))
+            name_item = QTableWidgetItem(str(row_data.get("name", "")))
+            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
+            status_item = QTableWidgetItem(str(row_data.get("status", "Unused")))
 
             name_item.setData(
                 Qt.ItemDataRole.UserRole,
-                {"id": s.id, "name": s.name, "usage_count": usage_count},
+                {
+                    "id": row_data.get("id"),
+                    "name": row_data.get("name"),
+                    "usage_count": usage_count,
+                },
             )
 
-            self.sizes_table.setItem(row, 0, name_item)
-            self.sizes_table.setItem(row, 1, usage_item)
-            self.sizes_table.setItem(row, 2, status_item)
+            table.setItem(row, 0, name_item)
+            table.setItem(row, 1, usage_item)
+            table.setItem(row, 2, status_item)
 
-            if usage_count > 0:
+            if row_data.get("in_use"):
                 muted = self.palette().color(self.foregroundRole()).darker(150)
                 name_item.setForeground(muted)
                 usage_item.setForeground(muted)
                 status_item.setForeground(muted)
+
+    def populate_sizes_list(self):
+        """Populate the sizes list."""
+        self._populate_reference_table(self.sizes_table, self._build_size_rows())
 
         if self.sizes_table.rowCount() > 0:
             self.sizes_table.selectRow(0)
@@ -496,33 +645,7 @@ class SettingsPage(QWidget):
 
     def populate_brands_list(self):
         """Populate the brands list."""
-        self.brands_table.setRowCount(0)
-        brands = Brand.get_all()
-        for b in brands:
-            usage_count = b.get_usage_count()
-            row = self.brands_table.rowCount()
-            self.brands_table.insertRow(row)
-
-            name_item = QTableWidgetItem(b.name)
-            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
-            status_item = QTableWidgetItem(
-                "NON-DELETABLE" if usage_count > 0 else "Unused"
-            )
-
-            name_item.setData(
-                Qt.ItemDataRole.UserRole,
-                {"id": b.id, "name": b.name, "usage_count": usage_count},
-            )
-
-            self.brands_table.setItem(row, 0, name_item)
-            self.brands_table.setItem(row, 1, usage_item)
-            self.brands_table.setItem(row, 2, status_item)
-
-            if usage_count > 0:
-                muted = self.palette().color(self.foregroundRole()).darker(150)
-                name_item.setForeground(muted)
-                usage_item.setForeground(muted)
-                status_item.setForeground(muted)
+        self._populate_reference_table(self.brands_table, self._build_brand_rows())
 
         if self.brands_table.rowCount() > 0:
             self.brands_table.selectRow(0)
@@ -531,33 +654,10 @@ class SettingsPage(QWidget):
 
     def populate_suppliers_list(self):
         """Populate the suppliers list."""
-        self.suppliers_table.setRowCount(0)
-        suppliers = Supplier.get_all()
-        for s in suppliers:
-            usage_count = s.get_usage_count()
-            row = self.suppliers_table.rowCount()
-            self.suppliers_table.insertRow(row)
-
-            name_item = QTableWidgetItem(s.name)
-            usage_item = QTableWidgetItem(f"{usage_count} item(s)")
-            status_item = QTableWidgetItem(
-                "NON-DELETABLE" if usage_count > 0 else "Unused"
-            )
-
-            name_item.setData(
-                Qt.ItemDataRole.UserRole,
-                {"id": s.id, "name": s.name, "usage_count": usage_count},
-            )
-
-            self.suppliers_table.setItem(row, 0, name_item)
-            self.suppliers_table.setItem(row, 1, usage_item)
-            self.suppliers_table.setItem(row, 2, status_item)
-
-            if usage_count > 0:
-                muted = self.palette().color(self.foregroundRole()).darker(150)
-                name_item.setForeground(muted)
-                usage_item.setForeground(muted)
-                status_item.setForeground(muted)
+        self._populate_reference_table(
+            self.suppliers_table,
+            self._build_supplier_rows(),
+        )
 
         if self.suppliers_table.rowCount() > 0:
             self.suppliers_table.selectRow(0)

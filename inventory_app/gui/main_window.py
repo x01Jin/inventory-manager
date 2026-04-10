@@ -149,6 +149,13 @@ class MainWindow(QMainWindow):
                 logger.info("Refreshed reports data")
             except Exception:
                 logger.exception("Failed to refresh reports data")
+        elif page_index == 5 and hasattr(self.settings_page, "refresh_data"):
+            try:
+                self.settings_page.refresh_data()
+                self._mark_page_refreshed(page_index)
+                logger.info("Refreshed settings reference data")
+            except Exception:
+                logger.exception("Failed to refresh settings reference data")
         elif page_index == 6 and hasattr(self.help_page, "load_current_tab"):
             try:
                 self.help_page.load_current_tab()

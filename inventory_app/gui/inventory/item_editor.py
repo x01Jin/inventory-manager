@@ -21,12 +21,16 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QFileDialog,
 )
-from PyQt6.QtCore import QDate
+from PyQt6.QtCore import QDate, Qt
 from datetime import date
 from inventory_app.database.models import Item, Category, Supplier, Size, Brand, ItemSDS
 from inventory_app.services.category_config import get_category_config
 from inventory_app.services.sds_storage_service import sds_storage_service
 from inventory_app.utils.logger import logger
+from inventory_app.utils.reference_normalization import (
+    build_size_compare_key,
+    normalize_metric_size_value,
+)
 
 
 class ItemEditor(QDialog):
@@ -98,6 +102,16 @@ class ItemEditor(QDialog):
         grid_layout.addWidget(QLabel("Size:"), 1, 0)
         self.size_combo = QComboBox()
         self.size_combo.addItem("Select Size", "")
+        self.size_combo.setEditable(True)
+        self.size_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        size_line_edit = self.size_combo.lineEdit()
+        if size_line_edit is not None:
+            size_line_edit.setPlaceholderText("Select or type size (e.g., 500 mL)")
+
+        size_completer = self.size_combo.completer()
+        if size_completer is not None:
+            size_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            size_completer.setFilterMode(Qt.MatchFlag.MatchContains)
         grid_layout.addWidget(self.size_combo, 1, 1)
 
         grid_layout.addWidget(QLabel("Brand:"), 1, 2)
@@ -490,6 +504,8 @@ class ItemEditor(QDialog):
                 index = self.size_combo.findText(self.existing_item.size)
                 if index >= 0:
                     self.size_combo.setCurrentIndex(index)
+                else:
+                    self.size_combo.setCurrentText(self.existing_item.size)
 
             if self.existing_item.brand:
                 index = self.brand_combo.findText(self.existing_item.brand)
@@ -543,7 +559,8 @@ class ItemEditor(QDialog):
         try:
             # Validate required fields with specific guidance before saving
             validation_issues = []
-            if not self.name_input.text().strip():
+            item_name = self.name_input.text().strip()
+            if not item_name:
                 validation_issues.append("Item Name is required.")
 
             category_data = self.category_combo.currentData()
@@ -564,6 +581,17 @@ class ItemEditor(QDialog):
                 )
                 return
 
+            if not self.existing_item:
+                likely_duplicates = Item.find_likely_duplicates(
+                    item_name, category_data
+                )
+                if likely_duplicates and not self._confirm_likely_duplicate_item(
+                    item_name,
+                    self.category_combo.currentText(),
+                    likely_duplicates,
+                ):
+                    return
+
             supplier_data = self.supplier_combo.currentData()
             normalized_supplier_id = None
             if supplier_data not in (None, "", 0):
@@ -579,12 +607,16 @@ class ItemEditor(QDialog):
                     )
                     return
 
-            normalized_size = self._normalize_optional_text_value(
-                self.size_combo.currentData()
-            )
+            normalized_size = normalize_metric_size_value(self.size_combo.currentText())
             normalized_brand = self._normalize_optional_text_value(
                 self.brand_combo.currentData()
             )
+
+            if normalized_size is not None:
+                resolved_size = self._resolve_or_create_size_value(normalized_size)
+                if resolved_size is None:
+                    return
+                normalized_size = resolved_size
 
             missing_optional_entries = []
             if normalized_supplier_id is None:
@@ -606,7 +638,7 @@ class ItemEditor(QDialog):
                 item = Item()
 
             # Basic info
-            item.name = self.name_input.text().strip()
+            item.name = item_name
             item.category_id = category_data
             item.supplier_id = normalized_supplier_id
             item.size = normalized_size
@@ -741,6 +773,78 @@ class ItemEditor(QDialog):
             QMessageBox.StandardButton.No,
         )
         return response == QMessageBox.StandardButton.Yes
+
+    def _confirm_likely_duplicate_item(
+        self,
+        item_name: str,
+        category_name: str,
+        duplicates: List[dict],
+    ) -> bool:
+        """Warn users when likely duplicate items exist in the same category."""
+        preview_lines = []
+        for duplicate in duplicates[:5]:
+            preview_lines.append(
+                "- "
+                f"{duplicate.get('name', 'Unknown')} "
+                f"(Size: {duplicate.get('size') or 'N/A'}, "
+                f"Brand: {duplicate.get('brand') or 'N/A'}, "
+                f"Supplier: {duplicate.get('supplier_name') or 'N/A'})"
+            )
+
+        extra_count = max(0, len(duplicates) - 5)
+        if extra_count > 0:
+            preview_lines.append(f"- ...and {extra_count} more")
+
+        message = (
+            f"A likely duplicate item already exists in '{category_name}'.\n\n"
+            f"New item: {item_name}\n\n"
+            "Possible matches:\n"
+            + "\n".join(preview_lines)
+            + "\n\nDo you want to continue saving this item?"
+        )
+
+        reply = QMessageBox.question(
+            self,
+            "Likely Duplicate Item",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def _resolve_or_create_size_value(self, size_value: str) -> Optional[str]:
+        """Resolve typed size to existing canonical value or create it."""
+        target_key = build_size_compare_key(size_value)
+        if not target_key:
+            return None
+
+        sizes = Size.get_all()
+        for size in sizes:
+            if build_size_compare_key(size.name) == target_key:
+                return normalize_metric_size_value(size.name) or size.name
+
+        new_size = Size(name=size_value)
+        success, message = new_size.save()
+        if success:
+            saved_name = new_size.name
+            self.size_combo.addItem(saved_name, saved_name)
+            self.size_combo.setCurrentText(saved_name)
+            return saved_name
+
+        # Another editor flow may have created an equivalent value first.
+        refreshed_sizes = Size.get_all()
+        for size in refreshed_sizes:
+            if build_size_compare_key(size.name) == target_key:
+                existing_name = normalize_metric_size_value(size.name) or size.name
+                self.size_combo.setCurrentText(existing_name)
+                return existing_name
+
+        QMessageBox.critical(
+            self,
+            "Size Error",
+            f"Failed to create size value '{size_value}'.\n{message}",
+        )
+        return None
 
     def _is_chemical_category(self, category_name: str) -> bool:
         """Return True when category supports SDS controls."""

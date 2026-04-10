@@ -38,8 +38,11 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 - Edit: updates item data and writes update history.
 - Delete: requires editor attribution and reason; blocked for currently requested items.
 - Add/Edit validation: Name, Category, and Editor Name/Initials are required before save.
+- Add flow duplicate warning: when another item exists with the same normalized name in the same category, the app shows a warning and lets users continue or cancel.
 - Supplier is optional, but if provided it must be selected from the Supplier dropdown.
 - Supplier, Size, Brand, and Category reference values are managed through Settings; in-use Size/Brand/Supplier values are non-deletable and display usage state there.
+- Size input is editable with suggestions: users can select existing values or type a new size directly in Add/Edit Item.
+- Typed size values are normalized to metric casing (for example, `10 mL`, `2.5 L`, `125 g`) before save.
 - If optional dropdowns are left blank (Supplier, Size, Brand), a confirmation dialog lists them before save. Users can proceed or go back to fill entries.
 
 Double-clicking an inventory row opens the item usage history dialog. Use the `Edit Item` button for field edits.
@@ -52,6 +55,7 @@ Categories are fixed by system configuration and determine default item type/dat
 
 - Brand, Supplier, Other Specifications, Expiry/Disposal Date, Item Type, and Acquisition Date are supported in add/edit and import flows.
 - Supplier values are stored by `supplier_id` and resolved from supplier names during import.
+- Size values are normalized to canonical metric casing in manual and import flows.
 - Manual add/edit treats the default `Select Supplier` as no supplier (`NULL`), not a text value.
 - Unselected optional dropdowns (Supplier, Size, Brand) are stored empty and displayed as `N/A` in the inventory table.
 - Item type is persisted as text in `Items.item_type` (`Consumable`, `Non-consumable`, or `TA, non-consumable`) and synchronized with `is_consumable` for stock behavior.

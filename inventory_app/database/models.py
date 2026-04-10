@@ -4,7 +4,7 @@ Provides classes for database entities with CRUD operations.
 Uses composition pattern with DatabaseConnection.
 """
 
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date, timezone
 from dataclasses import dataclass, field
 from enum import Enum
@@ -12,6 +12,11 @@ from enum import Enum
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
 from inventory_app.utils.activity_logger import activity_logger
+from inventory_app.utils.reference_normalization import (
+    build_reference_compare_key,
+    normalize_metric_size_value,
+    normalize_whitespace,
+)
 
 
 def _to_iso(value: Optional[date | datetime]) -> Optional[str]:
@@ -39,15 +44,22 @@ def check_case_insensitive_duplicate(
         matching name if a duplicate exists
     """
     try:
-        if exclude_id:
-            query = f"SELECT name FROM {table} WHERE LOWER(name) = LOWER(?) AND id != ?"
-            rows = db.execute_query(query, (name, exclude_id))
-        else:
-            query = f"SELECT name FROM {table} WHERE LOWER(name) = LOWER(?)"
-            rows = db.execute_query(query, (name,))
+        target_key = build_reference_compare_key(name)
+        if not target_key:
+            return False, None
 
-        if rows:
-            return True, rows[0]["name"]
+        if exclude_id:
+            query = f"SELECT id, name FROM {table} WHERE id != ?"
+            rows = db.execute_query(query, (exclude_id,), use_cache=False)
+        else:
+            query = f"SELECT id, name FROM {table}"
+            rows = db.execute_query(query, use_cache=False)
+
+        for row in rows:
+            existing_name = row.get("name")
+            if build_reference_compare_key(existing_name) == target_key:
+                return True, existing_name
+
         return False, None
     except Exception as e:
         logger.error(f"Error checking for duplicate in {table}: {e}")
@@ -115,6 +127,10 @@ class Supplier:
             Tuple of (success, message) where message contains error info if failed
         """
         try:
+            self.name = normalize_whitespace(self.name)
+            if not self.name:
+                return False, "Supplier name is required"
+
             # Check for case-insensitive duplicate (beta test requirement A.2)
             has_dup, existing = check_case_insensitive_duplicate(
                 "Suppliers", self.name, self.id
@@ -219,6 +235,11 @@ class Size:
             Tuple of (success, message) where message contains error info if failed
         """
         try:
+            normalized_name = normalize_metric_size_value(self.name)
+            self.name = normalized_name or ""
+            if not self.name:
+                return False, "Size name is required"
+
             # Check for case-insensitive duplicate (beta test requirement A.2)
             has_dup, existing = check_case_insensitive_duplicate(
                 "Sizes", self.name, self.id
@@ -318,6 +339,10 @@ class Brand:
             Tuple of (success, message) where message contains error info if failed
         """
         try:
+            self.name = normalize_whitespace(self.name)
+            if not self.name:
+                return False, "Brand name is required"
+
             # Check for case-insensitive duplicate (beta test requirement A.2)
             has_dup, existing = check_case_insensitive_duplicate(
                 "Brands", self.name, self.id
@@ -458,10 +483,13 @@ class Item:
     def save(self, editor_name: str, batch_quantity: int = 0) -> bool:
         """Save or update the item with history tracking and batch creation."""
         try:
-            self.name = (self.name or "").strip()
+            self.name = normalize_whitespace(self.name)
             if not self.name:
                 logger.error("Failed to save item: name is required")
                 return False
+
+            self.size = normalize_metric_size_value(self.size)
+            self.brand = normalize_whitespace(self.brand) or None
 
             if not (editor_name or "").strip():
                 logger.error("Failed to save item: editor_name is required")
@@ -747,6 +775,56 @@ class Item:
             return items
         except Exception as e:
             logger.error(f"Failed to get items: {e}")
+            return []
+
+    @classmethod
+    def find_likely_duplicates(
+        cls,
+        name: str,
+        category_id: int,
+        exclude_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Find likely duplicate items by normalized name within a category."""
+        try:
+            compare_name = build_reference_compare_key(name)
+            if not compare_name:
+                return []
+
+            normalized_category_id = cls._normalize_required_fk(category_id)
+            if normalized_category_id is None:
+                return []
+
+            query = """
+            SELECT
+                i.id,
+                i.name,
+                c.name AS category_name,
+                i.size,
+                i.brand,
+                s.name AS supplier_name
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
+            WHERE i.category_id = ?
+            """
+            params: List[Any] = [normalized_category_id]
+
+            if exclude_id is not None:
+                query += " AND i.id != ?"
+                params.append(exclude_id)
+
+            query += " ORDER BY i.name"
+            rows = db.execute_query(query, tuple(params), use_cache=False)
+
+            matches: List[Dict[str, Any]] = []
+            for row in rows:
+                row_name = row.get("name")
+                if build_reference_compare_key(row_name) == compare_name:
+                    matches.append(dict(row))
+
+            return matches
+        except Exception as e:
+            logger.error(f"Failed to find likely duplicates for item '{name}': {e}")
             return []
 
     @classmethod

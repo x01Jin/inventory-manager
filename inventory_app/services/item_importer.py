@@ -10,12 +10,16 @@ Supports progress callbacks for async UI updates.
 from typing import Dict, List, Set, Tuple, Any, Optional, Callable
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
-from inventory_app.database.models import Item
+from inventory_app.database.models import Item, Size
 from inventory_app.services.category_config import get_all_category_names
 from inventory_app.utils.logger import logger
 from inventory_app.database.connection import db
 from datetime import datetime, date
 import re
+from inventory_app.utils.reference_normalization import (
+    build_size_compare_key,
+    normalize_metric_size_value,
+)
 
 
 REQUIRED_HEADERS = {"name", "stocks", "stock", "item type", "item_type", "type"}
@@ -171,6 +175,36 @@ def _resolve_supplier_id(raw_supplier: Any) -> Optional[int]:
         logger.warning(f"Could not resolve supplier '{supplier_name}': {exc}")
 
     return None
+
+
+def _resolve_or_create_size_value(raw_size: Any) -> Optional[str]:
+    """Resolve size text to canonical format and ensure reference entry exists."""
+    if raw_size is None:
+        return None
+
+    size_text = normalize_metric_size_value(str(raw_size))
+    if not size_text:
+        return None
+
+    if size_text.upper() == "N/A":
+        return size_text
+
+    target_key = build_size_compare_key(size_text)
+    if not target_key:
+        return size_text
+
+    existing_sizes = Size.get_all()
+    for existing in existing_sizes:
+        if build_size_compare_key(existing.name) == target_key:
+            # Preserve canonical metric casing for item records.
+            return size_text
+
+    created_size = Size(name=size_text)
+    success, message = created_size.save()
+    if not success:
+        logger.warning(f"Could not register size '{size_text}' in Sizes: {message}")
+
+    return size_text
 
 
 def _is_consumable_type(raw_item_type: Any) -> bool:
@@ -490,6 +524,8 @@ def import_items_from_excel(
             # size column is empty, prefer the size parsed from stocks.
             if (size is None or str(size).strip() == "") and size_from_stocks:
                 size = size_from_stocks
+
+            size = _resolve_or_create_size_value(size)
 
             # If the stock parser returned notes (e.g., '(100pcs)' or 'of 8 pieces'),
             # append them to other_specifications for visibility.

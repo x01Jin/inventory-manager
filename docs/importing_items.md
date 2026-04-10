@@ -51,10 +51,11 @@ The import can be cancelled while in progress by clicking the Cancel button.
     - choose a unit from the dropdown (`ml`, `L`, `mg`, `g`, `kg`) so import rewrites the stock value as `<value> <unit>` (example: `1.5` + `L` -> `1.5 L` -> quantity `1500`), or
     - skip that row.
   - **Numeric counts** (e.g., `2`, `10`) are parsed as integer quantities (floats coerced to int).
-  - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **usable quantity with size**: the importer records the matched `size` and calculates an integer usable quantity.
+  - **Size-bearing entries** containing volume/mass units (e.g., `900ml`, `1.1 L`, `2 liters`, `125 g`, `500ml`) are treated as **usable quantity with size**: the importer records `size` and calculates an integer usable quantity.
   - For larger units, the importer converts to base usable units so partial requisitions remain possible with integer quantities: `L/liter/litre/ltr/lt/lts` are converted to ml (`1 L -> 1000`), `gal/galon/gallon` forms follow the same project conversion (`1.1 gal -> 1100`), and `kg/kilo/kilogram` forms are converted to grams (`1 kilo -> 1000`). Units already in smaller forms like `ml` and `g` keep their numeric quantity.
 
-  - **Supported size units** include common volume/mass units such as: `ml`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `l`, `lt`, `lts`, `g`, `gm`, `gms`, `gram`, `grams`, `kg`, `kilo`, `kilos`, `kilogram`, `kilograms`, `mg`, `milligram`, `milligrams`, `gal`, `galon`, `gallon`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive). The importer preserves the matched substring so the resulting `size` field closely resembles the input text.
+  - **Supported size units** include common volume/mass units such as: `ml`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `l`, `lt`, `lts`, `g`, `gm`, `gms`, `gram`, `grams`, `kg`, `kilo`, `kilos`, `kilogram`, `kilograms`, `mg`, `milligram`, `milligrams`, `gal`, `galon`, `gallon`, `liter`, `liters`, `litre`, `litres`, and `ltr` (case-insensitive).
+  - Imported `size` text is normalized to canonical metric casing for consistency (for example, `900ml` -> `900 mL`, `1 kilo` -> `1 kg`, `125 gms` -> `125 g`).
 
   - **Package counts with piece details** (e.g., `1 box (100pcs)`, `2 packs of 50 pcs`) are converted to usable stock units using `packages * pieces` (so `1 box (100pcs)` becomes quantity `100`). Piece details are still recorded as notes and appended to `other_specifications`.
   - **Other leading counts with extra info** (e.g., `10 boxes`, `1 set of 8 pieces`) use the leading integer as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
@@ -78,12 +79,12 @@ Notes
 
 ### Stocks parsing examples
 
-- `900ml` → quantity=900, size=`900ml`
+- `900ml` → quantity=900, size=`900 mL`
 - `1.1 L` → quantity=1100, size=`1.1 L`
 - `1.1 gal` → quantity=1100, size=`1.1 gal`
 - `2.5 L` → quantity=2500, size=`2.5 L`
-- `1 kilo` → quantity=1000, size=`1 kilo`
-- `125 gms` → quantity=125, size=`125 gms`
+- `1 kilo` → quantity=1000, size=`1 kg`
+- `125 gms` → quantity=125, size=`125 g`
 - `1 box (100pcs)` → quantity=100, notes=`(100pcs)` appended to `other_specifications`
 - `2 packs of 50 pcs` → quantity=100, notes captured as `of 50 pcs`
 - `1 set of 8 pieces` → quantity=1, notes captured as `of 8 pieces`
@@ -91,7 +92,7 @@ Notes
 ### Consumables rule (important)
 
 - Requisition and return dialogs use integer quantities. To support partial-use consumables (for example, borrowing 100 out of 900 ml), ensure stocks represent usable units.
-- If the `stocks` cell contains `900ml`, the importer converts it to `stocks = 900` and keeps `size = 900ml`.
+- If the `stocks` cell contains `900ml`, the importer converts it to `stocks = 900` and stores canonical `size = 900 mL`.
 - If the `stocks` cell contains `1 L`, the importer converts it to `stocks = 1000` and keeps `size = 1 L`.
 - This allows users to request/return values like `100`, `250`, etc. instead of being limited to whole-container counts.
 

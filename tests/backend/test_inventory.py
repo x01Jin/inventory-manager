@@ -3,6 +3,7 @@ import pytest
 from datetime import date, datetime, timedelta
 from inventory_app.database.connection import db
 from inventory_app.database.models import (
+    Item,
     Supplier,
     check_case_insensitive_duplicate,
 )
@@ -80,6 +81,24 @@ def test_duplicate_prevention(temp_db):
 
     has_dup, _ = check_case_insensitive_duplicate("Brands", "PYREX")
     assert has_dup is True
+
+
+def test_item_likely_duplicate_lookup_is_category_scoped(temp_db):
+    """Likely duplicates should match by normalized name within same category only."""
+    same_category = Item(name="Beaker", category_id=1)
+    assert same_category.save(editor_name="tester") is True
+
+    other_category = Item(name="beaker", category_id=2)
+    assert other_category.save(editor_name="tester") is True
+
+    matches = Item.find_likely_duplicates("  BEAKER  ", 1)
+    assert len(matches) == 1
+    assert matches[0]["id"] == same_category.id
+
+    excluded_matches = Item.find_likely_duplicates(
+        "beaker", 1, exclude_id=same_category.id
+    )
+    assert excluded_matches == []
 
 
 def test_stock_movement_logic(temp_db):

@@ -25,6 +25,9 @@ General behavior:
 
 - Names are trimmed and cannot be blank.
 - Duplicate names are blocked (case-insensitive).
+- Size values are normalized to canonical metric casing (for example, `250 mL`, `1 L`, `125 g`).
+- Entering the Settings page triggers one background refresh for `Sizes`, `Brands`, and `Suppliers` together.
+- During refresh, missing Size/Brand reference values found in existing inventory records are added so imported/legacy values show in Settings.
 - You must select an entry before Edit/Delete.
 
 Delete behavior:
@@ -41,6 +44,11 @@ Merge behavior:
 - Check one or more source entries (the duplicate values to consolidate).
 - Review the estimated affected item count, then confirm.
 - The merge updates item references and deletes merged source entries.
+
+Automatic normalization:
+
+- On startup, the app runs reference normalization and merges duplicate Size/Brand/Supplier entries that differ only by case/format.
+- Existing item size values are normalized to canonical metric casing.
 
 ## Categories Note
 

@@ -25,6 +25,10 @@ Behavior is consistent across tabs:
 
 - Input is trimmed and cannot be blank.
 - Case-insensitive duplicate checks are enforced (for example, `250ml` and `250mL` are treated as duplicates).
+- Size names are normalized to metric-cased format on save (for example, `250 mL`, `1 L`, `125 g`).
+- Entering the Settings page triggers a single background refresh for `Sizes`, `Brands`, and `Suppliers` together.
+- The refresh uses a top progress bar and runs off the main UI thread to avoid page freezing.
+- Before rendering tables, the app synchronizes missing Size/Brand reference entries from existing item records so legacy/imported values appear in Settings.
 - Edit/Delete requires selecting an existing entry first.
 - Entries are displayed in a 3-column table: `Name`, `Usage`, and `Status`.
 - You can double-click a row to open the Edit dialog for that entry.
@@ -52,6 +56,12 @@ Example cleanup:
 - Keep target: `ATR Trading System`
 - Merge sources: `ATR`, `ATR Trading`
 - Result: all affected items now reference `ATR Trading System`.
+
+Automatic cleanup on startup:
+
+- On app startup, reference data normalization runs automatically.
+- Duplicate Size, Brand, and Supplier entries that differ only by case/format are merged deterministically.
+- Existing item size text is normalized to canonical metric casing.
 
 ## Fixed Categories
 
