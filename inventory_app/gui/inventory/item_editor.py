@@ -19,11 +19,13 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QMessageBox,
     QSizePolicy,
+    QFileDialog,
 )
 from PyQt6.QtCore import QDate
 from datetime import date
-from inventory_app.database.models import Item, Category, Supplier, Size, Brand
+from inventory_app.database.models import Item, Category, Supplier, Size, Brand, ItemSDS
 from inventory_app.services.category_config import get_category_config
+from inventory_app.services.sds_storage_service import sds_storage_service
 from inventory_app.utils.logger import logger
 
 
@@ -38,6 +40,8 @@ class ItemEditor(QDialog):
         self.suppliers: List[str] = []
         self.sizes: List[str] = []
         self.brands: List[str] = []
+        self.sds_source_path: Optional[str] = None
+        self.current_sds: Optional[ItemSDS] = None
 
         if item_id:
             self.existing_item = Item.get_by_id(item_id)
@@ -203,6 +207,30 @@ class ItemEditor(QDialog):
         )
         spec_layout.addWidget(self.spec_input)
 
+        # SDS section (chemical categories only)
+        self.sds_label = QLabel("SDS File (optional):")
+        spec_layout.addWidget(self.sds_label)
+
+        sds_row = QHBoxLayout()
+        self.sds_file_input = QLineEdit()
+        self.sds_file_input.setReadOnly(True)
+        self.sds_file_input.setPlaceholderText("No SDS file selected")
+        sds_row.addWidget(self.sds_file_input)
+
+        self.sds_browse_btn = QPushButton("Browse")
+        self.sds_browse_btn.clicked.connect(self._select_sds_file)
+        sds_row.addWidget(self.sds_browse_btn)
+        spec_layout.addLayout(sds_row)
+
+        self.sds_notes_label = QLabel("SDS Notes (optional):")
+        spec_layout.addWidget(self.sds_notes_label)
+        self.sds_notes_input = QTextEdit()
+        self.sds_notes_input.setPlaceholderText(
+            "Optional quick SDS notes (hazards, first aid, handling)."
+        )
+        self.sds_notes_input.setMaximumHeight(90)
+        spec_layout.addWidget(self.sds_notes_input)
+
         # Editor Information (required) sits under specifications in right column
         editor_group = QGroupBox("Editor Information (Required)")
         editor_layout = QVBoxLayout(editor_group)
@@ -235,6 +263,9 @@ class ItemEditor(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         layout.addLayout(button_layout)
+
+        # SDS controls are shown only for chemical categories.
+        self._update_sds_visibility("")
 
         # Make window size responsive:
         # prefer 90% of available screen width and 60% of available screen height
@@ -386,6 +417,8 @@ class ItemEditor(QDialog):
                         QDate(cal_date.year, cal_date.month, cal_date.day)
                     )
 
+        self._update_sds_visibility(category_name)
+
     def on_acquisition_date_changed(self):
         """Recalculate expiration/disposal dates when acquisition date changes.
 
@@ -467,6 +500,15 @@ class ItemEditor(QDialog):
             self.po_input.setText(self.existing_item.po_number or "")
             self.spec_input.setPlainText(self.existing_item.other_specifications or "")
 
+            self.current_sds = ItemSDS.get_by_item_id(self.existing_item.id or 0)
+            if self.current_sds:
+                self.sds_file_input.setText(
+                    self.current_sds.original_filename
+                    or self.current_sds.file_path
+                    or ""
+                )
+                self.sds_notes_input.setPlainText(self.current_sds.sds_notes or "")
+
             # Dates
             if self.existing_item.acquisition_date:
                 qdate = QDate(
@@ -489,6 +531,7 @@ class ItemEditor(QDialog):
 
             # Update the layout based on the loaded item type
             self.on_item_type_changed()
+            self._update_sds_visibility(self.category_combo.currentText())
 
             logger.debug(f"Loaded data for item {self.item_id}")
 
@@ -498,15 +541,62 @@ class ItemEditor(QDialog):
     def save_item(self):
         """Save the item data."""
         try:
-            # Validate required fields
+            # Validate required fields with specific guidance before saving
+            validation_issues = []
             if not self.name_input.text().strip():
-                QMessageBox.warning(self, "Validation Error", "Item name is required.")
-                return
+                validation_issues.append("Item Name is required.")
+
+            category_data = self.category_combo.currentData()
+            if not isinstance(category_data, int) or category_data <= 0:
+                validation_issues.append(
+                    "Category is required. Please choose a value from the Category dropdown."
+                )
 
             if not self.editor_input.text().strip():
+                validation_issues.append("Editor Name/Initials is required.")
+
+            if validation_issues:
                 QMessageBox.warning(
-                    self, "Validation Error", "Editor name is required (Spec #14)."
+                    self,
+                    "Validation Error",
+                    "Please complete the required fields before saving:\n- "
+                    + "\n- ".join(validation_issues),
                 )
+                return
+
+            supplier_data = self.supplier_combo.currentData()
+            normalized_supplier_id = None
+            if supplier_data not in (None, "", 0):
+                if isinstance(supplier_data, int) and supplier_data > 0:
+                    normalized_supplier_id = supplier_data
+                elif isinstance(supplier_data, str) and supplier_data.strip().isdigit():
+                    normalized_supplier_id = int(supplier_data.strip())
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Validation Error",
+                        "Supplier selection is invalid. Please pick a supplier from the list or leave it as Select Supplier.",
+                    )
+                    return
+
+            normalized_size = self._normalize_optional_text_value(
+                self.size_combo.currentData()
+            )
+            normalized_brand = self._normalize_optional_text_value(
+                self.brand_combo.currentData()
+            )
+
+            missing_optional_entries = []
+            if normalized_supplier_id is None:
+                missing_optional_entries.append("Supplier")
+            if normalized_size is None:
+                missing_optional_entries.append("Size")
+            if normalized_brand is None:
+                missing_optional_entries.append("Brand")
+
+            if missing_optional_entries and not self._confirm_missing_optional_entries(
+                missing_optional_entries
+            ):
                 return
 
             # Create or update item
@@ -517,10 +607,10 @@ class ItemEditor(QDialog):
 
             # Basic info
             item.name = self.name_input.text().strip()
-            item.category_id = self.category_combo.currentData() or 0
-            item.supplier_id = self.supplier_combo.currentData()
-            item.size = self.size_combo.currentData()
-            item.brand = self.brand_combo.currentData()
+            item.category_id = category_data
+            item.supplier_id = normalized_supplier_id
+            item.size = normalized_size
+            item.brand = normalized_brand
 
             # Specifications
             item.po_number = self.po_input.text().strip() or None
@@ -605,6 +695,7 @@ class ItemEditor(QDialog):
             success = item.save(editor_name, batch_quantity)
 
             if success:
+                self._save_sds_if_needed(item.id or 0, editor_name)
                 batch_msg = (
                     f" with {batch_quantity} batches" if batch_quantity > 0 else ""
                 )
@@ -621,3 +712,114 @@ class ItemEditor(QDialog):
         except Exception as e:
             logger.error(f"Error saving item: {e}")
             QMessageBox.critical(self, "Error", f"Failed to save item: {str(e)}")
+
+    def _normalize_optional_text_value(self, value: Optional[str]) -> Optional[str]:
+        """Normalize optional text dropdown value to None when empty."""
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned if cleaned else None
+
+        return str(value).strip() or None
+
+    def _confirm_missing_optional_entries(self, entries: List[str]) -> bool:
+        """Ask user to proceed when optional dropdown fields are left unselected."""
+        message = (
+            "The following optional fields were not selected:\n"
+            f"- {'\n- '.join(entries)}\n\n"
+            "These will be displayed as N/A.\n"
+            "Do you want to proceed with saving?"
+        )
+
+        response = QMessageBox.question(
+            self,
+            "Optional Fields Not Filled",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return response == QMessageBox.StandardButton.Yes
+
+    def _is_chemical_category(self, category_name: str) -> bool:
+        """Return True when category supports SDS controls."""
+        return category_name in {"Chemicals-Solid", "Chemicals-Liquid"}
+
+    def _update_sds_visibility(self, category_name: str) -> None:
+        """Show SDS controls only for chemical categories."""
+        is_chemical = self._is_chemical_category(category_name)
+
+        self.sds_label.setVisible(is_chemical)
+        self.sds_file_input.setVisible(is_chemical)
+        self.sds_browse_btn.setVisible(is_chemical)
+        self.sds_notes_label.setVisible(is_chemical)
+        self.sds_notes_input.setVisible(is_chemical)
+
+        if not is_chemical:
+            self.sds_source_path = None
+            self.sds_file_input.clear()
+            self.sds_notes_input.clear()
+
+    def _select_sds_file(self) -> None:
+        """Select an SDS file from disk."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select SDS File",
+            "",
+            "Documents (*.pdf *.doc *.docx *.txt *.png *.jpg *.jpeg);;All Files (*.*)",
+        )
+        if not file_path:
+            return
+
+        self.sds_source_path = file_path
+        self.sds_file_input.setText(file_path)
+
+    def _save_sds_if_needed(self, item_id: int, editor_name: str) -> None:
+        """Persist optional SDS metadata/file for chemical items."""
+        if item_id <= 0:
+            return
+
+        if not self._is_chemical_category(self.category_combo.currentText()):
+            return
+
+        sds_notes = self.sds_notes_input.toPlainText().strip() or None
+        existing = ItemSDS.get_by_item_id(item_id)
+        sds_record = existing or ItemSDS(item_id=item_id)
+
+        copied_path = None
+        old_path = existing.file_path if existing else None
+        if self.sds_source_path:
+            metadata = sds_storage_service.store_file(item_id, self.sds_source_path)
+            if not metadata:
+                QMessageBox.warning(
+                    self,
+                    "SDS Warning",
+                    "Item was saved, but SDS file upload failed.",
+                )
+                return
+
+            copied_path = metadata["file_path"]
+            sds_record.stored_filename = metadata["stored_filename"]
+            sds_record.original_filename = metadata["original_filename"]
+            sds_record.file_path = metadata["file_path"]
+            sds_record.mime_type = metadata["mime_type"]
+
+        sds_record.sds_notes = sds_notes
+
+        if not sds_record.file_path and not sds_record.sds_notes:
+            return
+
+        reason = "SDS uploaded" if existing is None else "SDS updated"
+        if not sds_record.save(editor_name, reason=reason):
+            if copied_path:
+                sds_storage_service.remove_file(copied_path)
+            QMessageBox.warning(
+                self,
+                "SDS Warning",
+                "Item was saved, but SDS metadata could not be saved.",
+            )
+            return
+
+        if self.sds_source_path and old_path and old_path != sds_record.file_path:
+            sds_storage_service.remove_file(old_path)

@@ -2,6 +2,7 @@ import pytest
 from inventory_app.database.connection import db
 from inventory_app.database.models import Supplier, Size, Brand, Item
 
+
 @pytest.fixture
 def temp_db(tmp_path):
     """Create a temporary database for each test and ensure schema is applied."""
@@ -9,6 +10,7 @@ def temp_db(tmp_path):
     db.db_path = db_file
     assert db.create_database() is True
     yield db_file
+
 
 def test_supplier_deletion_logic(temp_db):
     """Verify supplier deletion behavior (force vs no-force)."""
@@ -31,13 +33,16 @@ def test_supplier_deletion_logic(temp_db):
     # 2. Deletion with force should succeed and nullify item reference
     success, msg = s.delete(force=True)
     assert success is True
-    
+
     # Verify supplier is gone
     assert Supplier.get_by_id(s.id) is None
-    
+
     # Verify item's supplier_id is NULL
+    assert item.id is not None
     retrieved_item = Item.get_by_id(item.id)
+    assert retrieved_item is not None
     assert retrieved_item.supplier_id is None
+
 
 def test_size_deletion_logic(temp_db):
     """Verify size deletion is blocked when in use."""
@@ -63,6 +68,7 @@ def test_size_deletion_logic(temp_db):
     assert success is True
     assert Size.get_by_id(sz.id) is None
 
+
 def test_brand_deletion_logic(temp_db):
     """Verify brand deletion is blocked when in use."""
     b = Brand(name="UniqueBrand")
@@ -87,6 +93,7 @@ def test_brand_deletion_logic(temp_db):
     assert success is True
     assert Brand.get_by_id(b.id) is None
 
+
 def test_reference_data_duplicate_prevention(temp_db):
     """Verify case-insensitive duplicate prevention for all reference data."""
     # Sizes
@@ -100,3 +107,29 @@ def test_reference_data_duplicate_prevention(temp_db):
     success, msg = Brand(name="PYREX").save()
     assert success is False
     assert "already exists" in msg.lower()
+
+
+def test_item_save_rejects_invalid_category_fk(temp_db):
+    """Item save should fail fast when category FK is invalid/missing."""
+    item_missing = Item(name="NoCategory", category_id=0)
+    assert item_missing.save(editor_name="tester") is False
+
+    item_unknown = Item(name="UnknownCategory", category_id=999999)
+    assert item_unknown.save(editor_name="tester") is False
+
+
+def test_item_save_supplier_fk_validation_and_blank_normalization(temp_db):
+    """Blank supplier values should normalize to None; unknown supplier FK should fail."""
+    blank_supplier_item = Item(name="BlankSupplier", category_id=1)
+    blank_supplier_item.supplier_id = ""  # type: ignore[assignment]
+    assert blank_supplier_item.save(editor_name="tester") is True
+
+    assert blank_supplier_item.id is not None
+    reloaded = Item.get_by_id(blank_supplier_item.id)
+    assert reloaded is not None
+    assert reloaded.supplier_id is None
+
+    unknown_supplier_item = Item(
+        name="UnknownSupplier", category_id=1, supplier_id=999999
+    )
+    assert unknown_supplier_item.save(editor_name="tester") is False

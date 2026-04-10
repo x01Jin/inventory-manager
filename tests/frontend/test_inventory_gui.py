@@ -231,3 +231,231 @@ def test_task12_double_click_opens_item_history_dialog(qtbot, monkeypatch):
     page.table.selectRow(0)
     page._on_table_double_click(None)
     assert opened["value"] is True
+
+
+def test_sds_button_only_for_chemical_rows(qtbot, monkeypatch):
+    """SDS row action appears only for Chemicals-Solid/Liquid rows."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=1,
+                name="Acetone",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="500mL",
+                brand="LabCorp",
+                supplier_name="Malcor Chemicals",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                has_sds=False,
+                total_stock=10,
+                available_stock=10,
+            ),
+            ItemRow(
+                id=2,
+                name="Beaker",
+                category_name="Apparatus",
+                item_type="Non-consumable",
+                size="250mL",
+                brand="Pyrex",
+                supplier_name="ATR Trading System",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 1),
+                last_modified=None,
+                has_sds=False,
+                total_stock=10,
+                available_stock=10,
+            ),
+        ]
+    )
+    page._update_filtered_table()
+
+    assert page.table.cellWidget(0, 1) is not None
+    assert page.table.cellWidget(1, 1) is None
+
+
+def test_sds_row_action_opens_external_file_when_entry_exists(qtbot, monkeypatch):
+    """Row SDS action should open the existing SDS file externally."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+
+    opened = {"value": False}
+
+    class FakeSDS:
+        def __init__(self):
+            self.file_path = "C:/tmp/acid.pdf"
+
+    monkeypatch.setattr(
+        "inventory_app.gui.inventory.inventory_page.ItemSDS.get_by_item_id",
+        lambda _item_id: FakeSDS(),
+    )
+    monkeypatch.setattr(
+        "inventory_app.gui.inventory.inventory_page.QDesktopServices.openUrl",
+        lambda _url: opened.__setitem__("value", True) or True,
+    )
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=10,
+                name="Sulfuric Acid",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="1L",
+                brand="Merck",
+                supplier_name="Malcor Chemicals",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                has_sds=True,
+                total_stock=5,
+                available_stock=5,
+            )
+        ]
+    )
+    page._update_filtered_table()
+
+    page.table.sds_requested.emit(10)
+    assert opened["value"] is True
+
+
+def test_sds_row_action_warns_when_entry_missing(qtbot, monkeypatch):
+    """Row SDS action should warn when chemical has no SDS entry yet."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+    monkeypatch.setattr(
+        "inventory_app.gui.inventory.inventory_page.ItemSDS.get_by_item_id",
+        lambda _item_id: None,
+    )
+
+    warned = {"value": False}
+    monkeypatch.setattr(
+        "inventory_app.gui.inventory.inventory_page.QMessageBox.information",
+        lambda *args, **kwargs: warned.__setitem__("value", True),
+    )
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=12,
+                name="Ammonia",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="500mL",
+                brand="Merck",
+                supplier_name="Malcor Chemicals",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                has_sds=False,
+                total_stock=5,
+                available_stock=5,
+            )
+        ]
+    )
+    page._update_filtered_table()
+
+    page.table.sds_requested.emit(12)
+    assert warned["value"] is True
+
+
+def test_sds_settings_toolbar_button_visible_for_selected_chemical(qtbot, monkeypatch):
+    """Toolbar SDS settings button should appear only when a chemical row is selected."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=21,
+                name="Ethanol",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="1L",
+                brand="Merck",
+                supplier_name="Malcor Chemicals",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                has_sds=False,
+                total_stock=5,
+                available_stock=5,
+            ),
+            ItemRow(
+                id=22,
+                name="Clamp",
+                category_name="Apparatus",
+                item_type="Non-consumable",
+                size=None,
+                brand=None,
+                supplier_name="ATR Trading System",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                has_sds=False,
+                total_stock=5,
+                available_stock=5,
+            ),
+        ]
+    )
+    page._update_filtered_table()
+
+    page.table.selectRow(0)
+    page._on_table_selection_changed()
+    assert page.sds_settings_button.isHidden() is False
+
+    page.table.selectRow(1)
+    page._on_table_selection_changed()
+    assert page.sds_settings_button.isHidden() is True

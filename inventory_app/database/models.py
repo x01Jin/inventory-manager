@@ -385,9 +385,75 @@ class Item:
     acquisition_date: Optional[date] = None
     last_modified: Optional[datetime] = None
 
+    @staticmethod
+    def _normalize_optional_fk(value: Optional[int | str]) -> Optional[int]:
+        """Normalize optional FK-like values to an int or None."""
+        if value in (None, "", 0):
+            return None
+
+        if isinstance(value, int):
+            return value if value > 0 else None
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            if stripped.isdigit():
+                parsed = int(stripped)
+                return parsed if parsed > 0 else None
+
+        return None
+
+    @staticmethod
+    def _normalize_required_fk(value: Optional[int | str]) -> Optional[int]:
+        """Normalize required FK-like values to a positive int, else None."""
+        if isinstance(value, int):
+            return value if value > 0 else None
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.isdigit():
+                parsed = int(stripped)
+                return parsed if parsed > 0 else None
+
+        return None
+
     def save(self, editor_name: str, batch_quantity: int = 0) -> bool:
         """Save or update the item with history tracking and batch creation."""
         try:
+            self.name = (self.name or "").strip()
+            if not self.name:
+                logger.error("Failed to save item: name is required")
+                return False
+
+            if not (editor_name or "").strip():
+                logger.error("Failed to save item: editor_name is required")
+                return False
+
+            normalized_category_id = self._normalize_required_fk(self.category_id)
+            if normalized_category_id is None:
+                logger.error(
+                    f"Failed to save item: invalid category_id '{self.category_id}'"
+                )
+                return False
+
+            if Category.get_by_id(normalized_category_id) is None:
+                logger.error(
+                    f"Failed to save item: category_id {normalized_category_id} does not exist"
+                )
+                return False
+
+            normalized_supplier_id = self._normalize_optional_fk(self.supplier_id)
+            if normalized_supplier_id is not None:
+                if Supplier.get_by_id(normalized_supplier_id) is None:
+                    logger.error(
+                        f"Failed to save item: supplier_id {normalized_supplier_id} does not exist"
+                    )
+                    return False
+
+            self.category_id = normalized_category_id
+            self.supplier_id = normalized_supplier_id
+
             current_time = datetime.now()
             # Wrap the entire save operation in a single transaction so that
             # creating the item and its initial batch (if any) are committed
@@ -709,6 +775,134 @@ class Item:
         except Exception as e:
             logger.error(f"Failed to search items: {e}")
             return []
+
+
+@dataclass
+class ItemSDS:
+    """Represents SDS metadata linked to a single inventory item."""
+
+    id: Optional[int] = None
+    item_id: int = 0
+    stored_filename: Optional[str] = None
+    original_filename: Optional[str] = None
+    file_path: Optional[str] = None
+    mime_type: Optional[str] = None
+    sds_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+
+    @classmethod
+    def get_by_item_id(cls, item_id: int) -> Optional["ItemSDS"]:
+        """Get SDS metadata for a specific item."""
+        try:
+            rows = db.execute_query(
+                "SELECT * FROM Item_SDS WHERE item_id = ?", (item_id,)
+            )
+            if not rows:
+                return None
+
+            data = dict(rows[0])
+            if data.get("created_at"):
+                data["created_at"] = datetime.fromisoformat(data["created_at"])
+            if data.get("updated_at"):
+                data["updated_at"] = datetime.fromisoformat(data["updated_at"])
+            return cls(**data)
+        except Exception as e:
+            logger.error(f"Failed to load SDS for item {item_id}: {e}")
+            return None
+
+    def save(self, editor_name: str, reason: str = "SDS updated") -> bool:
+        """Insert or update SDS metadata and write an audit history entry."""
+        if not self.item_id:
+            logger.error("Cannot save SDS without a valid item_id")
+            return False
+
+        try:
+            current_time = datetime.now().isoformat()
+            with db.transaction():
+                existing = db.execute_query(
+                    "SELECT id FROM Item_SDS WHERE item_id = ?",
+                    (self.item_id,),
+                    use_cache=False,
+                )
+
+                if existing:
+                    self.id = existing[0]["id"]
+                    db.execute_update(
+                        """
+                        UPDATE Item_SDS
+                        SET stored_filename = ?, original_filename = ?, file_path = ?,
+                            mime_type = ?, sds_notes = ?, updated_at = ?, updated_by = ?
+                        WHERE item_id = ?
+                        """,
+                        (
+                            self.stored_filename,
+                            self.original_filename,
+                            self.file_path,
+                            self.mime_type,
+                            self.sds_notes,
+                            current_time,
+                            editor_name,
+                            self.item_id,
+                        ),
+                    )
+                else:
+                    result = db.execute_update(
+                        """
+                        INSERT INTO Item_SDS (
+                            item_id, stored_filename, original_filename, file_path,
+                            mime_type, sds_notes, created_at, updated_at, updated_by
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            self.item_id,
+                            self.stored_filename,
+                            self.original_filename,
+                            self.file_path,
+                            self.mime_type,
+                            self.sds_notes,
+                            current_time,
+                            current_time,
+                            editor_name,
+                        ),
+                        return_last_id=True,
+                    )
+                    if isinstance(result, tuple):
+                        _, self.id = result
+
+                db.execute_update(
+                    """
+                    INSERT INTO Update_History (item_id, editor_name, reason)
+                    VALUES (?, ?, ?)
+                    """,
+                    (self.item_id, editor_name, reason),
+                )
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save SDS for item {self.item_id}: {e}")
+            return False
+
+    @classmethod
+    def delete_for_item(
+        cls, item_id: int, editor_name: str, reason: str = "SDS removed"
+    ) -> bool:
+        """Delete SDS metadata for an item and write an audit entry."""
+        try:
+            with db.transaction():
+                db.execute_update("DELETE FROM Item_SDS WHERE item_id = ?", (item_id,))
+                db.execute_update(
+                    """
+                    INSERT INTO Update_History (item_id, editor_name, reason)
+                    VALUES (?, ?, ?)
+                    """,
+                    (item_id, editor_name, reason),
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete SDS for item {item_id}: {e}")
+            return False
 
 
 class RequesterType(Enum):

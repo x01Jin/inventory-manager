@@ -21,7 +21,6 @@ try:
     from .database.connection import db
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
-    from .services.category_sync_service import sync_development_categories
     from .services.summary_tables import summary_tables_service
 except Exception:
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,7 +30,6 @@ except Exception:
     from inventory_app.database.connection import db
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
-    from inventory_app.services.category_sync_service import sync_development_categories
     from inventory_app.services.summary_tables import summary_tables_service
 
 
@@ -52,48 +50,10 @@ def initialize_laboratory_database() -> bool:
                 logger.error("Database creation returned failure state")
                 return False
         else:
-            logger.info("Existing database detected; running lightweight schema checks")
-
-        if not ensure_development_schema_compatibility():
-            logger.error("Schema compatibility checks failed")
-            return False
+            logger.info("Existing database detected")
         return True
     except Exception:
         logger.exception("Failed to initialize Laboratory Inventory database")
-        return False
-
-
-def ensure_development_schema_compatibility() -> bool:
-    """Apply lightweight compatibility updates for development databases.
-
-    This avoids migration churn during active development while keeping older
-    local databases usable when new non-breaking columns are introduced.
-    """
-    try:
-        columns = db.execute_query("PRAGMA table_info(Items)")
-        item_columns = {row.get("name") for row in columns}
-
-        if "item_type" not in item_columns:
-            logger.info("Adding missing Items.item_type column for compatibility")
-            db.execute_update("ALTER TABLE Items ADD COLUMN item_type TEXT")
-            db.execute_update(
-                """
-                UPDATE Items
-                SET item_type = CASE
-                    WHEN is_consumable = 1 THEN 'Consumable'
-                    ELSE 'Non-consumable'
-                END
-                WHERE item_type IS NULL OR TRIM(item_type) = ''
-                """
-            )
-
-        if not sync_development_categories():
-            logger.error("Failed to synchronize canonical categories")
-            return False
-
-        return True
-    except Exception:
-        logger.exception("Failed to apply development schema compatibility updates")
         return False
 
 

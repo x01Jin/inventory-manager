@@ -62,6 +62,7 @@ class InventoryController:
                 i.is_consumable,
                 i.acquisition_date,
                 i.last_modified,
+                CASE WHEN sds.item_id IS NOT NULL THEN 1 ELSE 0 END as has_sds,
                 COALESCE(stock.total_stock, 0) as total_stock,
                 COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
@@ -82,6 +83,7 @@ class InventoryController:
             """
                 + inventory_common_joins_sql()
                 + """
+            LEFT JOIN Item_SDS sds ON sds.item_id = i.id
             LEFT JOIN (
                 SELECT item_id, MIN(date_received) as date_received
                 FROM Item_Batches
@@ -134,6 +136,7 @@ class InventoryController:
                 s.name as supplier_name, i.other_specifications, i.po_number,
                 i.expiration_date, i.calibration_date, i.is_consumable,
                 i.acquisition_date, i.last_modified,
+                CASE WHEN sds.item_id IS NOT NULL THEN 1 ELSE 0 END as has_sds,
                 COALESCE(stock.total_stock, 0) as total_stock,
                 COALESCE(stock.total_stock, 0) - COALESCE(requested.requested_qty, 0) as available_stock,
                 CASE
@@ -153,6 +156,7 @@ class InventoryController:
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
+            LEFT JOIN Item_SDS sds ON sds.item_id = i.id
             LEFT JOIN (
                 """
                 + self._get_stock_calculations()

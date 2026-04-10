@@ -9,6 +9,7 @@ The Inventory page is the main workspace for item records, stock visibility, and
 - Search and filter by text, category, supplier, item type, and acquisition date range.
 - Surface date-based alert states through row coloring.
 - Open per-item usage history directly from the inventory table.
+- Open and maintain Safety Data Sheets (SDS) for chemical items.
 
 Underlying tables involved are `Items`, `Item_Batches`, and `Stock_Movements`.
 
@@ -36,8 +37,13 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 - Create: stores item data and initial batch quantity.
 - Edit: updates item data and writes update history.
 - Delete: requires editor attribution and reason; blocked for currently requested items.
+- Add/Edit validation: Name, Category, and Editor Name/Initials are required before save.
+- Supplier is optional, but if provided it must be selected from the Supplier dropdown.
+- If optional dropdowns are left blank (Supplier, Size, Brand), a confirmation dialog lists them before save. Users can proceed or go back to fill entries.
 
 Double-clicking an inventory row opens the item usage history dialog. Use the `Edit Item` button for field edits.
+
+Chemical rows (`Chemicals-Solid`, `Chemicals-Liquid`) show an `SDS` action beside the item name. If an SDS file exists, clicking it opens that exact file externally. If no SDS entry exists, the app shows a message indicating SDS is required.
 
 Categories are fixed by system configuration and determine default item type/date behavior.
 
@@ -45,7 +51,18 @@ Categories are fixed by system configuration and determine default item type/dat
 
 - Brand, Supplier, Other Specifications, Expiry/Disposal Date, Item Type, and Acquisition Date are supported in add/edit and import flows.
 - Supplier values are stored by `supplier_id` and resolved from supplier names during import.
+- Manual add/edit treats the default `Select Supplier` as no supplier (`NULL`), not a text value.
+- Unselected optional dropdowns (Supplier, Size, Brand) are stored empty and displayed as `N/A` in the inventory table.
 - Item type is persisted as text in `Items.item_type` (`Consumable`, `Non-consumable`, or `TA, non-consumable`) and synchronized with `is_consumable` for stock behavior.
+- Chemical items support SDS metadata in `Item_SDS` (stored filename, original filename, path, MIME type, optional notes, and editor attribution).
+
+## SDS Management
+
+- SDS files are stored locally in an `sds/` folder beside the running application.
+- In Add/Edit Item, chemical categories expose optional SDS file and SDS notes fields.
+- In the inventory table, only chemical rows display the SDS action button for quick external open.
+- Selecting a chemical row reveals a toolbar `SDS Settings` button. Use this button to upload, update, or remove SDS entries.
+- All SDS save/update/remove actions require editor attribution and are logged to `Update_History`.
 
 ## Auto-Calculated Dates
 

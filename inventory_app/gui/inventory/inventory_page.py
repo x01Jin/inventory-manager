@@ -22,8 +22,11 @@ from PyQt6.QtWidgets import (
     QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QUrl
 from inventory_app.gui.styles import get_current_theme
 from inventory_app.utils.logger import logger
+from inventory_app.database.models import ItemSDS
 from inventory_app.gui.utils.worker import Worker
 from inventory_app.gui.utils.parallel_loader import (
     ParallelDataLoader,
@@ -41,6 +44,7 @@ from .inventory_stats import InventoryStats
 from .item_editor import ItemEditor
 from .item_history_dialog import ItemHistoryDialog
 from .import_dialog import ImportItemsDialog
+from .sds_dialog import SDSDialog
 
 
 @dataclass
@@ -119,10 +123,15 @@ class InventoryPage(QWidget):
         self.refresh_button = QPushButton("🔄 Refresh")
         self.refresh_button.clicked.connect(self.refresh_data)
 
+        self.sds_settings_button = QPushButton("🧪 SDS Settings")
+        self.sds_settings_button.clicked.connect(self._open_selected_item_sds_settings)
+        self.sds_settings_button.setVisible(False)
+
         # Import button (opens dialog explaining required headers and allows importing from excel)
         self.import_button = QPushButton("⬇️ Import Items")
         self.import_button.clicked.connect(self.open_import_dialog)
 
+        header_layout.addWidget(self.sds_settings_button)
         header_layout.addWidget(self.import_button)
         header_layout.addWidget(self.add_button)
         header_layout.addWidget(self.edit_button)
@@ -164,6 +173,7 @@ class InventoryPage(QWidget):
         """Setup signal connections between components."""
         # Table selection changes
         self.table.itemSelectionChanged.connect(self._on_table_selection_changed)
+        self.table.sds_requested.connect(self._handle_sds_row_action)
 
         # Filter signals
         self.filters.search_changed.connect(self._on_search_changed)
@@ -267,6 +277,7 @@ class InventoryPage(QWidget):
                     calibration_date=self._parse_date(row.get("calibration_date")),
                     acquisition_date=self._parse_date(row.get("acquisition_date")),
                     last_modified=self._parse_datetime(row.get("last_modified")),
+                    has_sds=bool(row.get("has_sds", 0)),
                     is_consumable=bool(row.get("is_consumable", 1)),
                     total_stock=row.get("total_stock", 0),
                     available_stock=row.get("available_stock", 0),
@@ -378,6 +389,8 @@ class InventoryPage(QWidget):
         self.import_button.setEnabled(not is_loading)
         self.edit_button.setEnabled(False)
         self.delete_button.setEnabled(False)
+        self.sds_settings_button.setEnabled(False)
+        self.sds_settings_button.setVisible(False)
 
     def add_item(self):
         """Add a new item."""
@@ -494,6 +507,13 @@ class InventoryPage(QWidget):
         self.edit_button.setEnabled(has_selection)
         self.delete_button.setEnabled(has_selection)
 
+        selected_item = self._get_selected_item_row()
+        is_chemical = self._is_chemical_category(
+            selected_item.category_name if selected_item else ""
+        )
+        self.sds_settings_button.setVisible(has_selection and is_chemical)
+        self.sds_settings_button.setEnabled(has_selection and is_chemical)
+
         if has_selection:
             item_id = self.table.get_selected_item_id()
             self.item_selected.emit(item_id)
@@ -583,6 +603,7 @@ class InventoryPage(QWidget):
                 "last_modified": item.last_modified.isoformat()
                 if item.last_modified
                 else None,
+                "has_sds": 1 if item.has_sds else 0,
                 "is_consumable": item.is_consumable,
                 "total_stock": item.total_stock,
                 "available_stock": item.available_stock,
@@ -618,3 +639,92 @@ class InventoryPage(QWidget):
             return datetime.fromisoformat(datetime_str)
         except (ValueError, TypeError):
             return None
+
+    def _get_selected_item_row(self) -> Optional[ItemRow]:
+        """Return currently selected item row from model."""
+        item_id = self.table.get_selected_item_id()
+        if not item_id:
+            return None
+        return next(
+            (entry for entry in self.model.get_filtered_items() if entry.id == item_id),
+            None,
+        )
+
+    def _is_chemical_category(self, category_name: str) -> bool:
+        """Check if category supports SDS actions."""
+        return category_name in {"Chemicals-Solid", "Chemicals-Liquid"}
+
+    def _open_selected_item_sds_settings(self):
+        """Open SDS settings dialog for currently selected chemical item."""
+        selected_item = self._get_selected_item_row()
+        if not selected_item or not self._is_chemical_category(
+            selected_item.category_name
+        ):
+            return
+
+        self._open_sds_dialog(selected_item.id or 0)
+
+    def _handle_sds_row_action(self, item_id: int):
+        """Row SDS click behavior: open existing file externally or show missing-entry notice."""
+        if not item_id:
+            return
+
+        try:
+            selected_item = next(
+                (
+                    entry
+                    for entry in self.model.get_filtered_items()
+                    if entry.id == item_id
+                ),
+                None,
+            )
+            if not selected_item or not self._is_chemical_category(
+                selected_item.category_name
+            ):
+                return
+
+            sds_record = ItemSDS.get_by_item_id(item_id)
+            if sds_record and sds_record.file_path:
+                url = QUrl.fromLocalFile(sds_record.file_path)
+                if not QDesktopServices.openUrl(url):
+                    QMessageBox.warning(
+                        self,
+                        "SDS Open Failed",
+                        "SDS entry exists, but the file could not be opened externally.",
+                    )
+                return
+
+            QMessageBox.information(
+                self,
+                "SDS Required",
+                "This chemical does not have an SDS entry yet. Use the SDS Settings button in the toolbar to upload one.",
+            )
+        except Exception as e:
+            logger.error(f"Failed handling SDS row action for item {item_id}: {e}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to handle SDS action: {str(e)}"
+            )
+
+    def _open_sds_dialog(self, item_id: int):
+        """Open SDS settings dialog for a specific item."""
+        if not item_id:
+            return
+
+        try:
+            selected_item = next(
+                (
+                    entry
+                    for entry in self.model.get_filtered_items()
+                    if entry.id == item_id
+                ),
+                None,
+            )
+            item_name = selected_item.name if selected_item else ""
+
+            dialog = SDSDialog(item_id=item_id, item_name=item_name, parent=self)
+            if dialog.exec() == SDSDialog.DialogCode.Accepted:
+                self.refresh_data()
+                self.data_changed.emit()
+        except Exception as e:
+            logger.error(f"Failed to open SDS dialog for item {item_id}: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open SDS dialog: {str(e)}")

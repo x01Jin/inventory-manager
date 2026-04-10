@@ -27,6 +27,7 @@ class ItemRow:
     is_consumable: bool
     acquisition_date: Optional[date]
     last_modified: Optional[datetime]
+    has_sds: bool = False
     total_stock: int = 0
     available_stock: int = 0
 

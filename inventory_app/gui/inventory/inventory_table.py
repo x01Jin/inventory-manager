@@ -17,8 +17,10 @@ from PyQt6.QtWidgets import (
     QWidget,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QLabel,
+    QPushButton,
 )
-from PyQt6.QtCore import Qt, QTimer, QModelIndex
+from PyQt6.QtCore import Qt, QTimer, QModelIndex, pyqtSignal
 from PyQt6.QtGui import QShowEvent, QPainter, QBrush
 from PyQt6.QtGui import QColor
 from inventory_app.services.item_status_service import item_status_service
@@ -84,6 +86,10 @@ class AlertIndicator(QWidget):
 
 class InventoryTable(QTableWidget):
     """Table widget for displaying inventory items with optimized progressive styling."""
+
+    sds_requested = pyqtSignal(int)
+
+    CHEMICAL_CATEGORIES = {"Chemicals-Solid", "Chemicals-Liquid"}
 
     COLUMNS = [
         "Stock/Available",
@@ -277,6 +283,18 @@ class InventoryTable(QTableWidget):
             name_item = self.SortableTableItem(name)
             name_item.setData(SORT_ROLE, (name or "").lower())
             self.setItem(row, 1, name_item)
+            if (
+                item.get("category_name") in self.CHEMICAL_CATEGORIES
+                and item_id is not None
+            ):
+                # Prevent double-rendering text under the inline SDS widget.
+                name_item.setText("")
+                has_sds = bool(item.get("has_sds", 0))
+                self.setCellWidget(
+                    row,
+                    1,
+                    self._build_sds_name_widget(name, item_id, has_sds),
+                )
             self.setItem(row, 2, QTableWidgetItem(size or "N/A"))
             self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))
             self.setItem(row, 4, QTableWidgetItem(other_specifications or "N/A"))
@@ -493,6 +511,46 @@ class InventoryTable(QTableWidget):
     def get_row_count(self) -> int:
         """Get the number of rows in the table."""
         return self.rowCount()
+
+    def _build_sds_name_widget(self, name: str, item_id: int, has_sds: bool) -> QWidget:
+        """Create a Name + SDS action widget for chemical items."""
+        wrapper = QWidget(self.viewport())
+        wrapper.setObjectName("sdsInlineWrapper")
+        wrapper.setAutoFillBackground(False)
+        wrapper.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        wrapper.setStyleSheet("QWidget#sdsInlineWrapper { background: transparent; }")
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        name_label = QLabel(name or "N/A")
+        name_label.setObjectName("chemicalNameLabel")
+        name_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        name_label.setStyleSheet("background: transparent; border: none;")
+        sds_button = QPushButton("SDS")
+        sds_button.setObjectName("sdsInlineButton")
+        sds_button.setFlat(True)
+        sds_button.setStyleSheet(
+            "QPushButton#sdsInlineButton {"
+            "padding: 0 6px;"
+            "margin: 0;"
+            "background: transparent;"
+            "border: 1px solid rgba(180, 180, 180, 0.45);"
+            "border-radius: 7px;"
+            "font-size: 9pt;"
+            "}"
+            "QPushButton#sdsInlineButton:hover {"
+            "border: 1px solid rgba(200, 200, 200, 0.75);"
+            "}"
+        )
+        sds_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        sds_button.setFixedHeight(18)
+        sds_button.setMinimumWidth(36)
+        sds_button.clicked.connect(lambda _, iid=item_id: self.sds_requested.emit(iid))
+
+        layout.addWidget(name_label, 1)
+        layout.addWidget(sds_button, 0)
+        return wrapper
 
     def _apply_row_styling(self, row: int, item_status) -> None:
         """Apply background color styling to an entire row based on item status."""

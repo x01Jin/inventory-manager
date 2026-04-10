@@ -4,11 +4,13 @@ The Inventory page is the primary place to view, search, and manage all items, b
 
 ## **Top controls (header)**
 
-- **➕ Add Item:** Opens the Item Editor to add a new item and (for new items) an initial batch quantity. Required: Item name and Editor name/initials.
+- **➕ Add Item:** Opens the Item Editor to add a new item and (for new items) an initial batch quantity. Required: Item name, Category, and Editor name/initials.
 - **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item.
 - **🗑️ Delete Item:** Enabled when you select a row; prompts for confirmation and requires your name/initials and a deletion reason. Deletions are permanent.
 - **🔄 Refresh:** Reloads items, filters, and statistics from the database.
 - **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` (Excel) file. Use this to add many items at once; each imported row creates a new Item and an initial batch unless skipped.
+- **SDS (row action):** Appears beside item names only for chemical rows (`Chemicals-Solid` and `Chemicals-Liquid`). If SDS exists, it opens the exact SDS file externally. If SDS does not exist, the app shows a message that SDS entry is required.
+- **🧪 SDS Settings (toolbar):** Appears when a chemical row is selected. Use this button to upload, update, or remove SDS records.
 
 ## **Importing items (Excel .xlsx) 🔧**
 
@@ -52,6 +54,7 @@ The table shows one row per item/batch grouping. Column list and descriptions:
 
 - **Stock/Available:** Shown as `total/available`. `total` is received batches minus consumed/disposed plus returns; `available` subtracts active reservations/requests so it reflects what can be allocated now.
 - **Name:** Item display name. Click to select a row; double-click to open usage history.
+- **SDS button beside Name (chemicals only):** Quick-open action for external file viewing. Missing entries show an SDS-required message.
 - **Size / Brand / Other Specifications:** Free-form values entered when adding/editing the item.
 - **Supplier:** Supplier name (if provided).
 - **Calibration Date:** For non-consumables, shows last calibration date.
@@ -90,11 +93,14 @@ Key fields and behaviors in the Add/Edit dialog:
 - **PO Number:** Optional purchase order number.
 - **Batch Quantity (Add only):** Number of units/batches to record for a new item. Must be a positive integer. Defaults to 1.
 - **Other Specifications:** Free-form text for details (materials, model numbers, notes).
+- **SDS File (chemical categories only):** Optional file chooser used to attach a local SDS file while adding/editing a chemical item.
+- **SDS Notes (chemical categories only):** Optional notes for hazard/first-aid/handling summaries.
 - **Acquisition Date:** Defaults to today; you may change it. **Changing this date recalculates expiration/calibration dates** based on the category thresholds.
 - **Item Type:** Automatically set by category selection (Consumable or Non-Consumable). You can override this manually if needed. This toggles the meaning of the date fields:
   - If **Consumable**, the bottom-right date is **Expiration Date** (special value `No Expiration` allowed).
   - If **Non-Consumable**, the top-right date becomes **Disposal Date** and the bottom-right becomes **Calibration Date** (each can be left unset / special value to indicate None).
 - **Editor Name/Initials (required):** You must supply this for audit purposes when saving or deleting.
+- **SDS audit requirement:** SDS save/update/remove actions require editor attribution and are written to update history.
 
 **Auto-calculated dates explained:**
 
@@ -112,7 +118,10 @@ You can always edit these dates manually if the calculated values don't match yo
 
 Validation & messages:
 
-- Saving will show warnings for missing required fields (item name, editor name) and for invalid batch quantities.
+- Saving will show warnings for missing required fields (item name, category, editor name) and for invalid batch quantities.
+- Supplier is optional, but if selected it must come from the Supplier dropdown list.
+- If optional dropdown fields are left blank (Supplier, Size, Brand), the app shows a confirmation dialog listing those fields. You can proceed with save or go back and fill them.
+- Optional dropdowns left blank are displayed as `N/A` in the inventory table.
 - Successful saves show a confirmation message. Errors will show an error dialog with details.
 
 ## **Delete behavior**

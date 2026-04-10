@@ -78,6 +78,24 @@ CREATE INDEX idx_items_calibration ON Items(calibration_date);
 CREATE INDEX idx_items_supplier ON Items(supplier_id);
 CREATE INDEX idx_items_last_modified ON Items(last_modified);
 
+-- 5b. Item_SDS: SDS metadata and storage references for chemical items
+CREATE TABLE Item_SDS (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL UNIQUE,
+    stored_filename TEXT,
+    original_filename TEXT,
+    file_path TEXT,
+    mime_type TEXT,
+    sds_notes TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by TEXT,
+    FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_item_sds_item ON Item_SDS(item_id);
+CREATE INDEX idx_item_sds_updated ON Item_SDS(updated_at DESC);
+
 -- 6. Item_Batches: Multiple receipt dates and quantities
 CREATE TABLE Item_Batches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
