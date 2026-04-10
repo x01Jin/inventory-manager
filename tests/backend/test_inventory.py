@@ -13,6 +13,8 @@ from inventory_app.services.category_config import (
 from inventory_app.services.category_sync_service import sync_development_categories
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.services.validation_service import ValidationService
+from inventory_app.gui.inventory.inventory_model import InventoryModel, ItemRow
+from inventory_app.gui.inventory.inventory_controller import InventoryController
 
 
 @pytest.fixture
@@ -319,6 +321,135 @@ def test_task10_stock_calculation_service_behavior(temp_db):
 
     assert stock_calculation_service.calculate_total_stock(non_consumable_id) == 8
     assert stock_calculation_service.calculate_batch_stock(non_consumable_batch_id) == 8
+
+
+def test_task12_inventory_filters_compose_correctly(temp_db):
+    """Task 12: search/category/supplier/item-type/date filters must compose as intersection."""
+    model = InventoryModel()
+    model.set_items(
+        [
+            ItemRow(
+                id=1,
+                name="Beaker 500ml",
+                category_name="Apparatus",
+                item_type="Non-consumable",
+                size="500ml",
+                brand="Pyrex",
+                supplier_name="ATR Trading System",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 10),
+                last_modified=None,
+                total_stock=10,
+                available_stock=8,
+            ),
+            ItemRow(
+                id=2,
+                name="Beaker 250ml",
+                category_name="Apparatus",
+                item_type="Non-consumable",
+                size="250ml",
+                brand="Pyrex",
+                supplier_name="Malcor Chemicals",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 10),
+                last_modified=None,
+                total_stock=12,
+                available_stock=12,
+            ),
+            ItemRow(
+                id=3,
+                name="Hydrochloric Acid",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="1000ml",
+                brand="Dalkem",
+                supplier_name="ATR Trading System",
+                other_specifications=None,
+                po_number=None,
+                expiration_date=date(2026, 1, 1),
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 10),
+                last_modified=None,
+                total_stock=1000,
+                available_stock=900,
+            ),
+        ]
+    )
+
+    model.apply_current_filters(
+        search_term="beaker",
+        category="Apparatus",
+        supplier="ATR Trading System",
+        item_type="Non-consumable",
+        date_from=date(2024, 1, 1),
+        date_to=date(2024, 12, 31),
+    )
+
+    filtered = model.get_filtered_items()
+    assert len(filtered) == 1
+    assert filtered[0].id == 1
+
+
+def test_task12_item_usage_history_includes_defective_and_date_range(temp_db):
+    """Task 12: item history includes usage + defective rows and respects date range."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Task12 Item", 1),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name, grade_level, section) VALUES (?, ?, ?)",
+        ("Student A", "Grade 8", "A"),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+
+    req_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2025-01-05 09:00:00",
+            "2025-01-05 11:00:00",
+            "returned",
+            "Acid-Base Lab",
+            "2025-01-05",
+        ),
+        return_last_id=True,
+    )[1]
+    assert req_id is not None
+
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_id, item_id, 4),
+    )
+    db.execute_update(
+        "INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by, reported_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, req_id, 1, "Cracked after use", "Custodian", "2025-01-06"),
+    )
+
+    controller = InventoryController()
+    all_rows = controller.get_item_usage_history(item_id)
+    assert len(all_rows) == 2
+    assert {row["event_type"] for row in all_rows} == {"Usage", "Defective"}
+
+    usage_only_rows = controller.get_item_usage_history(
+        item_id,
+        start_date=date(2025, 1, 5),
+        end_date=date(2025, 1, 5),
+    )
+    assert len(usage_only_rows) == 1
+    assert usage_only_rows[0]["event_type"] == "Usage"
 
 
 def test_task10_inventory_stats_total_stock_deducts_finalized_usage(temp_db):

@@ -39,6 +39,7 @@ from .inventory_table import InventoryTable
 from .inventory_filters import InventoryFilters
 from .inventory_stats import InventoryStats
 from .item_editor import ItemEditor
+from .item_history_dialog import ItemHistoryDialog
 from .import_dialog import ImportItemsDialog
 
 
@@ -168,6 +169,10 @@ class InventoryPage(QWidget):
         self.filters.search_changed.connect(self._on_search_changed)
         self.filters.category_filter_changed.connect(self._on_category_filter_changed)
         self.filters.supplier_filter_changed.connect(self._on_supplier_filter_changed)
+        self.filters.item_type_filter_changed.connect(self._on_item_type_filter_changed)
+        self.filters.date_range_filter_changed.connect(
+            self._on_date_range_filter_changed
+        )
         self.filters.clear_filters_requested.connect(self._on_clear_filters)
 
         # Table double-click for editing
@@ -271,10 +276,7 @@ class InventoryPage(QWidget):
             # Cache raw data for reuse
             self._cached_raw_data = raw_data
 
-            # Update model
-            from .inventory_model import InventoryModel
-
-            self.model = InventoryModel()
+            # Update model while preserving active filter state.
             self.model.set_items(items)
 
             # Batch-fetch statuses for all items (eliminates N+1 query problem)
@@ -292,6 +294,10 @@ class InventoryPage(QWidget):
             # Update filters
             self.filters.set_categories(categories)
             self.filters.set_suppliers(suppliers)
+            self.filters.set_item_types(self.model.get_unique_item_types())
+
+            # Re-apply active filters after data refresh.
+            self._apply_current_filters()
 
             # Update stats
             stats = self.model.get_statistics()
@@ -494,27 +500,62 @@ class InventoryPage(QWidget):
 
     def _on_search_changed(self, search_term: str):
         """Handle search term changes."""
-        self.model.filter_by_search(search_term)
-        self._update_filtered_table()
+        self._apply_current_filters()
 
     def _on_category_filter_changed(self, category: str):
         """Handle category filter changes."""
-        self.model.filter_by_category(category)
-        self._update_filtered_table()
+        self._apply_current_filters()
 
     def _on_supplier_filter_changed(self, supplier: str):
         """Handle supplier filter changes."""
-        self.model.filter_by_supplier(supplier)
+        self._apply_current_filters()
+
+    def _on_item_type_filter_changed(self, item_type: str):
+        """Handle item type filter changes."""
+        self._apply_current_filters()
+
+    def _on_date_range_filter_changed(self, start_date, end_date):
+        """Handle acquisition date-range filter changes."""
+        self._apply_current_filters()
+
+    def _apply_current_filters(self):
+        """Apply all active filter controls to the inventory model."""
+        date_from, date_to = self.filters.get_date_range()
+        self.model.apply_current_filters(
+            search_term=self.filters.get_search_text(),
+            category=self.filters.get_selected_category(),
+            supplier=self.filters.get_selected_supplier(),
+            item_type=self.filters.get_selected_item_type(),
+            date_from=date_from,
+            date_to=date_to,
+        )
         self._update_filtered_table()
 
     def _on_clear_filters(self):
         """Handle clear filters request."""
         self.model.clear_filters()
-        self.refresh_data()
+        self._update_filtered_table()
 
     def _on_table_double_click(self, item):
-        """Handle table double-click for editing."""
-        self.edit_selected_item()
+        """Handle table double-click for viewing item usage history."""
+        item_id = self.table.get_selected_item_id()
+        if not item_id:
+            return
+
+        selected_items = self.model.get_filtered_items()
+        selected_item = next(
+            (entry for entry in selected_items if entry.id == item_id), None
+        )
+        if not selected_item:
+            return
+
+        dialog = ItemHistoryDialog(
+            item_id=item_id,
+            item_name=selected_item.name,
+            controller=self.controller,
+            parent=self,
+        )
+        dialog.exec()
 
     def _update_filtered_table(self):
         """Update table with current filtered data using batched population."""

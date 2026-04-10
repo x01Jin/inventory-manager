@@ -306,6 +306,89 @@ class InventoryController:
             logger.error(f"Failed to get batch statistics: {e}")
             return {"total_batches": 0, "total_stock": 0, "available_stock": 0}
 
+    def get_item_usage_history(
+        self,
+        item_id: int,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get detailed usage history for an item, including defective return events."""
+        try:
+            usage_query = """
+                SELECT
+                    'Usage' AS event_type,
+                    r.lab_activity_date AS event_date,
+                    i.name AS item_name,
+                    req.name AS requester_name,
+                    req.grade_level AS grade_level,
+                    req.section AS section,
+                    r.lab_activity_name AS lab_activity,
+                    ri.quantity_requested AS quantity,
+                    r.expected_request AS request_date,
+                    r.expected_return AS return_date,
+                    r.lab_activity_description AS notes
+                FROM Requisition_Items ri
+                JOIN Requisitions r ON r.id = ri.requisition_id
+                JOIN Items i ON i.id = ri.item_id
+                JOIN Requesters req ON req.id = r.requester_id
+                WHERE ri.item_id = ?
+            """
+
+            usage_params: List[Any] = [item_id]
+            if start_date:
+                usage_query += " AND DATE(r.lab_activity_date) >= ?"
+                usage_params.append(start_date.isoformat())
+            if end_date:
+                usage_query += " AND DATE(r.lab_activity_date) <= ?"
+                usage_params.append(end_date.isoformat())
+
+            defective_query = """
+                SELECT
+                    'Defective' AS event_type,
+                    DATE(di.reported_date) AS event_date,
+                    i.name AS item_name,
+                    req.name AS requester_name,
+                    req.grade_level AS grade_level,
+                    req.section AS section,
+                    r.lab_activity_name AS lab_activity,
+                    di.quantity AS quantity,
+                    r.expected_request AS request_date,
+                    r.expected_return AS return_date,
+                    di.notes AS notes
+                FROM Defective_Items di
+                JOIN Requisitions r ON r.id = di.requisition_id
+                JOIN Items i ON i.id = di.item_id
+                JOIN Requesters req ON req.id = r.requester_id
+                WHERE di.item_id = ?
+            """
+
+            defective_params: List[Any] = [item_id]
+            if start_date:
+                defective_query += " AND DATE(di.reported_date) >= ?"
+                defective_params.append(start_date.isoformat())
+            if end_date:
+                defective_query += " AND DATE(di.reported_date) <= ?"
+                defective_params.append(end_date.isoformat())
+
+            usage_rows = db.execute_query(usage_query, tuple(usage_params)) or []
+            defective_rows = (
+                db.execute_query(defective_query, tuple(defective_params)) or []
+            )
+
+            rows = usage_rows + defective_rows
+            rows.sort(
+                key=lambda row: (
+                    row.get("event_date") or "",
+                    row.get("event_type") or "",
+                ),
+                reverse=True,
+            )
+            return rows
+
+        except Exception as e:
+            logger.error(f"Failed to get item usage history for {item_id}: {e}")
+            return []
+
     def get_categories(self) -> List[str]:
         """Get list of unique categories."""
         try:

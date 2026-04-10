@@ -6,8 +6,9 @@ The Inventory page is the main workspace for item records, stock visibility, and
 
 - View inventory rows with stock and alert context.
 - Add, edit, delete, and import items.
-- Search and filter by text, category, and supplier.
+- Search and filter by text, category, supplier, item type, and acquisition date range.
 - Surface date-based alert states through row coloring.
+- Open per-item usage history directly from the inventory table.
 
 Underlying tables involved are `Items`, `Item_Batches`, and `Stock_Movements`.
 
@@ -35,6 +36,8 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 - Create: stores item data and initial batch quantity.
 - Edit: updates item data and writes update history.
 - Delete: requires editor attribution and reason; blocked for currently requested items.
+
+Double-clicking an inventory row opens the item usage history dialog. Use the `Edit Item` button for field edits.
 
 Categories are fixed by system configuration and determine default item type/date behavior.
 
@@ -93,3 +96,14 @@ The system prevents stock from going negative.
 - Lab Models
 - Others
 - Uncategorized
+
+## Search, Filters, and Usage History
+
+- Search is case-insensitive and matches item name, category, and supplier text.
+- Search and filter controls use responsive horizontal sizing and expand to fill available panel width.
+- Category, supplier, and item type filters are exact-match dropdown filters.
+- Filters compose as intersection logic. Applying multiple filters narrows to rows that satisfy all active criteria.
+- Acquisition date range filter is optional and filters by `Items.acquisition_date` when enabled.
+- `Clear Filters` resets all filters and returns the full inventory list without forcing a reload.
+- Double-click an item row to open usage history. The history view includes requisition usage events and defective/broken return events.
+- History defaults to all-time. Users can enable a date range and filter by activity/reported date.

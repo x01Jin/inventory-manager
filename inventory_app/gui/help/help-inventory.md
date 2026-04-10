@@ -5,7 +5,7 @@ The Inventory page is the primary place to view, search, and manage all items, b
 ## **Top controls (header)**
 
 - **➕ Add Item:** Opens the Item Editor to add a new item and (for new items) an initial batch quantity. Required: Item name and Editor name/initials.
-- **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item. You can also double-click a row to edit.
+- **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item.
 - **🗑️ Delete Item:** Enabled when you select a row; prompts for confirmation and requires your name/initials and a deletion reason. Deletions are permanent.
 - **🔄 Refresh:** Reloads items, filters, and statistics from the database.
 - **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` (Excel) file. Use this to add many items at once; each imported row creates a new Item and an initial batch unless skipped.
@@ -40,14 +40,18 @@ The Inventory page is the primary place to view, search, and manage all items, b
 - **🔍 Search:** Search by item name, category, or supplier. Typing updates the table instantly.
 - **📂 Category:** Filter the table to a single category or choose **All Categories** to show everything.
 - **🏢 Supplier:** Filter the table to a single supplier or choose **All Suppliers**.
-- **🗑️ Clear Filters:** Resets search and filter controls and reloads the full inventory.
+- **🧪 Item Type:** Filter by `Consumable`, `Non-consumable`, or other configured item type values.
+- **Acquisition Date Range:** Enable **Filter by acquisition date** and set From/To dates to show only items acquired in that range.
+- **🗑️ Clear Filters:** Resets search and filter controls and restores the full inventory list.
+
+All active filters are combined. The table shows only rows that satisfy every selected filter.
 
 ## **Inventory Table (columns & meanings)**
 
 The table shows one row per item/batch grouping. Column list and descriptions:
 
 - **Stock/Available:** Shown as `total/available`. `total` is received batches minus consumed/disposed plus returns; `available` subtracts active reservations/requests so it reflects what can be allocated now.
-- **Name:** Item display name. Click to select a row; double-click to edit.
+- **Name:** Item display name. Click to select a row; double-click to open usage history.
 - **Size / Brand / Other Specifications:** Free-form values entered when adding/editing the item.
 - **Supplier:** Supplier name (if provided).
 - **Calibration Date:** For non-consumables, shows last calibration date.
@@ -128,7 +132,16 @@ The Quick Statistics block shows several counts and small alerts:
 ## **Search & Filter behavior (exact matching rules)**
 
 - The **Search** box matches text inside `name`, `category`, or `supplier` (case-insensitive, substring match).
-- Category and Supplier filters are exact matches based on names returned from the database.
+- Category, Supplier, and Item Type filters are exact matches based on dropdown values.
+- Date-range filtering applies to acquisition date when enabled.
+- Filters are intersection-based and do not overwrite each other.
+
+## **Item Usage History**
+
+- Double-click an inventory row to open its usage history dialog.
+- The dialog shows item usage events from requisitions and defective/broken return events.
+- Each history row includes requester name, grade/section, activity date, lab activity, quantity, request/return dates, and notes.
+- Default view is all-time. Enable date range in the dialog to filter by date.
 
 ## **How available stock is calculated (brief, factual)**
 
@@ -140,10 +153,10 @@ The Quick Statistics block shows several counts and small alerts:
 ## **Common tasks / quick recipes**
 
 - **Add a new item:** Click **➕ Add Item**, fill the required fields (name, editor), set batch quantity and any dates, save.
-- **Edit an item:** Select its row and click **✏️ Edit Item** or double-click the row, change fields, and save.
+- **Edit an item:** Select its row and click **✏️ Edit Item**, change fields, and save.
 - **Delete an item:** Select row → **🗑️ Delete Item** → confirm, enter your name and reason → Delete.
 - **Find items:** Use the **🔍 Search** box and the Category/Supplier filters together to narrow results.
-- **Investigate an alert:** Sort or filter by dates, click the item, open edit dialog to view calibration/expiration/disposal fields and history.
+- **Investigate an alert:** Sort or filter by dates, double-click item to inspect usage history, or use **✏️ Edit Item** to inspect calibration/expiration/disposal fields.
 
 ## **Limitations & notes**
 
