@@ -124,6 +124,7 @@ Tips:
 
 - **Create a requisition:** Click **➕ New Requisition** → select requester → add items and quantities → set activity and schedule → Create.
 - **Edit a requisition:** Select row → **✏️ Edit Requisition** → change fields → Update.
+- Requisition updates write field-level audit details (field name, old value, new value) when changes are saved.
 - **Process returns:** Select row → **↩️ Return Items** → enter returned/lost quantities → Process (final).
 - **Find requisitions:** Use **🔍 Search** with requester name, activity name, or item; use status or date range to narrow.
 

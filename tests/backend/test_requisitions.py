@@ -51,6 +51,15 @@ def test_requisition_save_and_retrieve(temp_db):
     assert retrieved[0].lab_activity_date == date(2025, 5, 20)
     assert isinstance(retrieved[0].expected_request, datetime)
 
+    # Update and verify field-level requisition history.
+    req.lab_activity_name = "Chemistry 102"
+    assert req.save("tester") is True
+    history_rows = db.execute_query(
+        "SELECT field_name, old_value, new_value FROM Requisition_History WHERE requisition_id = ? ORDER BY id DESC",
+        (req.id,),
+    )
+    assert any(row["field_name"] == "lab_activity_name" for row in history_rows)
+
 
 def test_requisition_html_generation(temp_db):
     """Verify HTML generation logic for printing requisitions."""

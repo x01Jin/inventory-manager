@@ -2,7 +2,7 @@
 
 ## Overview
 
-- Reports support Usage and Inventory analytics. Exports are generated as Excel files using `openpyxl`.
+- Reports support Usage, Inventory, Trends, and Audit analytics. Exports are generated as Excel files using `openpyxl`.
 - **Usage counting is based on lab_activity_date** (when materials are actually used in lab activities), NOT the borrow/request date.
 
 ## Usage Reports
@@ -97,9 +97,10 @@ Generates a time-series usage report for any custom date range with automatic gr
     - `get_trends_data(start_date, end_date, granularity=None|'auto', group_by='item', top_n=None, include_consumables=True, category_filter='') -> List[Dict]` — `granularity` defaults to `None` (Auto) and will use the smart granularity computed from the date range when unset.
     - `get_expiration_data(start_date, end_date, category_filter='') -> List[Dict]`
     - `get_calibration_due_data(start_date, end_date, category_filter='') -> List[Dict]`
-    - `get_update_history_data(start_date, end_date, item_filter='') -> List[Dict]` — edit history with editor name and reason
+    - `get_update_history_data(start_date, end_date, item_filter='') -> List[Dict]` — edit history with editor, reason, and field-level old/new values
     - `get_disposal_history_data(start_date, end_date, category_filter='') -> List[Dict]` — disposal records with reason
     - `get_defective_items_data(start_date, end_date, category_filter='') -> List[Dict]` — defective/broken items returned
+    - `get_audit_log_data(start_date, end_date, editor_filter='', action_filter='', entity_filter='') -> List[Dict]` — unified Task 9 audit dataset
   - `header_utils` (inventory_app/gui/reports/header_utils.py): Header normalization and period key parsing:
     - `format_excel_headers(headers, start_date, end_date) -> List[str]`
     - `parse_and_format_period_key(period_key, granularity) -> str`
@@ -161,6 +162,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
+  - Audit Log Report — centralized audit stream across item/requisition updates, disposals, defective recordings, and activity events.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
 
 Background Processing and UI Integration
@@ -223,6 +225,7 @@ Common Reports
 - **Update History Report** - Shows history of edits to inventory items including editor name, timestamp, and reason
 - **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them
 - **Defective Items Report** - Shows defective/broken items returned with condition type, notes, reporter, and date
+- **Audit Log Report** - Shows centralized history across item/requisition edits, disposals, defective recordings, and activity events, including field-level old/new values when available
 - **Usage by Grade Level Report** - Shows item usage grouped by grade level and section, with optional filter for individual requests only
 
 ## Usage by Grade Level Report

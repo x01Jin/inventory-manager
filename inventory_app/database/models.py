@@ -26,6 +26,13 @@ def _to_iso(value: Optional[date | datetime]) -> Optional[str]:
     return value.isoformat()
 
 
+def _audit_text(value: Any) -> Optional[str]:
+    """Normalize values for audit history storage."""
+    if value is None:
+        return None
+    return str(value)
+
+
 def check_case_insensitive_duplicate(
     table: str, name: str, exclude_id: Optional[int] = None
 ) -> Tuple[bool, Optional[str]]:
@@ -525,14 +532,64 @@ class Item:
             # atomically.
             with db.transaction():
                 if self.id:
-                    # Update existing - log to history first
-                    history_query = """
-                    INSERT INTO Update_History (item_id, editor_name, reason)
-                    VALUES (?, ?, ?)
-                    """
-                    db.execute_update(
-                        history_query, (self.id, editor_name, "Item updated")
+                    existing_rows = db.execute_query(
+                        "SELECT * FROM Items WHERE id = ?",
+                        (self.id,),
+                        use_cache=False,
                     )
+                    if not existing_rows:
+                        logger.error(f"Failed to save item: item {self.id} not found")
+                        return False
+
+                    existing = dict(existing_rows[0])
+
+                    new_values = {
+                        "name": self.name,
+                        "category_id": self.category_id,
+                        "item_type": self.item_type,
+                        "size": self.size,
+                        "brand": self.brand,
+                        "other_specifications": self.other_specifications,
+                        "po_number": self.po_number,
+                        "supplier_id": self.supplier_id,
+                        "expiration_date": _to_iso(self.expiration_date),
+                        "calibration_date": _to_iso(self.calibration_date),
+                        "is_consumable": self.is_consumable,
+                        "acquisition_date": _to_iso(self.acquisition_date),
+                    }
+
+                    field_changes = []
+                    for field_name, new_value in new_values.items():
+                        old_value = existing.get(field_name)
+                        if old_value != new_value:
+                            field_changes.append(
+                                (
+                                    self.id,
+                                    editor_name,
+                                    "Item field updated",
+                                    field_name,
+                                    _audit_text(old_value),
+                                    _audit_text(new_value),
+                                )
+                            )
+
+                    if field_changes:
+                        db.execute_many(
+                            """
+                            INSERT INTO Update_History (
+                                item_id, editor_name, reason, field_name, old_value, new_value
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            field_changes,
+                        )
+                    else:
+                        db.execute_update(
+                            """
+                            INSERT INTO Update_History (item_id, editor_name, reason)
+                            VALUES (?, ?, ?)
+                            """,
+                            (self.id, editor_name, "Item update saved"),
+                        )
 
                     # Update item
                     query = """
@@ -1180,14 +1237,67 @@ class Requisition:
         """Save or update the requisition with history tracking."""
         try:
             if self.id:
-                # Log to history
-                history_query = """
-                INSERT INTO Requisition_History (requisition_id, editor_name, reason)
-                VALUES (?, ?, ?)
-                """
-                db.execute_update(
-                    history_query, (self.id, editor_name, "Requisition updated")
+                existing_rows = db.execute_query(
+                    "SELECT * FROM Requisitions WHERE id = ?",
+                    (self.id,),
+                    use_cache=False,
                 )
+                if not existing_rows:
+                    logger.error(
+                        f"Failed to save requisition: requisition {self.id} not found"
+                    )
+                    return False
+
+                existing = dict(existing_rows[0])
+
+                new_values = {
+                    "requester_id": self.requester_id,
+                    "expected_request": self.expected_request.isoformat(),
+                    "expected_return": self.expected_return.isoformat(),
+                    "status": self.status,
+                    "lab_activity_name": self.lab_activity_name,
+                    "lab_activity_description": self.lab_activity_description,
+                    "lab_activity_date": self.lab_activity_date.isoformat(),
+                    "num_students": self.num_students,
+                    "num_groups": self.num_groups,
+                    "is_individual": self.is_individual,
+                    "individual_name": self.individual_name,
+                    "individual_contact": self.individual_contact,
+                    "individual_purpose": self.individual_purpose,
+                }
+
+                field_changes = []
+                for field_name, new_value in new_values.items():
+                    old_value = existing.get(field_name)
+                    if old_value != new_value:
+                        field_changes.append(
+                            (
+                                self.id,
+                                editor_name,
+                                "Requisition field updated",
+                                field_name,
+                                _audit_text(old_value),
+                                _audit_text(new_value),
+                            )
+                        )
+
+                if field_changes:
+                    db.execute_many(
+                        """
+                        INSERT INTO Requisition_History (
+                            requisition_id, editor_name, reason, field_name, old_value, new_value
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        field_changes,
+                    )
+                else:
+                    db.execute_update(
+                        """
+                        INSERT INTO Requisition_History (requisition_id, editor_name, reason)
+                        VALUES (?, ?, ?)
+                        """,
+                        (self.id, editor_name, "Requisition update saved"),
+                    )
 
                 # Update requisition
                 query = """

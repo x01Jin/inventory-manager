@@ -36,7 +36,7 @@ The dashboard displays nine metric cards providing instant insight into system s
 The Activity panel provides an audit trail of recent system events:
 
 - **Latest Activity**: Single most recent activity with full description, user, and timestamp
-- **Activity History**: Table showing recent activities (limited to ~20 entries by system policy)
+- **Activity History**: Table showing recent activities (dashboard display is limited for readability)
 - Latest Activity row height auto-adjusts to wrapped description text so long entries are fully visible.
 
 **Activity Types Logged:**
@@ -49,9 +49,8 @@ The Activity panel provides an audit trail of recent system events:
 
 **Retention Policy:**
 
-- Activities older than 90 days are automatically deleted
-- Maximum of 20 activities retained (oldest removed when limit exceeded)
-- Managed by database triggers on the Activity_Log table
+- Activity logs are retained without automatic deletion.
+- The Dashboard view remains a recent-activity window for readability and performance.
 
 ### Schedule Chart
 
@@ -129,7 +128,7 @@ The dashboard is read-only and non-configurable. Data sources and thresholds are
 
 - Dashboard provides overview only; detailed operations require navigation to specific pages
 - No export functionality; use Reports page for exports
-- Activity history is limited (~20 entries) by design for performance
+- Activity storage is unlimited; the dashboard intentionally renders a compact recent subset
 - Alert display is capped at 50 rows for UI performance
 
 ## Performance Optimizations

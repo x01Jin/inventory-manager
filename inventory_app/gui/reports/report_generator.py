@@ -33,6 +33,7 @@ from inventory_app.gui.reports.data_sources import (
     get_item_usage_details,
     get_item_batch_summary,
     get_defective_items_data,
+    get_audit_log_data,
 )
 
 # Inline header mapping moved to header_utils
@@ -249,6 +250,9 @@ class ReportGenerator:
         output_path: Optional[str] = None,
         low_stock_threshold: Optional[int] = None,
         item_name_filter: str = "",
+        editor_filter: str = "",
+        action_filter: str = "",
+        entity_filter: str = "",
         grade_filter: str = "",
         section_filter: str = "",
         show_individual_only: bool = False,
@@ -266,12 +270,16 @@ class ReportGenerator:
                 - 'Calibration Due Report'
                 - 'Update History Report' (beta test #7)
                 - 'Disposal History Report' (beta test #16)
+                - 'Audit Log Report' (Task 9)
                 - 'Usage by Grade Level' (beta test #19)
             start_date: Start date for the report period
             end_date: End date for the report period
             category_filter: Category filter
             low_stock_threshold: Threshold for Low Stock Alert (units)
             item_name_filter: Filter by item name (for Item Usage Details, Batch Summary)
+            editor_filter: Filter by editor name/initials (for Audit Log Report)
+            action_filter: Filter by action type (for Audit Log Report)
+            entity_filter: Filter by entity type (for Audit Log Report)
             grade_filter: Filter by grade level (for Usage by Grade Level)
             section_filter: Filter by section (for Usage by Grade Level)
             show_individual_only: Whether to show only individual requests (for Usage by Grade Level)
@@ -344,6 +352,15 @@ class ReportGenerator:
                     start_date, end_date, category_filter
                 )
                 title = "Defective Items Report"
+            elif report_type == "Audit Log Report":
+                report_data = self._get_audit_log_data(
+                    start_date,
+                    end_date,
+                    editor_filter=editor_filter,
+                    action_filter=action_filter,
+                    entity_filter=entity_filter,
+                )
+                title = "Audit Log Report"
             else:
                 return f"Unknown inventory report type: {report_type}"
 
@@ -642,6 +659,27 @@ class ReportGenerator:
             logger.error(f"Failed to get defective items data: {e}")
             return []
 
+    def _get_audit_log_data(
+        self,
+        start_date: date,
+        end_date: date,
+        editor_filter: str = "",
+        action_filter: str = "",
+        entity_filter: str = "",
+    ) -> List[Dict]:
+        """Get unified Task 9 audit log data for reports."""
+        try:
+            return get_audit_log_data(
+                start_date,
+                end_date,
+                editor_filter=editor_filter,
+                action_filter=action_filter,
+                entity_filter=entity_filter,
+            )
+        except Exception as e:
+            logger.error(f"Failed to get audit log data: {e}")
+            return []
+
     def generate_usage_by_grade_level_report(
         self,
         start_date: date,
@@ -696,7 +734,11 @@ class ReportGenerator:
 
             output_path_obj = Path(output_path)
             self._create_excel_report(
-                report_data, output_path_obj, "Usage by Grade Level Report", start_date, end_date
+                report_data,
+                output_path_obj,
+                "Usage by Grade Level Report",
+                start_date,
+                end_date,
             )
 
             logger.info(f"Usage by Grade Level report generated: {output_path}")

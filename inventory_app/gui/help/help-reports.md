@@ -10,11 +10,12 @@ The Reports page is where you generate, inspect, and export detailed, Excel-comp
 
 ## **Report Types & Tabs**
 
-There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trends Reports**. Choose the tab that matches your need, configure options, and click **Generate Report**.
+There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Reports**, and **Audit Log**. Choose the tab that matches your need, configure options, and click **Generate Report**.
 
 - **Usage Reports:** Time-bucketed usage of items across the selected date range. Use the **Report Type** dropdown to choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/yearly granularity). Monthly Usage supports category filtering and is the default selection. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
 - **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, **Calibration Due Report**, **Update History Report**, **Disposal History Report**, **Usage by Grade Level**, and **Defective Items Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows). Others show current or historical state.
 - **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Yearly), and an optional **Top N** filter (Top 10/20/50/All).
+- **Audit Log:** Centralized report stream for auditing. It combines item/requisition updates, disposals, defective recordings, and activity events. Filters include date range, editor name/initials, action type, and entity type.
 
 ## **Filters & Options**
 
@@ -36,10 +37,11 @@ There are three main tabs: **Usage Reports**, **Inventory Reports**, and **Trend
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).
 - **Calibration Due Report:** Items in calibration-enabled categories (default: Equipment) with calibration due within the selected window.
-- **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, and reason for editing.
+- **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, reason, and field-level old/new values when available.
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
 - **Usage by Grade Level:** Usage breakdown by requester grade level and section, showing lab activity name and date. Useful for tracking material usage across different educational groups.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.
+- **Audit Log Report:** Unified audit history including item/requisition changes, disposals, defective recordings, and activity log events.
 - **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, yearly) depending on granularity.
 
 ## **File output & naming**

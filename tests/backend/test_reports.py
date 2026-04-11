@@ -9,6 +9,7 @@ from inventory_app.gui.reports.query_builder import ReportQueryBuilder
 from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
     get_stock_levels_data,
+    get_audit_log_data,
 )
 
 
@@ -153,6 +154,36 @@ def test_update_history_report_integrity(temp_db):
     )
     assert len(history) >= 1
     assert history[0]["editor_name"] == "RefactorTester"
+    assert any(row.get("field_name") == "name" for row in history)
+    matching = [row for row in history if row.get("field_name") == "name"]
+    assert matching[0]["old_value"] == "HistoryItem"
+    assert matching[0]["new_value"] == "UpdatedName"
+
+
+def test_audit_log_data_source(temp_db):
+    """Unified audit log dataset should include history and activity records."""
+    created_item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Audit Item", 1),
+        return_last_id=True,
+    )[1]
+    assert created_item_id is not None
+    item_id = created_item_id
+
+    item = Item.get_by_id(item_id)
+    assert item is not None
+    item.name = "Audit Item Updated"
+    assert item.save(editor_name="AuditTester") is True
+
+    rows = get_audit_log_data(
+        start_date=date(2020, 1, 1),
+        end_date=date(2100, 1, 1),
+        editor_filter="AuditTester",
+    )
+
+    assert rows
+    assert any(r.get("Action") == "ITEM_UPDATE" for r in rows)
+    assert any(r.get("Editor") == "AuditTester" for r in rows)
 
 
 def test_task10_stock_levels_data_policy(temp_db):

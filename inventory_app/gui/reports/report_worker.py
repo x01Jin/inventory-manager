@@ -38,6 +38,10 @@ class ReportWorker(QThread):
         )
         # Item name filter (for Item Usage Details and Batch Summary)
         self.item_name_filter = kwargs.get("item_name_filter", "")
+        # Audit report filters
+        self.editor_filter = kwargs.get("editor_filter", "")
+        self.action_filter = kwargs.get("action_filter", "")
+        self.entity_filter = kwargs.get("entity_filter", "")
         # Grade and Section filters (for Usage by Grade Level)
         self.grade_filter = kwargs.get("grade_filter", "")
         self.section_filter = kwargs.get("section_filter", "")
@@ -118,6 +122,9 @@ class ReportWorker(QThread):
             category_filter=self.category_filter,
             low_stock_threshold=self.low_stock_threshold,
             item_name_filter=self.item_name_filter,
+            editor_filter=self.editor_filter,
+            action_filter=self.action_filter,
+            entity_filter=self.entity_filter,
             grade_filter=self.grade_filter,
             section_filter=self.section_filter,
             show_individual_only=self.show_individual_only,

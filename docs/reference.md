@@ -126,7 +126,7 @@ python scripts/maintenance.py --db-path C:\path\to\inventory.db --days-to-keep 9
 - `Update_History` - Item edit audit trail
 - `Requisition_History` - Requisition edit audit trail
 - `Disposal_History` - Disposed items records
-- `Activity_Log` - Recent activity for dashboard
+- `Activity_Log` - Activity events for dashboard and audit reporting (unlimited retention)
 - `Defective_Items` - Defective/broken items from returns
 
 **Views:**
@@ -139,8 +139,7 @@ python scripts/maintenance.py --db-path C:\path\to\inventory.db --days-to-keep 9
 
 - `trg_stock_movement_batch_before_insert/update` - Prevent batch oversubscription
 - `trg_stock_movement_item_before_insert/update` - Prevent item oversubscription
-- `trg_activity_log_cleanup_after_insert` - Remove old activities (>90 days)
-- `trg_activity_log_maintain_limit_after_insert` - Keep max 20 activities
+- Activity log pruning triggers were removed; retention is managed as unlimited history.
 
 ### Database API
 

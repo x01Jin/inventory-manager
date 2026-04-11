@@ -129,6 +129,10 @@ class ReportsPage(QWidget):
         trends_tab = self.create_trends_tab()
         self.tab_widget.addTab(trends_tab, "📉 Trends Reports")
 
+        # Audit Log Reports Tab
+        audit_tab = self.create_audit_tab()
+        self.tab_widget.addTab(audit_tab, "📋 Audit Log")
+
         config_layout.addWidget(
             self.tab_widget, 1
         )  # Stretch factor 1: takes remaining space
@@ -525,6 +529,87 @@ class ReportsPage(QWidget):
         layout.addStretch()
         return tab
 
+    def create_audit_tab(self) -> QWidget:
+        """Create dedicated Task 9 audit log report configuration tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(6)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        date_group = QGroupBox("📅 Date Range")
+        date_layout = QVBoxLayout(date_group)
+        date_layout.setSpacing(4)
+        date_layout.setContentsMargins(8, 8, 8, 8)
+        self.audit_date_selector = DateRangeSelector()
+        date_layout.addWidget(self.audit_date_selector)
+        layout.addWidget(date_group)
+
+        filters_group = QGroupBox("🔍 Audit Filters")
+        filters_layout = QVBoxLayout(filters_group)
+        filters_layout.setSpacing(4)
+        filters_layout.setContentsMargins(8, 8, 8, 8)
+
+        editor_layout = QHBoxLayout()
+        editor_layout.setSpacing(4)
+        editor_layout.addWidget(QLabel("Editor Name/Initials:"))
+        self.audit_editor_filter = QLineEdit()
+        self.audit_editor_filter.setPlaceholderText("Optional: filter by editor")
+        editor_layout.addWidget(self.audit_editor_filter)
+        filters_layout.addLayout(editor_layout)
+
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(4)
+        action_layout.addWidget(QLabel("Action Type:"))
+        self.audit_action_filter = QComboBox()
+        self.audit_action_filter.addItems(
+            [
+                "All Actions",
+                "ITEM_UPDATE",
+                "REQUISITION_UPDATE",
+                "ITEM_DISPOSAL",
+                "DEFECTIVE_RECORDED",
+                "ITEM_ADDED",
+                "ITEM_EDITED",
+                "ITEM_DELETED",
+                "REQUISITION_CREATED",
+                "REQUISITION_EDITED",
+                "REQUISITION_RETURNED",
+                "REQUISITION_DELETED",
+                "REQUESTER_ADDED",
+                "REQUESTER_EDITED",
+                "REQUESTER_DELETED",
+                "REPORT_GENERATED",
+                "STOCK_RECEIVED",
+                "STOCK_ADJUSTED",
+            ]
+        )
+        action_layout.addWidget(self.audit_action_filter)
+        filters_layout.addLayout(action_layout)
+
+        entity_layout = QHBoxLayout()
+        entity_layout.setSpacing(4)
+        entity_layout.addWidget(QLabel("Entity Type:"))
+        self.audit_entity_filter = QComboBox()
+        self.audit_entity_filter.addItems(
+            ["All Entities", "item", "requisition", "requester", "stock"]
+        )
+        entity_layout.addWidget(self.audit_entity_filter)
+        filters_layout.addLayout(entity_layout)
+
+        layout.addWidget(filters_group)
+
+        info_text = QTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setMinimumHeight(80)
+        info_text.setPlainText(
+            "Audit Log Report provides centralized change history across item edits,\n"
+            "requisition updates, disposals, defective recordings, and activity events.\n"
+            "Use filters to isolate editor actions and verify field-level old/new values."
+        )
+        layout.addWidget(info_text)
+        layout.addStretch()
+        return tab
+
     def create_status_panel(self) -> QWidget:
         """Create the status and results panel."""
         status_widget = QWidget()
@@ -647,7 +732,7 @@ class ReportsPage(QWidget):
 
     def on_report_type_changed(self, index):
         """Handle report type tab changes."""
-        report_types = ["usage", "inventory", "trends"]
+        report_types = ["usage", "inventory", "trends", "audit"]
         self.current_report_type = report_types[index]
 
     def refresh_data(self):
@@ -773,6 +858,8 @@ class ReportsPage(QWidget):
                 self.generate_inventory_report()
             elif self.current_report_type == "trends":
                 self.generate_trends_report()
+            elif self.current_report_type == "audit":
+                self.generate_audit_report()
             else:
                 QMessageBox.critical(
                     self, "Error", f"Unknown report type: {self.current_report_type}"
@@ -996,6 +1083,40 @@ class ReportsPage(QWidget):
             group_by=group_by_key,
             top_n=top_n,
             include_consumables=include_consumables,
+        )
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_report_finished)
+        self.worker.error.connect(self.on_report_error)
+        self.worker.start()
+
+    def generate_audit_report(self):
+        """Generate centralized Task 9 audit log report."""
+        start_date, end_date = self.audit_date_selector.to_py_dates()
+
+        if start_date > end_date:
+            QMessageBox.warning(
+                self, "Invalid Date Range", "Start date cannot be after end date."
+            )
+            self.reset_ui()
+            return
+
+        editor_filter = self.audit_editor_filter.text().strip()
+        action_filter = self.audit_action_filter.currentText()
+        entity_filter = self.audit_entity_filter.currentText()
+
+        if action_filter == "All Actions":
+            action_filter = ""
+        if entity_filter == "All Entities":
+            entity_filter = ""
+
+        self.worker = ReportWorker(
+            "inventory",
+            start_date,
+            end_date,
+            inventory_report_type="Audit Log Report",
+            editor_filter=editor_filter,
+            action_filter=action_filter,
+            entity_filter=entity_filter,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)

@@ -370,7 +370,12 @@ class EditRequisitionDialog(BaseRequisitionDialog):
 
             try:
                 with global_db.transaction(immediate=True):
-                    if not req.save("System"):
+                    # Require editor attribution for audit trail before persisting changes.
+                    editor_name = self.get_editor_name()
+                    if not editor_name:
+                        raise Exception("Editor name is required")
+
+                    if not req.save(editor_name):
                         raise Exception("Failed to save requisition")
 
                     # Clear existing items and re-create
@@ -398,11 +403,6 @@ class EditRequisitionDialog(BaseRequisitionDialog):
                         self.requisition_id, self.selected_items
                     ):
                         raise Exception("Failed to create stock movements")
-
-                    # Get editor name from user
-                    editor_name = self.get_editor_name()
-                    if not editor_name:
-                        raise Exception("Editor name is required")
 
                     # Log activity (include in transaction)
                     success = requisition_activity_manager.log_requisition_updated(

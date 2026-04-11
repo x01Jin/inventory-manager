@@ -321,7 +321,7 @@ class ReturnProcessor:
         item_id: int,
         quantity: int,
         notes: str,
-        reported_by: str,
+        editor_name: str,
     ) -> None:
         """
         Record defective/broken items in the Defective_Items table.
@@ -333,12 +333,14 @@ class ReturnProcessor:
             item_id: ID of the item
             quantity: Number of defective items
             notes: Description of the defect
-            reported_by: Name of person reporting
+            editor_name: Name of person reporting/editing
         """
         try:
             query = """
-            INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO Defective_Items (
+                item_id, requisition_id, quantity, notes, reported_by, editor_name
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """
             db.execute_update(
                 query,
@@ -347,7 +349,8 @@ class ReturnProcessor:
                     requisition_id,
                     quantity,
                     notes or "",
-                    reported_by,
+                    editor_name,
+                    editor_name,
                 ),
             )
             logger.info(
@@ -571,7 +574,7 @@ class ReturnProcessor:
                 i.name AS item_name,
                 di.quantity,
                 di.notes,
-                di.reported_by,
+                COALESCE(di.editor_name, di.reported_by) AS reported_by,
                 di.reported_date,
                 c.name AS category
             FROM Defective_Items di

@@ -20,7 +20,7 @@ def temp_db(tmp_path):
 
 
 def test_activity_logger_retention(temp_db):
-    """Verify that old activities are cleaned up according to retention policy."""
+    """Verify behavior: unlimited retention with no automatic pruning."""
     # Insert one old record (100 days old) and one recent record (10 days old)
     old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
     recent_ts = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
@@ -36,13 +36,13 @@ def test_activity_logger_retention(temp_db):
         insert_q, ("ITEM_ADDED", "Recent activity", None, None, "tester", recent_ts)
     )
 
-    # Trigger cleanup
-    ActivityLogger.cleanup_old_activities(days_to_keep=90)
+    # Default cleanup call should perform no deletion.
+    ActivityLogger.cleanup_old_activities()
 
     remaining = db.execute_query("SELECT COUNT(*) as count FROM Activity_Log")[0][
         "count"
     ]
-    assert remaining == 1
+    assert remaining == 2
 
     # Verify limit cleanup
     for i in range(50):
@@ -50,12 +50,12 @@ def test_activity_logger_retention(temp_db):
             insert_q, ("ITEM_ADDED", f"Activity {i}", None, None, "tester", recent_ts)
         )
 
-    # Trigger limit cleanup (usually capped at 20 in triggers, but let's test the utility)
-    ActivityLogger.maintain_activity_limit(max_activities=20)
+    # Default limit maintenance should perform no deletion.
+    ActivityLogger.maintain_activity_limit()
     remaining = db.execute_query("SELECT COUNT(*) as count FROM Activity_Log")[0][
         "count"
     ]
-    assert remaining <= 20
+    assert remaining == 52
 
 
 def test_metrics_query_integrity(temp_db):
@@ -136,12 +136,12 @@ def test_alert_data_retrieval(temp_db):
 
 
 def test_activity_log_triggers(temp_db):
-    """Verify database triggers automatically handle activity log maintenance."""
+    """Verify no schema triggers automatically prune Task 9 activity logs."""
     insert_q = """
     INSERT INTO Activity_Log (activity_type, description, entity_id, entity_type, user_name, timestamp)
     VALUES (?, ?, ?, ?, ?, ?)
     """
-    # Exceed limit to trigger automatic pruning
+    # Exceed old threshold; records must all remain.
     for i in range(25):
         db.execute_update(
             insert_q,
@@ -156,8 +156,7 @@ def test_activity_log_triggers(temp_db):
         )
 
     total = db.execute_query("SELECT COUNT(*) as count FROM Activity_Log")[0]["count"]
-    # Trigger from schema.sql should keep it at 20
-    assert total <= 20
+    assert total == 25
 
 
 def test_dashboard_expiring_metric_uses_status_windows(temp_db):

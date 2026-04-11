@@ -21,11 +21,11 @@ The current Dashboard is composed of four primary panels (your deployment may sh
 
 ### Display & retention limits (what you will actually see)
 
-- **Activity:** The app maintains only a short activity history (designed to keep a small, recent log). The Dashboard shows the latest activity plus recent history; the backend keeps roughly the most recent ~20 entries.
+- **Activity:** The Dashboard shows a compact recent window for readability, while activity records are retained.
 - **Schedule Chart:** Upstream query fetches up to 7 upcoming requisitions but the widget displays up to 5 rows for compactness.
 - **Alerts:** Dashboard will show up to 50 alert rows; if more exist the table shows a tooltip noting additional alerts.
 
-- **Recent Activity:** Two small tables: a single-row "Latest Activity" and an "Activity History" list. The activity feed shows `Description`, `User`, and `Time`. The app keeps a short activity history (by default the system maintains a limited recent history — ~20 records); the Dashboard shows the latest entries from that log.
+- **Recent Activity:** Two small tables: a single-row "Latest Activity" and an "Activity History" list. The activity feed shows `Description`, `User`, and `Time`. The Dashboard shows the latest entries from a full activity history.
 
 - **Schedule Chart:** A compact table of upcoming requisitions. It lists status, requester, expected request, and expected return. Only requisitions with `expected_request >= now` and status in (`requested`, `active`, `overdue`) are returned; the widget displays a small number of upcoming rows (display limited for compactness).
 

@@ -505,7 +505,10 @@ def get_update_history_data(
                 c.name AS "Category",
                 uh.editor_name AS "Editor",
                 uh.edit_timestamp AS "Edit Date/Time",
-                uh.reason AS "Reason for Edit"
+                uh.reason AS "Reason for Edit",
+                uh.field_name AS "Field",
+                uh.old_value AS "Old Value",
+                uh.new_value AS "New Value"
             FROM Update_History uh
             JOIN Items i ON i.id = uh.item_id
             JOIN Categories c ON c.id = i.category_id
@@ -811,7 +814,7 @@ def get_defective_items_data(
                 i.brand AS "Brand",
                 di.quantity AS "Defective Quantity",
                 di.notes AS "Notes",
-                di.reported_by AS "Reported By",
+                COALESCE(di.editor_name, di.reported_by) AS "Reported By",
                 di.reported_date AS "Report Date",
                 r.lab_activity_name AS "Lab Activity",
                 req.name AS "Requester"
@@ -835,4 +838,117 @@ def get_defective_items_data(
 
     except Exception as e:
         logger.error(f"Failed to get defective items data: {e}")
+        return []
+
+
+def get_audit_log_data(
+    start_date: date,
+    end_date: date,
+    editor_filter: str = "",
+    action_filter: str = "",
+    entity_filter: str = "",
+) -> List[Dict]:
+    """Return a unified audit log dataset for Task 9 reporting."""
+    try:
+        query = """
+            SELECT * FROM (
+                SELECT
+                    'ITEM_UPDATE' AS "Action",
+                    'item' AS "Entity Type",
+                    CAST(uh.item_id AS TEXT) AS "Entity ID",
+                    i.name AS "Entity Name",
+                    uh.editor_name AS "Editor",
+                    uh.edit_timestamp AS "Timestamp",
+                    uh.field_name AS "Field",
+                    uh.old_value AS "Old Value",
+                    uh.new_value AS "New Value",
+                    uh.reason AS "Reason"
+                FROM Update_History uh
+                LEFT JOIN Items i ON i.id = uh.item_id
+
+                UNION ALL
+
+                SELECT
+                    'REQUISITION_UPDATE' AS "Action",
+                    'requisition' AS "Entity Type",
+                    CAST(rh.requisition_id AS TEXT) AS "Entity ID",
+                    r.lab_activity_name AS "Entity Name",
+                    rh.editor_name AS "Editor",
+                    rh.edit_timestamp AS "Timestamp",
+                    rh.field_name AS "Field",
+                    rh.old_value AS "Old Value",
+                    rh.new_value AS "New Value",
+                    rh.reason AS "Reason"
+                FROM Requisition_History rh
+                LEFT JOIN Requisitions r ON r.id = rh.requisition_id
+
+                UNION ALL
+
+                SELECT
+                    'ITEM_DISPOSAL' AS "Action",
+                    'item' AS "Entity Type",
+                    CAST(dh.item_id AS TEXT) AS "Entity ID",
+                    COALESCE(i.name, '[Item Deleted]') AS "Entity Name",
+                    dh.editor_name AS "Editor",
+                    dh.disposal_timestamp AS "Timestamp",
+                    NULL AS "Field",
+                    NULL AS "Old Value",
+                    NULL AS "New Value",
+                    dh.reason AS "Reason"
+                FROM Disposal_History dh
+                LEFT JOIN Items i ON i.id = dh.item_id
+
+                UNION ALL
+
+                SELECT
+                    'DEFECTIVE_RECORDED' AS "Action",
+                    'requisition' AS "Entity Type",
+                    CAST(di.requisition_id AS TEXT) AS "Entity ID",
+                    i.name AS "Entity Name",
+                    COALESCE(di.editor_name, di.reported_by) AS "Editor",
+                    di.reported_date AS "Timestamp",
+                    'quantity_defective' AS "Field",
+                    NULL AS "Old Value",
+                    CAST(di.quantity AS TEXT) AS "New Value",
+                    COALESCE(di.notes, '') AS "Reason"
+                FROM Defective_Items di
+                LEFT JOIN Items i ON i.id = di.item_id
+
+                UNION ALL
+
+                SELECT
+                    al.activity_type AS "Action",
+                    COALESCE(al.entity_type, '') AS "Entity Type",
+                    CASE WHEN al.entity_id IS NULL THEN '' ELSE CAST(al.entity_id AS TEXT) END AS "Entity ID",
+                    '' AS "Entity Name",
+                    COALESCE(al.user_name, 'System') AS "Editor",
+                    al.timestamp AS "Timestamp",
+                    NULL AS "Field",
+                    NULL AS "Old Value",
+                    NULL AS "New Value",
+                    al.description AS "Reason"
+                FROM Activity_Log al
+            ) unified
+            WHERE DATE(unified."Timestamp") BETWEEN ? AND ?
+        """
+
+        params: List[str] = [start_date.isoformat(), end_date.isoformat()]
+
+        if editor_filter:
+            query += ' AND unified."Editor" LIKE ?'
+            params.append(f"%{editor_filter}%")
+
+        if action_filter:
+            query += ' AND unified."Action" = ?'
+            params.append(action_filter)
+
+        if entity_filter:
+            query += ' AND unified."Entity Type" = ?'
+            params.append(entity_filter)
+
+        query += ' ORDER BY unified."Timestamp" DESC'
+
+        return db.execute_query(query, tuple(params)) or []
+    except Exception as e:
+        logger.error(f"Failed to get audit log data: {e}")
         return []

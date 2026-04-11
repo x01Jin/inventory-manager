@@ -69,9 +69,6 @@ class ActivityLogger:
 
             logger.debug(f"Logged activity: {activity_type} - {description}")
 
-            # Maintain only the 20 most recent activities
-            ActivityLogger.maintain_activity_limit()
-
             return True
 
         except Exception as e:
@@ -128,7 +125,7 @@ class ActivityLogger:
             return []
 
     @staticmethod
-    def cleanup_old_activities(days_to_keep: int = 90) -> int:
+    def cleanup_old_activities(days_to_keep: Optional[int] = None) -> int:
         """
         Clean up old activity logs to prevent database bloat.
 
@@ -139,6 +136,9 @@ class ActivityLogger:
             Number of records deleted
         """
         try:
+            if days_to_keep is None:
+                return 0
+
             # Compute cutoff timestamp in Python to allow parameterized queries
             cutoff = (
                 datetime.now(timezone.utc) - timedelta(days=days_to_keep)
@@ -161,7 +161,7 @@ class ActivityLogger:
             return 0
 
     @staticmethod
-    def maintain_activity_limit(max_activities: int = 20) -> int:
+    def maintain_activity_limit(max_activities: int = -1) -> int:
         """
         Maintain only the most recent activities by deleting older ones beyond the limit.
 
@@ -176,7 +176,7 @@ class ActivityLogger:
             count_query = "SELECT COUNT(*) as count FROM Activity_Log"
             total_count = db.execute_query(count_query)[0]["count"]
 
-            if total_count <= max_activities:
+            if max_activities <= 0 or total_count <= max_activities:
                 return 0  # No cleanup needed
 
             # Delete older records beyond the limit in a parameterized, efficient way.

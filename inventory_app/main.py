@@ -19,6 +19,7 @@ import atexit
 # environments.
 try:
     from .database.connection import db
+    from .database.audit_schema_compat import ensure_audit_schema
     from .utils.logger import logger
     from .services.alert_engine import alert_engine
     from .services.summary_tables import summary_tables_service
@@ -29,6 +30,7 @@ except Exception:
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
     from inventory_app.database.connection import db
+    from inventory_app.database.audit_schema_compat import ensure_audit_schema
     from inventory_app.utils.logger import logger
     from inventory_app.services.alert_engine import alert_engine
     from inventory_app.services.summary_tables import summary_tables_service
@@ -139,6 +141,10 @@ def main() -> int:
         # Run migrations with splash if needed
         if not run_migrations_with_splash(app):
             logger.error("Application startup failed: migration error")
+            return 1
+
+        if not ensure_audit_schema():
+            logger.error("Application startup failed: Task 9 audit compatibility error")
             return 1
 
         try:

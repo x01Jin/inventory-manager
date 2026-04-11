@@ -240,6 +240,9 @@ CREATE TABLE Update_History (
     editor_name TEXT NOT NULL,
     edit_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reason TEXT NOT NULL,
+    field_name TEXT,
+    old_value TEXT,
+    new_value TEXT,
         FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
 );
 
@@ -253,6 +256,9 @@ CREATE TABLE Requisition_History (
     editor_name TEXT NOT NULL,
     edit_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reason TEXT NOT NULL,
+    field_name TEXT,
+    old_value TEXT,
+    new_value TEXT,
         FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
 );
 
@@ -296,6 +302,7 @@ CREATE TABLE Defective_Items (
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     notes TEXT,
     reported_by TEXT NOT NULL,
+    editor_name TEXT,
     reported_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE,
         FOREIGN KEY (requisition_id) REFERENCES Requisitions(id) ON DELETE CASCADE
@@ -306,21 +313,8 @@ CREATE INDEX idx_defective_item ON Defective_Items(item_id);
 CREATE INDEX idx_defective_requisition ON Defective_Items(requisition_id);
 CREATE INDEX idx_defective_date ON Defective_Items(reported_date);
 
--- Triggers to automatically enforce activity log retention policies
--- 1) Remove activities older than 90 days on insert
-CREATE TRIGGER IF NOT EXISTS trg_activity_log_cleanup_after_insert
-AFTER INSERT ON Activity_Log
-BEGIN
-    DELETE FROM Activity_Log WHERE timestamp < datetime('now', '-90 days');
-END;
-
--- 2) Maintain a maximum of 20 recent activities by deleting older ones on insert
-CREATE TRIGGER IF NOT EXISTS trg_activity_log_maintain_limit_after_insert
-AFTER INSERT ON Activity_Log
-WHEN (SELECT COUNT(*) FROM Activity_Log) > 20
-BEGIN
-    DELETE FROM Activity_Log WHERE id NOT IN (SELECT id FROM Activity_Log ORDER BY timestamp DESC LIMIT 20);
-END;
+-- Activity_Log retention is intentionally unlimited.
+-- Dashboard/activity views should use display/query limits only.
 
 -- VIEWS FOR REPORTS AND ALERTS
 
@@ -353,7 +347,7 @@ SELECT
     c.name AS category,
     di.quantity AS defective_quantity,
     di.notes,
-    di.reported_by,
+    COALESCE(di.editor_name, di.reported_by) AS reported_by,
     di.reported_date,
     r.lab_activity_name AS activity,
     req.name AS requester_name
