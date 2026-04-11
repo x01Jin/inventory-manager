@@ -17,6 +17,8 @@ Underlying tables involved are `Items`, `Item_Batches`, and `Stock_Movements`.
 
 - Data loads asynchronously to keep the UI responsive.
 - Loading indicators are shown while refresh is in progress.
+- Post-query processing (item row shaping and status prefetch) runs in a background worker before UI binding.
+- Progress bar now remains active through inventory table population/styling so long refreshes have visible feedback.
 - Action buttons are temporarily guarded during critical load phases.
 - Virtual scrolling exists as an internal feature flag and is not currently exposed as a user setting.
 
@@ -36,6 +38,7 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 
 - Create: stores item data and initial batch quantity.
 - Edit: updates item data and writes update history.
+- Edit (existing items): includes Batch Acquisition Records management for adding, editing, and removing batch entries (`B1`, `B2`, `B3`, and so on).
 - Delete: requires editor attribution and reason; blocked for currently requested items.
 - Add/Edit validation: Name, Category, and Editor Name/Initials are required before save.
 - Add flow duplicate warning: when another item exists with the same normalized name in the same category, the app shows a warning and lets users continue or cancel.
@@ -60,6 +63,16 @@ Categories are fixed by system configuration and determine default item type/dat
 - Unselected optional dropdowns (Supplier, Size, Brand) are stored empty and displayed as `N/A` in the inventory table.
 - Item type is persisted as text in `Items.item_type` (`Consumable`, `Non-consumable`, or `TA, non-consumable`) and synchronized with `is_consumable` for stock behavior.
 - Chemical items support SDS metadata in `Item_SDS` (stored filename, original filename, path, MIME type, optional notes, and editor attribution).
+
+## Batch Acquisition Records
+
+- Multi-batch acquisition is stored in `Item_Batches` with sequential labels (`B1`, `B2`, `B3`, and so on).
+- Each batch stores its own `date_received` and `quantity_received` values.
+- Existing item edits support batch record maintenance:
+  - Add a new batch with date and quantity.
+  - Edit date/quantity for an existing batch.
+  - Remove a batch only when it has no stock movement history.
+- Item-level `Items.acquisition_date` remains as a compatibility fallback and is synchronized to the earliest batch date.
 
 ## SDS Management
 
@@ -89,6 +102,12 @@ Status computation rules:
 - Non-consumable disposal warning: within 90 days.
 - Equipment calibration warning: within 90 days of next due date.
 - Overdue when the relevant due date is already in the past.
+
+Non-consumable disposal evaluation is batch-aware:
+
+- If an item has batch records, disposal status is calculated per batch (using batch disposal date when present, or category lifecycle from batch received date).
+- The most urgent batch drives the row-level status and color.
+- Alert surfaces include the batch label (`B1`, `B2`, and so on) for disposal-related entries.
 
 Row coloring:
 
@@ -133,6 +152,7 @@ The system prevents stock from going negative.
 - Status filter supports `Expiring`, `Expired/Overdue`, `Calibration Warning`, and `Calibration Due`.
 - Filters compose as intersection logic. Applying multiple filters narrows to rows that satisfy all active criteria.
 - Acquisition date range filter is optional and filters by `Items.acquisition_date` when enabled.
+- Acquisition date range filter is optional and batch-aware when batch records exist: an item matches when any batch acquisition date falls inside the selected range.
 - `Clear Filters` resets all filters and returns the full inventory list without forcing a reload.
 - Double-click an item row to open usage history. The history view includes requisition usage events and defective/broken return events.
 - History defaults to all-time. Users can enable a date range and filter by activity/reported date.

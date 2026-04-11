@@ -269,6 +269,8 @@ class InventoryTable(QTableWidget):
             expiration_date = self.format_date(item.get("expiration_date"))
             calibration_date = self.format_date(item.get("calibration_date"))
             acquisition_date = self.format_date(item.get("acquisition_date"))
+            batch_count = int(item.get("batch_count") or 0)
+            batch_summary = item.get("batch_summary") or ""
             is_consumable = item.get("is_consumable", False)
             item_type_text = item.get("item_type")
             last_modified = self.format_datetime(item.get("last_modified"))
@@ -367,7 +369,11 @@ class InventoryTable(QTableWidget):
             self.setItem(row, 7, exp_date_item)
 
             self.setItem(row, 8, QTableWidgetItem(item_type))
-            acq_item = self.SortableTableItem(acquisition_date)
+            acquisition_display = acquisition_date
+            if batch_count > 1 and acquisition_date and acquisition_date != "N/A":
+                acquisition_display = f"{acquisition_date} (+{batch_count - 1} more)"
+
+            acq_item = self.SortableTableItem(acquisition_display)
             try:
                 from datetime import datetime
 
@@ -379,6 +385,8 @@ class InventoryTable(QTableWidget):
                     acq_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 acq_item.setData(SORT_ROLE, float("inf"))
+            if batch_summary:
+                acq_item.setToolTip(batch_summary)
             self.setItem(row, 9, acq_item)
 
             lm_item = self.SortableTableItem(last_modified)

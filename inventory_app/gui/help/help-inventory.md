@@ -45,6 +45,7 @@ The Inventory page is the primary place to view, search, and manage all items, b
 - **🧪 Item Type:** Filter by `Consumable`, `Non-consumable`, or other configured item type values.
 - **🚨 Status:** Filter by lifecycle alerts: `Expiring`, `Expired / Overdue`, `Calibration Warning`, or `Calibration Due`.
 - **Acquisition Date Range:** Enable **Filter by acquisition date** and set From/To dates to show only items acquired in that range.
+- **Acquisition Date Range behavior:** For items with multiple batches, the filter matches when any batch acquisition date falls inside the range.
 - **🗑️ Clear Filters:** Resets search and filter controls and restores the full inventory list.
 
 All active filters are combined. The table shows only rows that satisfy every selected filter.
@@ -62,6 +63,7 @@ The table shows one row per item/batch grouping. Column list and descriptions:
 - **Expiry/Disposal Date:** For consumables this is expiration; for non-consumables this is disposal date.
 - **Item Type:** `Consumable` or `Non-Consumable` — affects which date is shown (expiration vs calibration/disposal).
 - **Acquisition Date:** When the item or batch was acquired.
+  - For multi-batch items, the column shows the first batch date with a `(+N more)` suffix, and hover text shows the full batch list.
 - **Last Modified:** Timestamp of the most recent change (format `MM/DD/YYYY HH:MM`).
 
 Notes about sorting and selection:
@@ -93,6 +95,10 @@ Key fields and behaviors in the Add/Edit dialog:
 - **Supplier / Size / Brand:** Select suppliers from existing entries. Size supports suggestions plus direct typed entry and is normalized to metric unit casing (for example, `500 mL`). Brands remain dropdown-based.
 - **PO Number:** Optional purchase order number.
 - **Batch Quantity (Add only):** Number of units/batches to record for a new item. Must be a positive integer. Defaults to 1.
+- **Batch Acquisition Records (Edit existing items):**
+  - Add Batch: Creates the next sequential label (`B1`, `B2`, ...).
+  - Edit Selected: Updates date received and quantity for the selected batch.
+  - Remove Selected: Removes a batch only if it has no stock movement history and at least one batch remains.
 - **Other Specifications:** Free-form text for details (materials, model numbers, notes).
 - **SDS File (chemical categories only):** Optional file chooser used to attach a local SDS file while adding/editing a chemical item.
 - **SDS Notes (chemical categories only):** Optional notes for hazard/first-aid/handling summaries.
@@ -145,6 +151,7 @@ The Quick Statistics block shows several counts and small alerts:
 - The **Search** box matches text inside `name`, `category`, or `supplier` (case-insensitive, substring match).
 - Category, Supplier, Item Type, and Status filters are exact matches based on dropdown values.
 - Date-range filtering applies to acquisition date when enabled.
+- Date-range filtering uses batch acquisition dates when batch history exists.
 - Filters are intersection-based and do not overwrite each other.
 
 ## **Item Usage History**

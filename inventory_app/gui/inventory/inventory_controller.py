@@ -117,7 +117,10 @@ class InventoryController:
                 i.expiration_date,
                 i.calibration_date,
                 i.is_consumable,
-                i.acquisition_date,
+                COALESCE(ib.first_batch_date, i.acquisition_date) as acquisition_date,
+                ib.last_batch_date,
+                ib.batch_count,
+                ib.batch_summary,
                 i.last_modified,
                 CASE WHEN sds.item_id IS NOT NULL THEN 1 ELSE 0 END as has_sds,
                 COALESCE(defective.defective_count, 0) as defective_count,
@@ -149,7 +152,15 @@ class InventoryController:
                 + """
             ) defective ON defective.item_id = i.id
             LEFT JOIN (
-                SELECT item_id, MIN(date_received) as date_received
+                SELECT
+                    item_id,
+                    MIN(date_received) as first_batch_date,
+                    MAX(date_received) as last_batch_date,
+                    COUNT(*) as batch_count,
+                    GROUP_CONCAT(
+                        'B' || batch_number || ': ' || date_received || ' (' || quantity_received || ' units)',
+                        '; '
+                    ) as batch_summary
                 FROM Item_Batches
                 GROUP BY item_id
             ) ib ON i.id = ib.item_id
@@ -199,7 +210,11 @@ class InventoryController:
                 i.id, i.name, c.name as category_name, i.item_type, i.size, i.brand,
                 s.name as supplier_name, i.other_specifications, i.po_number,
                 i.expiration_date, i.calibration_date, i.is_consumable,
-                i.acquisition_date, i.last_modified,
+                COALESCE(ib.first_batch_date, i.acquisition_date) as acquisition_date,
+                ib.last_batch_date,
+                ib.batch_count,
+                ib.batch_summary,
+                i.last_modified,
                 CASE WHEN sds.item_id IS NOT NULL THEN 1 ELSE 0 END as has_sds,
                 COALESCE(defective.defective_count, 0) as defective_count,
                 CASE WHEN COALESCE(defective.defective_count, 0) > 0 THEN 1 ELSE 0 END as has_defective,
@@ -223,6 +238,19 @@ class InventoryController:
             LEFT JOIN Categories c ON i.category_id = c.id
             LEFT JOIN Suppliers s ON i.supplier_id = s.id
             LEFT JOIN Item_SDS sds ON sds.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    item_id,
+                    MIN(date_received) as first_batch_date,
+                    MAX(date_received) as last_batch_date,
+                    COUNT(*) as batch_count,
+                    GROUP_CONCAT(
+                        'B' || batch_number || ': ' || date_received || ' (' || quantity_received || ' units)',
+                        '; '
+                    ) as batch_summary
+                FROM Item_Batches
+                GROUP BY item_id
+            ) ib ON i.id = ib.item_id
             LEFT JOIN (
                 """
                 + self._get_defective_current_subquery()

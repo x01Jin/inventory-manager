@@ -256,6 +256,11 @@ def test_disposal_alert_labels_for_non_consumables(temp_db):
 
     alerts = alert_engine.get_all_alerts()
     alerts_by_name = {a.item_name: a.alert_type for a in alerts}
+    warning_alert = next(
+        (a for a in alerts if a.item_name == "Apparatus Warning"), None
+    )
 
     assert alerts_by_name.get("Apparatus Warning") == "disposal warning"
     assert alerts_by_name.get("Apparatus Overdue") == "disposal overdue"
+    assert warning_alert is not None
+    assert warning_alert.batch_label == "B1"

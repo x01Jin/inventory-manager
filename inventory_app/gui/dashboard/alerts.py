@@ -59,12 +59,17 @@ class AlertsManager:
 
             rows.append(
                 {
-                    "item": alert.item_name,
+                    "item": (
+                        f"{alert.item_name} ({alert.batch_label})"
+                        if alert.batch_label
+                        else alert.item_name
+                    ),
                     "type": alert.alert_type,
                     "status": type_to_status.get(alert.alert_type, alert.severity),
                     "days_until": alert.days_until,
                     "due_date": self._format_due_date(alert.reference_date),
                     "category": alert.category_name or "Uncategorized",
+                    "batch": alert.batch_label or "-",
                 }
             )
 
@@ -80,6 +85,7 @@ class AlertsManager:
                         "days_until": None,
                         "due_date": "N/A",
                         "category": entry.get("Category") or "N/A",
+                        "batch": "-",
                     }
                 )
 
@@ -100,7 +106,7 @@ class AlertsManager:
 
         dedup = {}
         for row in rows:
-            key = row["item"]
+            key = (row["item"], row.get("type"), row.get("batch"))
             existing = dedup.get(key)
             if not existing:
                 dedup[key] = row
@@ -214,9 +220,17 @@ class AlertsManager:
     def create_full_alerts_table(self):
         """Create and configure full alerts table for dedicated alerts tab."""
         alerts_table = QTableWidget()
-        alerts_table.setColumnCount(6)
+        alerts_table.setColumnCount(7)
         alerts_table.setHorizontalHeaderLabels(
-            ["Alert Type", "Item", "Category", "Due Date", "Days Left", "Status"]
+            [
+                "Alert Type",
+                "Item",
+                "Batch",
+                "Category",
+                "Due Date",
+                "Days Left",
+                "Status",
+            ]
         )
         alerts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         alerts_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -232,6 +246,7 @@ class AlertsManager:
             header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
 
         return alerts_table
 
@@ -244,15 +259,16 @@ class AlertsManager:
             for row, data in enumerate(alerts_data):
                 alerts_table.setItem(row, 0, QTableWidgetItem(data["type"]))
                 alerts_table.setItem(row, 1, QTableWidgetItem(data["item"]))
+                alerts_table.setItem(row, 2, QTableWidgetItem(data.get("batch", "-")))
                 alerts_table.setItem(
-                    row, 2, QTableWidgetItem(data.get("category", "N/A"))
+                    row, 3, QTableWidgetItem(data.get("category", "N/A"))
                 )
                 alerts_table.setItem(
-                    row, 3, QTableWidgetItem(data.get("due_date", "N/A"))
+                    row, 4, QTableWidgetItem(data.get("due_date", "N/A"))
                 )
                 alerts_table.setItem(
                     row,
-                    4,
+                    5,
                     QTableWidgetItem(
                         "N/A"
                         if data.get("days_until") is None
@@ -265,7 +281,7 @@ class AlertsManager:
                     status_item.setBackground(QColor(DarkTheme.ERROR_COLOR))
                 elif data["status"] == "Warning":
                     status_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
-                alerts_table.setItem(row, 5, status_item)
+                alerts_table.setItem(row, 6, status_item)
 
             alerts_table.setSortingEnabled(True)
 

@@ -7,7 +7,7 @@ Policy source of truth:
 - Status calculations consume those rules instead of duplicating category heuristics.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import date, timedelta
 from dataclasses import dataclass
 
@@ -34,6 +34,8 @@ class ItemStatus:
     reference_date: Optional[date] = None
     has_defective: bool = False
     defective_count: int = 0
+    batch_id: Optional[int] = None
+    batch_label: Optional[str] = None
 
 
 class ItemStatusService:
@@ -118,9 +120,14 @@ class ItemStatusService:
                 rows = db.execute_query(query, tuple(chunk))
                 all_rows.extend(rows)
 
+            batch_rows_by_item = self._load_batches_for_items(unique_ids)
+
             # Calculate status for each item
             for item_data in all_rows:
-                status = self._calculate_status(item_data)
+                status = self._calculate_status(
+                    item_data,
+                    batch_rows=batch_rows_by_item.get(item_data["id"]),
+                )
                 if status:
                     result[status.item_id] = status
 
@@ -182,7 +189,11 @@ class ItemStatusService:
                 return None
 
             item_data = rows[0]
-            return self._calculate_status(item_data)
+            batch_rows_by_item = self._load_batches_for_items([item_id])
+            return self._calculate_status(
+                item_data,
+                batch_rows=batch_rows_by_item.get(item_id),
+            )
 
         except Exception as e:
             logger.error(f"Failed to get status for item {item_id}: {e}")
@@ -238,9 +249,14 @@ class ItemStatusService:
             full_params = stock_params
             rows = db.execute_query(query, full_params)
             statuses = []
+            item_ids = [row["id"] for row in rows]
+            batch_rows_by_item = self._load_batches_for_items(item_ids)
 
             for item_data in rows:
-                status = self._calculate_status(item_data)
+                status = self._calculate_status(
+                    item_data,
+                    batch_rows=batch_rows_by_item.get(item_data["id"]),
+                )
                 if status:
                     statuses.append(status)
 
@@ -303,7 +319,11 @@ class ItemStatusService:
 
         return counts
 
-    def _calculate_status(self, item_data: Dict) -> Optional[ItemStatus]:
+    def _calculate_status(
+        self,
+        item_data: Dict,
+        batch_rows: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[ItemStatus]:
         """
         Calculate status for an item based on its data.
 
@@ -327,7 +347,11 @@ class ItemStatusService:
             else:
                 # Handle non-consumable items
                 return self._calculate_non_consumable_status(
-                    item_id, item_data, today, defective_count
+                    item_id,
+                    item_data,
+                    today,
+                    defective_count,
+                    batch_rows=batch_rows,
                 )
 
         except Exception as e:
@@ -409,7 +433,12 @@ class ItemStatusService:
             )
 
     def _calculate_non_consumable_status(
-        self, item_id: int, item_data: Dict, today: date, defective_count: int
+        self,
+        item_id: int,
+        item_data: Dict,
+        today: date,
+        defective_count: int,
+        batch_rows: Optional[List[Dict[str, Any]]] = None,
     ) -> ItemStatus:
         """
         Calculate status for non-consumable items.
@@ -436,9 +465,7 @@ class ItemStatusService:
             # non-calibrated lifecycle policy.
             category_config = get_category_config("Others")
 
-        statuses = []
-        reference_dates = []
-        days_list = []
+        candidates = []
 
         # Calibration status is only applicable for categories that require it.
         if category_config and category_config.has_calibration and calibration_date:
@@ -449,80 +476,213 @@ class ItemStatusService:
                 days_until_cal = (next_cal_date - today).days
 
                 if days_until_cal < 0:
-                    statuses.append("CAL_DUE")
-                    reference_dates.append(next_cal_date)
-                    days_list.append(days_until_cal)
+                    candidates.append(
+                        {
+                            "status": "CAL_DUE",
+                            "reference_date": next_cal_date,
+                            "days_until": days_until_cal,
+                        }
+                    )
                 elif days_until_cal <= CALIBRATION_WARNING_DAYS:  # 3 months warning
-                    statuses.append("CAL_WARNING")
-                    reference_dates.append(next_cal_date)
-                    days_list.append(days_until_cal)
+                    candidates.append(
+                        {
+                            "status": "CAL_WARNING",
+                            "reference_date": next_cal_date,
+                            "days_until": days_until_cal,
+                        }
+                    )
 
             except (ValueError, TypeError):
                 logger.warning(
                     f"Invalid calibration date format for item {item_id}: {calibration_date}"
                 )
 
-        # Check disposal status (stored in expiration_date)
-        disposal_date = None
-        if expiration_date:
-            try:
-                disposal_date = date.fromisoformat(expiration_date)
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Invalid disposal date format for item {item_id}: {expiration_date}"
-                )
-        elif acquisition_date and category_config:
-            # No disposal date set - derive from category lifecycle policy.
-            try:
-                acq_date = date.fromisoformat(acquisition_date)
-                disposal_date = category_config.calculate_expiration_date(acq_date)
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Invalid acquisition date format for item {item_id}: {acquisition_date}"
-                )
+        # Disposal status should be evaluated per batch when batch records exist.
+        if batch_rows is None:
+            batch_rows = db.execute_query(
+                """
+                SELECT id, batch_number, date_received, disposal_date
+                FROM Item_Batches
+                WHERE item_id = ?
+                ORDER BY batch_number ASC
+                """,
+                (item_id,),
+                use_cache=False,
+            )
 
-        if disposal_date:
-            days_until_disp = (disposal_date - today).days
+        disposal_candidates = []
+        if batch_rows:
+            for row in batch_rows:
+                disposal_date = None
+                batch_disposal_raw = row.get("disposal_date")
+                if batch_disposal_raw:
+                    try:
+                        disposal_date = date.fromisoformat(batch_disposal_raw)
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Invalid batch disposal date format for item {item_id}, batch {row.get('batch_number')}: {batch_disposal_raw}"
+                        )
 
-            if days_until_disp < 0:
-                statuses.append("EXPIRED")  # Disposal overdue
-                reference_dates.append(disposal_date)
-                days_list.append(days_until_disp)
-            elif days_until_disp <= NON_CONSUMABLE_WARNING_DAYS:
-                statuses.append("EXPIRING")  # Disposal approaching
-                reference_dates.append(disposal_date)
-                days_list.append(days_until_disp)
+                if not disposal_date and category_config:
+                    if expiration_date:
+                        try:
+                            disposal_date = date.fromisoformat(expiration_date)
+                        except (ValueError, TypeError):
+                            disposal_date = None
+
+                if not disposal_date and category_config:
+                    batch_received_raw = row.get("date_received")
+                    try:
+                        if not isinstance(batch_received_raw, str):
+                            raise TypeError("Batch received date is missing")
+                        batch_received = date.fromisoformat(batch_received_raw)
+                        disposal_date = category_config.calculate_expiration_date(
+                            batch_received
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Invalid batch received date for item {item_id}, batch {row.get('batch_number')}: {batch_received_raw}"
+                        )
+
+                if not disposal_date:
+                    continue
+
+                days_until_disp = (disposal_date - today).days
+                if days_until_disp < 0:
+                    disposal_candidates.append(
+                        {
+                            "status": "EXPIRED",
+                            "reference_date": disposal_date,
+                            "days_until": days_until_disp,
+                            "batch_id": row.get("id"),
+                            "batch_label": f"B{row.get('batch_number')}",
+                        }
+                    )
+                elif days_until_disp <= NON_CONSUMABLE_WARNING_DAYS:
+                    disposal_candidates.append(
+                        {
+                            "status": "EXPIRING",
+                            "reference_date": disposal_date,
+                            "days_until": days_until_disp,
+                            "batch_id": row.get("id"),
+                            "batch_label": f"B{row.get('batch_number')}",
+                        }
+                    )
+        else:
+            # Fallback for legacy records with no batch history.
+            disposal_date = None
+            if expiration_date:
+                try:
+                    disposal_date = date.fromisoformat(expiration_date)
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Invalid disposal date format for item {item_id}: {expiration_date}"
+                    )
+            elif acquisition_date and category_config:
+                try:
+                    acq_date = date.fromisoformat(acquisition_date)
+                    disposal_date = category_config.calculate_expiration_date(acq_date)
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Invalid acquisition date format for item {item_id}: {acquisition_date}"
+                    )
+
+            if disposal_date:
+                days_until_disp = (disposal_date - today).days
+                if days_until_disp < 0:
+                    disposal_candidates.append(
+                        {
+                            "status": "EXPIRED",
+                            "reference_date": disposal_date,
+                            "days_until": days_until_disp,
+                        }
+                    )
+                elif days_until_disp <= NON_CONSUMABLE_WARNING_DAYS:
+                    disposal_candidates.append(
+                        {
+                            "status": "EXPIRING",
+                            "reference_date": disposal_date,
+                            "days_until": days_until_disp,
+                        }
+                    )
+
+        if disposal_candidates:
+            # Surface the most urgent disposal candidate only.
+            candidates.append(min(disposal_candidates, key=lambda c: c["days_until"]))
 
         # Return combined status if multiple alerts, otherwise single status or OK
-        if not statuses:
+        if not candidates:
             return ItemStatus(
                 item_id=item_id,
                 status="OK",
                 has_defective=defective_count > 0,
                 defective_count=defective_count,
             )
-        elif len(statuses) == 1:
+        elif len(candidates) == 1:
+            candidate = candidates[0]
             return ItemStatus(
                 item_id=item_id,
-                status=statuses[0],
-                days_until=days_list[0],
-                reference_date=reference_dates[0],
+                status=candidate["status"],
+                days_until=candidate["days_until"],
+                reference_date=candidate["reference_date"],
                 has_defective=defective_count > 0,
                 defective_count=defective_count,
+                batch_id=candidate.get("batch_id"),
+                batch_label=candidate.get("batch_label"),
             )
         else:
             # Multiple statuses - combine with "and" separator
-            combined_status = " and ".join(statuses)
-            # Use the most urgent (smallest days_until, most negative)
-            most_urgent_idx = days_list.index(min(days_list))
+            combined_status = " and ".join(
+                candidate["status"] for candidate in candidates
+            )
+            most_urgent = min(candidates, key=lambda c: c["days_until"])
             return ItemStatus(
                 item_id=item_id,
                 status=combined_status,
-                days_until=days_list[most_urgent_idx],
-                reference_date=reference_dates[most_urgent_idx],
+                days_until=most_urgent["days_until"],
+                reference_date=most_urgent["reference_date"],
                 has_defective=defective_count > 0,
                 defective_count=defective_count,
+                batch_id=most_urgent.get("batch_id"),
+                batch_label=most_urgent.get("batch_label"),
             )
+
+    def _load_batches_for_items(
+        self,
+        item_ids: List[int],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """Load batch rows for many items in chunked queries to avoid N+1 DB calls."""
+        if not item_ids:
+            return {}
+
+        unique_ids = list(set(item_id for item_id in item_ids if item_id is not None))
+        if not unique_ids:
+            return {}
+
+        rows_by_item: Dict[int, List[Dict[str, Any]]] = {
+            item_id: [] for item_id in unique_ids
+        }
+
+        chunks = [
+            unique_ids[i : i + self.SQLITE_PARAM_LIMIT]
+            for i in range(0, len(unique_ids), self.SQLITE_PARAM_LIMIT)
+        ]
+
+        for chunk in chunks:
+            query = """
+            SELECT id, item_id, batch_number, date_received, disposal_date
+            FROM Item_Batches
+            WHERE item_id IN ({})
+            ORDER BY item_id ASC, batch_number ASC
+            """.format(",".join("?" * len(chunk)))
+
+            rows = db.execute_query(query, tuple(chunk), use_cache=False)
+            for row in rows:
+                row_dict = dict(row)
+                item_id = int(row_dict["item_id"])
+                rows_by_item.setdefault(item_id, []).append(row_dict)
+
+        return rows_by_item
 
 
 # Global instance

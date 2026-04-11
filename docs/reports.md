@@ -163,7 +163,10 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
   - Audit Log Report — centralized audit stream across item/requisition updates, disposals, defective recordings, and activity events.
+  - Acquisition History Report — batch-level acquisition rows including explicit batch labels (`B1`, `B2`, and so on) and per-batch dates.
+  - Batch Summary Report — grouped per-item batch history output with label/date/quantity details.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
+- For multi-batch items, acquisition-date report outputs are sourced from `Item_Batches.date_received` and not limited to a single item-level acquisition date.
 
 Background Processing and UI Integration
 

@@ -26,7 +26,10 @@ class ItemRow:
     calibration_date: Optional[date]
     is_consumable: bool
     acquisition_date: Optional[date]
-    last_modified: Optional[datetime]
+    last_batch_date: Optional[date] = None
+    batch_count: int = 0
+    batch_summary: Optional[str] = None
+    last_modified: Optional[datetime] = None
     has_sds: bool = False
     has_defective: bool = False
     defective_count: int = 0
@@ -275,13 +278,16 @@ class InventoryModel:
 
     def _matches_date_range(self, item: ItemRow) -> bool:
         """Check whether item acquisition date matches active date-range filters."""
-        if item.acquisition_date is None:
+        range_start = item.acquisition_date
+        range_end = item.last_batch_date or item.acquisition_date
+
+        if range_start is None:
             return False
 
-        if self.date_from_filter and item.acquisition_date < self.date_from_filter:
+        if self.date_from_filter and range_end and range_end < self.date_from_filter:
             return False
 
-        if self.date_to_filter and item.acquisition_date > self.date_to_filter:
+        if self.date_to_filter and range_start > self.date_to_filter:
             return False
 
         return True

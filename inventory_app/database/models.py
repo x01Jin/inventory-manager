@@ -685,14 +685,18 @@ class Item:
             logger.info(
                 f"Creating batch with {quantity} total units for item {self.id} ({self.name})"
             )
-            current_time = datetime.now().date().isoformat()
+            batch_date = (
+                self.acquisition_date.isoformat()
+                if isinstance(self.acquisition_date, date)
+                else datetime.now().date().isoformat()
+            )
 
             # Create ONE batch with the total quantity
             query = """
             INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received)
             VALUES (?, ?, ?, ?)
             """
-            result = db.execute_update(query, (self.id, 1, current_time, quantity))
+            result = db.execute_update(query, (self.id, 1, batch_date, quantity))
             if result is None:
                 logger.error(f"Failed to insert batch for item {self.id}")
             else:
@@ -719,6 +723,220 @@ class Item:
         except Exception as e:
             logger.error(f"Failed to create batch for item {self.id}: {e}")
             logger.error(f"Error details: {str(e)}")
+
+    @classmethod
+    def get_batches_for_item(cls, item_id: int) -> List[Dict[str, Any]]:
+        """Return item batches ordered by batch number with movement stats."""
+        try:
+            query = """
+            SELECT
+                ib.id,
+                ib.item_id,
+                ib.batch_number,
+                ib.date_received,
+                ib.quantity_received,
+                ib.disposal_date,
+                COALESCE(SUM(
+                    CASE
+                        WHEN sm.movement_type IN ('CONSUMPTION', 'DISPOSAL', 'RESERVATION', 'REQUEST')
+                        THEN sm.quantity
+                        WHEN sm.movement_type = 'RETURN'
+                        THEN -sm.quantity
+                        ELSE 0
+                    END
+                ), 0) AS committed_quantity,
+                COALESCE(COUNT(sm.id), 0) AS movement_count
+            FROM Item_Batches ib
+            LEFT JOIN Stock_Movements sm ON sm.batch_id = ib.id
+            WHERE ib.item_id = ?
+            GROUP BY ib.id, ib.item_id, ib.batch_number, ib.date_received, ib.quantity_received, ib.disposal_date
+            ORDER BY ib.batch_number ASC
+            """
+            return [
+                dict(row)
+                for row in db.execute_query(query, (item_id,), use_cache=False)
+            ]
+        except Exception as e:
+            logger.error(f"Failed to get batches for item {item_id}: {e}")
+            return []
+
+    @classmethod
+    def sync_batches_for_item(
+        cls,
+        item_id: int,
+        batches: List[Dict[str, Any]],
+        editor_name: str,
+    ) -> Tuple[bool, str]:
+        """Create/update/delete item batches to match provided list."""
+        try:
+            if not item_id:
+                return False, "Invalid item ID."
+
+            if not (editor_name or "").strip():
+                return False, "Editor name is required for batch updates."
+
+            normalized_batches: List[Dict[str, Any]] = []
+            seen_numbers = set()
+            for raw in batches:
+                batch_number = int(raw.get("batch_number") or 0)
+                quantity_received = int(raw.get("quantity_received") or 0)
+                date_received = str(raw.get("date_received") or "").strip()
+                disposal_date_raw = raw.get("disposal_date")
+                disposal_date = (
+                    str(disposal_date_raw).strip() if disposal_date_raw else None
+                )
+
+                if batch_number <= 0:
+                    return False, "Batch numbers must be positive integers."
+                if batch_number in seen_numbers:
+                    return (
+                        False,
+                        f"Duplicate batch label B{batch_number} is not allowed.",
+                    )
+                seen_numbers.add(batch_number)
+
+                if quantity_received <= 0:
+                    return (
+                        False,
+                        f"Batch B{batch_number} quantity must be greater than zero.",
+                    )
+
+                try:
+                    parsed_date = date.fromisoformat(date_received)
+                except Exception:
+                    return False, f"Batch B{batch_number} has an invalid received date."
+
+                if disposal_date:
+                    try:
+                        date.fromisoformat(disposal_date)
+                    except Exception:
+                        return (
+                            False,
+                            f"Batch B{batch_number} has an invalid disposal date.",
+                        )
+
+                normalized_batches.append(
+                    {
+                        "id": raw.get("id"),
+                        "batch_number": batch_number,
+                        "quantity_received": quantity_received,
+                        "date_received": parsed_date.isoformat(),
+                        "disposal_date": disposal_date,
+                    }
+                )
+
+            if not normalized_batches:
+                return False, "At least one batch is required."
+
+            normalized_batches.sort(key=lambda b: b["batch_number"])
+
+            existing_rows = cls.get_batches_for_item(item_id)
+            existing_by_id = {row["id"]: row for row in existing_rows}
+            incoming_ids = {
+                int(batch["id"])
+                for batch in normalized_batches
+                if batch.get("id") not in (None, "", 0)
+            }
+
+            with db.transaction():
+                # Validate quantity updates against committed movements.
+                for batch in normalized_batches:
+                    batch_id = batch.get("id")
+                    if batch_id in (None, "", 0):
+                        continue
+
+                    existing = existing_by_id.get(int(batch_id))
+                    if not existing:
+                        return (
+                            False,
+                            "One or more batches no longer exist. Please refresh and try again.",
+                        )
+
+                    committed_qty = int(existing.get("committed_quantity") or 0)
+                    if batch["quantity_received"] < committed_qty:
+                        return (
+                            False,
+                            f"Batch B{batch['batch_number']} quantity cannot be below committed usage ({committed_qty}).",
+                        )
+
+                # Validate removals: do not remove batches with movement history.
+                removable = [
+                    row for row in existing_rows if row["id"] not in incoming_ids
+                ]
+                for row in removable:
+                    if int(row.get("movement_count") or 0) > 0:
+                        return (
+                            False,
+                            f"Batch B{row['batch_number']} has stock movement history and cannot be removed.",
+                        )
+
+                # Upsert incoming batches.
+                for batch in normalized_batches:
+                    batch_id = batch.get("id")
+                    if batch_id in (None, "", 0):
+                        db.execute_update(
+                            """
+                            INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received, disposal_date)
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (
+                                item_id,
+                                batch["batch_number"],
+                                batch["date_received"],
+                                batch["quantity_received"],
+                                batch["disposal_date"],
+                            ),
+                        )
+                    else:
+                        db.execute_update(
+                            """
+                            UPDATE Item_Batches
+                            SET batch_number = ?, date_received = ?, quantity_received = ?, disposal_date = ?
+                            WHERE id = ? AND item_id = ?
+                            """,
+                            (
+                                batch["batch_number"],
+                                batch["date_received"],
+                                batch["quantity_received"],
+                                batch["disposal_date"],
+                                int(batch_id),
+                                item_id,
+                            ),
+                        )
+
+                # Remove eligible batches that were omitted from incoming set.
+                for row in removable:
+                    db.execute_update(
+                        "DELETE FROM Item_Batches WHERE id = ?", (row["id"],)
+                    )
+
+                # Keep item-level acquisition_date aligned as compatibility fallback.
+                min_batch_date_row = db.execute_query(
+                    "SELECT MIN(date_received) AS first_date FROM Item_Batches WHERE item_id = ?",
+                    (item_id,),
+                    use_cache=False,
+                )
+                first_batch_date = None
+                if min_batch_date_row:
+                    first_batch_date = min_batch_date_row[0].get("first_date")
+
+                db.execute_update(
+                    "UPDATE Items SET acquisition_date = ?, last_modified = ? WHERE id = ?",
+                    (first_batch_date, datetime.now().isoformat(), item_id),
+                )
+
+                db.execute_update(
+                    """
+                    INSERT INTO Update_History (item_id, editor_name, reason)
+                    VALUES (?, ?, ?)
+                    """,
+                    (item_id, editor_name, "Batch records updated"),
+                )
+
+            return True, "Batch records saved."
+        except Exception as e:
+            logger.error(f"Failed to sync batches for item {item_id}: {e}")
+            return False, f"Failed to save batches: {str(e)}"
 
     def delete(self, editor_name: str, reason: str) -> bool:
         """Delete the item and all related records if not currently requested."""

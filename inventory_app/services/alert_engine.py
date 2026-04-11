@@ -23,6 +23,7 @@ class Alert:
     days_until: int
     severity: str  # 'Critical', 'Warning', 'Info'
     category_name: Optional[str] = None
+    batch_label: Optional[str] = None
 
 
 class AlertEngine:
@@ -223,6 +224,7 @@ class AlertEngine:
             days_until=status.days_until or 0,
             severity=severity,
             category_name=category_name,
+            batch_label=status.batch_label,
         )
 
     def _determine_severity(self, status_part: str, days_until: Optional[int]) -> str:

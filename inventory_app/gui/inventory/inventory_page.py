@@ -262,54 +262,93 @@ class InventoryPage(QWidget):
             categories = results.get("categories", [])
             suppliers = results.get("suppliers", [])
 
-            # Convert to ItemRow objects
-            items = []
-            for row in raw_data:
-                item = ItemRow(
-                    id=row.get("id"),
-                    name=row.get("name", ""),
-                    category_name=row.get("category_name", "Uncategorized"),
-                    item_type=row.get("item_type"),
-                    size=row.get("size"),
-                    brand=row.get("brand"),
-                    supplier_name=row.get("supplier_name"),
-                    other_specifications=row.get("other_specifications"),
-                    po_number=row.get("po_number"),
-                    expiration_date=self._parse_date(row.get("expiration_date")),
-                    calibration_date=self._parse_date(row.get("calibration_date")),
-                    acquisition_date=self._parse_date(row.get("acquisition_date")),
-                    last_modified=self._parse_datetime(row.get("last_modified")),
-                    has_sds=bool(row.get("has_sds", 0)),
-                    has_defective=bool(row.get("has_defective", 0)),
-                    defective_count=int(row.get("defective_count", 0) or 0),
-                    is_consumable=bool(row.get("is_consumable", 1)),
-                    total_stock=row.get("total_stock", 0),
-                    available_stock=row.get("available_stock", 0),
-                )
-                items.append(item)
+            # Offload item conversion + status prefetch to worker thread.
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(80)
+            self.progress_bar.setFormat("Processing inventory data... 80%")
 
-            # Cache raw data for reuse
-            self._cached_raw_data = raw_data
+            self._current_worker = Worker(
+                self._build_inventory_payload,
+                raw_data,
+                categories,
+                suppliers,
+            )
+            self._current_worker.signals.result.connect(self._on_payload_ready)
+            self._current_worker.signals.error.connect(self._on_load_error)
+            self._current_worker.signals.finished.connect(self._on_load_finished)
 
-            # Update model while preserving active filter state.
-            self.model.set_items(items)
+            from inventory_app.gui.utils.worker import worker_pool
 
-            # Batch-fetch statuses for all items (eliminates N+1 query problem)
-            item_ids = [item.get("id") for item in raw_data if item.get("id")]
-            statuses = {}
-            if item_ids:
-                statuses = item_status_service.get_statuses_for_items(item_ids)
-                logger.debug(
-                    f"Pre-fetched {len(statuses)} statuses for {len(item_ids)} items"
-                )
-            self.model.set_status_lookup(statuses)
+            worker_pool.start(self._current_worker)
+
+        except Exception as e:
+            logger.error(f"Error processing parallel load results: {e}")
+            self._on_load_error((type(e), e, str(e)))
+
+    def _build_inventory_payload(
+        self,
+        raw_data: List[Dict[str, Any]],
+        categories: List[str],
+        suppliers: List[str],
+    ) -> InventoryLoadResult:
+        """Build item rows and prefetch statuses in worker thread."""
+        items = []
+        for row in raw_data:
+            item = ItemRow(
+                id=row.get("id"),
+                name=row.get("name", ""),
+                category_name=row.get("category_name", "Uncategorized"),
+                item_type=row.get("item_type"),
+                size=row.get("size"),
+                brand=row.get("brand"),
+                supplier_name=row.get("supplier_name"),
+                other_specifications=row.get("other_specifications"),
+                po_number=row.get("po_number"),
+                expiration_date=self._parse_date(row.get("expiration_date")),
+                calibration_date=self._parse_date(row.get("calibration_date")),
+                acquisition_date=self._parse_date(row.get("acquisition_date")),
+                last_batch_date=self._parse_date(row.get("last_batch_date")),
+                batch_count=int(row.get("batch_count", 0) or 0),
+                batch_summary=row.get("batch_summary"),
+                last_modified=self._parse_datetime(row.get("last_modified")),
+                has_sds=bool(row.get("has_sds", 0)),
+                has_defective=bool(row.get("has_defective", 0)),
+                defective_count=int(row.get("defective_count", 0) or 0),
+                is_consumable=bool(row.get("is_consumable", 1)),
+                total_stock=row.get("total_stock", 0),
+                available_stock=row.get("available_stock", 0),
+            )
+            items.append(item)
+
+        item_ids = [item.get("id") for item in raw_data if item.get("id")]
+        statuses: Dict[int, Any] = {}
+        if item_ids:
+            statuses = item_status_service.get_statuses_for_items(item_ids)
+
+        return InventoryLoadResult(
+            raw_data=raw_data,
+            items=items,
+            categories=categories,
+            suppliers=suppliers,
+            statuses=statuses,
+        )
+
+    def _on_payload_ready(self, payload: InventoryLoadResult):
+        """Apply worker-built payload to UI on main thread."""
+        try:
+            self._cached_raw_data = payload.raw_data
+            self.model.set_items(payload.items)
+            self.model.set_status_lookup(payload.statuses)
+
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("Populating inventory table...")
 
             # Update table with batched row insertion and pre-fetched statuses
-            self._populate_table_async(raw_data, statuses)
+            self._populate_table_async(payload.raw_data, payload.statuses)
 
             # Update filters
-            self.filters.set_categories(categories)
-            self.filters.set_suppliers(suppliers)
+            self.filters.set_categories(payload.categories)
+            self.filters.set_suppliers(payload.suppliers)
             self.filters.set_item_types(self.model.get_unique_item_types())
 
             # Re-apply active filters after data refresh.
@@ -319,17 +358,9 @@ class InventoryPage(QWidget):
             stats = self.model.get_statistics()
             self.stats.update_statistics(stats)
 
-            # Hide progress and re-enable buttons
-            self.progress_bar.setVisible(False)
-            self._set_loading_state(False)
-
-            self._is_loading = False
-            self._parallel_loader = None
-
-            logger.info(f"Refreshed inventory data: {len(items)} items loaded")
-
+            logger.info(f"Refreshed inventory data: {len(payload.items)} items loaded")
         except Exception as e:
-            logger.error(f"Error processing parallel load results: {e}")
+            logger.error(f"Error applying inventory payload: {e}")
             self._on_load_error((type(e), e, str(e)))
 
     def _on_parallel_error(self, name: str, error: Exception, traceback_str: str):
@@ -358,6 +389,9 @@ class InventoryPage(QWidget):
 
     def _on_styling_complete(self):
         """Called when table styling is complete."""
+        self._is_loading = False
+        self.progress_bar.setVisible(False)
+        self._set_loading_state(False)
         self.refresh_button.setEnabled(True)
         self.add_button.setEnabled(True)
         self.import_button.setEnabled(True)
@@ -375,11 +409,10 @@ class InventoryPage(QWidget):
         )
 
     def _on_load_finished(self):
-        """Handle load finished (runs on main thread)."""
-        self._is_loading = False
+        """Handle background worker completion without ending UI loading early."""
         self._current_worker = None
         self._parallel_loader = None
-        logger.info("Refreshed inventory data")
+        logger.debug("Background inventory payload worker finished")
 
     def _set_loading_state(self, is_loading: bool):
         """Update UI loading state."""
@@ -612,6 +645,11 @@ class InventoryPage(QWidget):
                 "acquisition_date": item.acquisition_date.isoformat()
                 if item.acquisition_date
                 else None,
+                "last_batch_date": item.last_batch_date.isoformat()
+                if item.last_batch_date
+                else None,
+                "batch_count": item.batch_count,
+                "batch_summary": item.batch_summary,
                 "last_modified": item.last_modified.isoformat()
                 if item.last_modified
                 else None,

@@ -20,6 +20,10 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QFileDialog,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QInputDialog,
 )
 from PyQt6.QtCore import QDate, Qt
 from datetime import date
@@ -46,6 +50,7 @@ class ItemEditor(QDialog):
         self.brands: List[str] = []
         self.sds_source_path: Optional[str] = None
         self.current_sds: Optional[ItemSDS] = None
+        self.batch_rows: List[dict] = []
 
         if item_id:
             self.existing_item = Item.get_by_id(item_id)
@@ -261,6 +266,52 @@ class ItemEditor(QDialog):
         # Build right column
         right_v = QVBoxLayout()
         right_v.addWidget(spec_group, 3)
+        if self.item_id:
+            self.batch_group = QGroupBox("Batch Acquisition Records")
+            batch_group_layout = QVBoxLayout(self.batch_group)
+
+            self.batch_table = QTableWidget()
+            self.batch_table.setColumnCount(3)
+            self.batch_table.setHorizontalHeaderLabels(
+                ["Batch", "Date Received", "Quantity"]
+            )
+            self.batch_table.setSelectionBehavior(
+                QTableWidget.SelectionBehavior.SelectRows
+            )
+            self.batch_table.setSelectionMode(
+                QTableWidget.SelectionMode.SingleSelection
+            )
+            self.batch_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            batch_header = self.batch_table.horizontalHeader()
+            if batch_header:
+                batch_header.setSectionResizeMode(
+                    0, QHeaderView.ResizeMode.ResizeToContents
+                )
+                batch_header.setSectionResizeMode(
+                    1, QHeaderView.ResizeMode.ResizeToContents
+                )
+                batch_header.setSectionResizeMode(
+                    2, QHeaderView.ResizeMode.ResizeToContents
+                )
+                batch_header.setStretchLastSection(True)
+            batch_group_layout.addWidget(self.batch_table)
+
+            batch_actions = QHBoxLayout()
+            self.batch_add_btn = QPushButton("Add Batch")
+            self.batch_add_btn.clicked.connect(self._add_batch)
+            batch_actions.addWidget(self.batch_add_btn)
+
+            self.batch_edit_btn = QPushButton("Edit Selected")
+            self.batch_edit_btn.clicked.connect(self._edit_selected_batch)
+            batch_actions.addWidget(self.batch_edit_btn)
+
+            self.batch_remove_btn = QPushButton("Remove Selected")
+            self.batch_remove_btn.clicked.connect(self._remove_selected_batch)
+            batch_actions.addWidget(self.batch_remove_btn)
+            batch_actions.addStretch()
+            batch_group_layout.addLayout(batch_actions)
+
+            right_v.addWidget(self.batch_group, 2)
         right_v.addWidget(editor_group, 1)
         right_v.addStretch()
         main_h_layout.addLayout(right_v, 2)
@@ -558,6 +609,7 @@ class ItemEditor(QDialog):
             # Update the layout based on the loaded item type
             self.on_item_type_changed()
             self._update_sds_visibility(self.category_combo.currentText())
+            self._load_batch_data()
 
             logger.debug(f"Loaded data for item {self.item_id}")
 
@@ -735,6 +787,16 @@ class ItemEditor(QDialog):
             # Save
             editor_name = self.editor_input.text().strip()
             success = item.save(editor_name, batch_quantity)
+
+            if success and self.item_id:
+                batches_saved, batch_message = Item.sync_batches_for_item(
+                    item.id or 0,
+                    self.batch_rows,
+                    editor_name,
+                )
+                if not batches_saved:
+                    QMessageBox.critical(self, "Batch Error", batch_message)
+                    return
 
             if success:
                 self._save_sds_if_needed(item.id or 0, editor_name)
@@ -937,3 +999,193 @@ class ItemEditor(QDialog):
 
         if self.sds_source_path and old_path and old_path != sds_record.file_path:
             sds_storage_service.remove_file(old_path)
+
+    def _load_batch_data(self) -> None:
+        """Load existing batch rows for edit mode."""
+        if not self.item_id:
+            return
+
+        rows = Item.get_batches_for_item(self.item_id)
+        self.batch_rows = []
+        for row in rows:
+            self.batch_rows.append(
+                {
+                    "id": row.get("id"),
+                    "batch_number": int(row.get("batch_number") or 0),
+                    "date_received": row.get("date_received"),
+                    "quantity_received": int(row.get("quantity_received") or 0),
+                    "disposal_date": row.get("disposal_date"),
+                    "movement_count": int(row.get("movement_count") or 0),
+                }
+            )
+
+        self._refresh_batch_table()
+
+    def _refresh_batch_table(self) -> None:
+        """Render in-memory batch rows to table."""
+        if not self.item_id:
+            return
+
+        self.batch_rows.sort(key=lambda row: row.get("batch_number", 0))
+        self.batch_table.setRowCount(len(self.batch_rows))
+        for idx, row in enumerate(self.batch_rows):
+            self.batch_table.setItem(
+                idx,
+                0,
+                QTableWidgetItem(f"B{int(row.get('batch_number') or 0)}"),
+            )
+            self.batch_table.setItem(
+                idx,
+                1,
+                QTableWidgetItem(str(row.get("date_received") or "N/A")),
+            )
+            quantity_text = str(int(row.get("quantity_received") or 0))
+            if int(row.get("movement_count") or 0) > 0:
+                quantity_text = f"{quantity_text} (locked by movement history)"
+            self.batch_table.setItem(idx, 2, QTableWidgetItem(quantity_text))
+
+    def _next_batch_number(self) -> int:
+        """Get next available batch number."""
+        if not self.batch_rows:
+            return 1
+        return max(int(row.get("batch_number") or 0) for row in self.batch_rows) + 1
+
+    def _add_batch(self) -> None:
+        """Add a new batch entry to in-memory rows."""
+        next_number = self._next_batch_number()
+
+        date_text, date_ok = QInputDialog.getText(
+            self,
+            "Add Batch",
+            f"Date Received for B{next_number} (YYYY-MM-DD):",
+            text=date.today().isoformat(),
+        )
+        if not date_ok:
+            return
+
+        date_text = date_text.strip()
+        try:
+            parsed_date = date.fromisoformat(date_text)
+        except Exception:
+            QMessageBox.warning(
+                self, "Invalid Date", "Please enter a valid ISO date (YYYY-MM-DD)."
+            )
+            return
+
+        qty, qty_ok = QInputDialog.getInt(
+            self,
+            "Add Batch",
+            f"Quantity for B{next_number}:",
+            1,
+            1,
+            1000000,
+            1,
+        )
+        if not qty_ok:
+            return
+
+        self.batch_rows.append(
+            {
+                "id": None,
+                "batch_number": next_number,
+                "date_received": parsed_date.isoformat(),
+                "quantity_received": qty,
+                "disposal_date": None,
+                "movement_count": 0,
+            }
+        )
+        self._refresh_batch_table()
+
+    def _selected_batch_row(self) -> Optional[int]:
+        """Get selected table row index for batch table."""
+        if not self.item_id:
+            return None
+        selection_model = self.batch_table.selectionModel()
+        if selection_model is None:
+            return None
+        selected = selection_model.selectedRows()
+        if not selected:
+            return None
+        return selected[0].row()
+
+    def _edit_selected_batch(self) -> None:
+        """Edit selected batch date/quantity in memory."""
+        row_idx = self._selected_batch_row()
+        if row_idx is None or row_idx < 0 or row_idx >= len(self.batch_rows):
+            QMessageBox.information(self, "No Selection", "Select a batch first.")
+            return
+
+        batch = self.batch_rows[row_idx]
+        batch_label = f"B{int(batch.get('batch_number') or 0)}"
+
+        date_text, date_ok = QInputDialog.getText(
+            self,
+            "Edit Batch",
+            f"Date Received for {batch_label} (YYYY-MM-DD):",
+            text=str(batch.get("date_received") or date.today().isoformat()),
+        )
+        if not date_ok:
+            return
+
+        date_text = date_text.strip()
+        try:
+            parsed_date = date.fromisoformat(date_text)
+        except Exception:
+            QMessageBox.warning(
+                self, "Invalid Date", "Please enter a valid ISO date (YYYY-MM-DD)."
+            )
+            return
+
+        current_qty = int(batch.get("quantity_received") or 1)
+        qty, qty_ok = QInputDialog.getInt(
+            self,
+            "Edit Batch",
+            f"Quantity for {batch_label}:",
+            current_qty,
+            1,
+            1000000,
+            1,
+        )
+        if not qty_ok:
+            return
+
+        batch["date_received"] = parsed_date.isoformat()
+        batch["quantity_received"] = qty
+        self._refresh_batch_table()
+
+    def _remove_selected_batch(self) -> None:
+        """Remove selected batch in memory with movement guardrails."""
+        row_idx = self._selected_batch_row()
+        if row_idx is None or row_idx < 0 or row_idx >= len(self.batch_rows):
+            QMessageBox.information(self, "No Selection", "Select a batch first.")
+            return
+
+        if len(self.batch_rows) <= 1:
+            QMessageBox.warning(
+                self, "Batch Required", "At least one batch must remain."
+            )
+            return
+
+        batch = self.batch_rows[row_idx]
+        movement_count = int(batch.get("movement_count") or 0)
+        if movement_count > 0:
+            QMessageBox.warning(
+                self,
+                "Cannot Remove Batch",
+                "This batch has stock movement history and cannot be removed.",
+            )
+            return
+
+        batch_label = f"B{int(batch.get('batch_number') or 0)}"
+        confirm = QMessageBox.question(
+            self,
+            "Remove Batch",
+            f"Remove {batch_label}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        self.batch_rows.pop(row_idx)
+        self._refresh_batch_table()

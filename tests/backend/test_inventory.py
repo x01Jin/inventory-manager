@@ -826,11 +826,14 @@ def test_non_consumable_disposal_uses_category_config(temp_db):
     assert isinstance(apparatus_id, int)
     assert isinstance(models_id, int)
 
-    for item_id in (apparatus_id, models_id):
-        db.execute_update(
-            "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
-            (item_id, 1, 1, today.isoformat()),
-        )
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (apparatus_id, 1, 1, apparatus_acq),
+    )
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (models_id, 1, 1, models_acq),
+    )
 
     apparatus_status = item_status_service.get_item_status(apparatus_id)
     models_status = item_status_service.get_item_status(models_id)
@@ -839,6 +842,39 @@ def test_non_consumable_disposal_uses_category_config(temp_db):
     assert models_status is not None
     assert "EXPIRING" in apparatus_status.status
     assert models_status.status == "OK"
+
+
+def test_task7_per_batch_disposal_uses_oldest_risk_batch(temp_db):
+    """Per-batch fallback should flag older risky batches even when item acquisition is newer."""
+    today = date.today()
+
+    categories = db.execute_query("SELECT id, name FROM Categories")
+    cat_ids = {row["name"]: row["id"] for row in categories}
+
+    # Keep item-level acquisition recent to prove batch-level fallback drives disposal status.
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable, acquisition_date) VALUES (?, ?, ?, ?)",
+        ("Task7 Batch Apparatus", cat_ids["Apparatus"], 0, today.isoformat()),
+        return_last_id=True,
+    )[1]
+    assert isinstance(item_id, int)
+
+    old_batch_date = (today - timedelta(days=(3 * 365) - 20)).isoformat()
+    recent_batch_date = (today - timedelta(days=30)).isoformat()
+
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 1, old_batch_date),
+    )
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 2, 1, recent_batch_date),
+    )
+
+    status = item_status_service.get_item_status(item_id)
+    assert status is not None
+    assert "EXPIRING" in status.status
+    assert status.batch_label == "B1"
 
 
 def test_non_calibration_category_ignores_calibration_alerts(temp_db):
