@@ -1,5 +1,5 @@
 import pytest
-from PyQt6.QtWidgets import QWidget, QLabel, QTableWidget
+from PyQt6.QtWidgets import QWidget, QLabel, QTableWidget, QTabWidget
 from inventory_app.gui.dashboard.activity import ActivityManager
 from inventory_app.gui.dashboard.dashboard_page import DashboardPage
 
@@ -63,6 +63,25 @@ def test_dashboard_alerts_widget(qtbot):
     assert (
         hasattr(page, "alerts_table") or page.findChild(QWidget, "alerts") is not None
     )
+
+
+def test_dashboard_alerts_has_full_tab(qtbot):
+    """Dashboard alerts section should expose Summary and All Alerts tabs."""
+    page = DashboardPage()
+    qtbot.addWidget(page)
+
+    tab_widgets = page.findChildren(QTabWidget)
+    assert tab_widgets
+
+    alerts_tabs = None
+    for tabs in tab_widgets:
+        titles = {tabs.tabText(i) for i in range(tabs.count())}
+        if {"Summary", "All Alerts"}.issubset(titles):
+            alerts_tabs = tabs
+            break
+
+    assert alerts_tabs is not None
+    assert isinstance(page.all_alerts_table, QTableWidget)
 
 
 def test_activity_log_display(qtbot):

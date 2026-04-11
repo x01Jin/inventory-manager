@@ -176,6 +176,10 @@ class ItemEditor(QDialog):
         self.disposal_label.hide()
         self.disposal_date.hide()
 
+        self.lifecycle_note = QLabel()
+        self.lifecycle_note.setWordWrap(True)
+        dates_grid_layout.addWidget(self.lifecycle_note, 4, 0, 1, 2)
+
         # Make the input column expand vertically and horizontally as needed
         dates_grid_layout.setColumnStretch(1, 1)
         dates_layout.addLayout(dates_grid_layout)
@@ -316,6 +320,9 @@ class ItemEditor(QDialog):
             self.variable_input.setSpecialValueText("No Expiration")
             self.variable_label.show()
             self.variable_input.show()
+            self.lifecycle_note.setText(
+                "Alerts use Expiration Date directly for consumables (warning within 180 days)."
+            )
 
             # Populate with existing expiration date if available
             if self.existing_item and self.existing_item.expiration_date:
@@ -333,10 +340,13 @@ class ItemEditor(QDialog):
             self.disposal_date.show()
 
             # Show calibration in bottom-right
-            self.variable_label.setText("Calibration Date:")
+            self.variable_label.setText("Last Calibration Date:")
             self.variable_input.setSpecialValueText("No Calibration")
             self.variable_label.show()
             self.variable_input.show()
+            self.lifecycle_note.setText(
+                "Calibration Due is auto-calculated as Last Calibration Date + 1 year; warning starts within 90 days. Disposal alerts use Disposal Date."
+            )
 
             # Populate with existing dates if available
             if self.existing_item:

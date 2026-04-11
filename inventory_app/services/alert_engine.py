@@ -22,6 +22,7 @@ class Alert:
     reference_date: date
     days_until: int
     severity: str  # 'Critical', 'Warning', 'Info'
+    category_name: Optional[str] = None
 
 
 class AlertEngine:
@@ -136,6 +137,18 @@ class AlertEngine:
             if not status.reference_date:
                 return None
 
+            # Resolve category metadata for richer alert displays.
+            category_name = None
+            if item.category_id:
+                try:
+                    from inventory_app.database.models import Category
+
+                    category = Category.get_by_id(item.category_id)
+                    if category:
+                        category_name = category.name
+                except Exception:
+                    category_name = None
+
             # Handle combined statuses (split by " and ")
             status_parts = status.status.split(" and ")
 
@@ -143,7 +156,11 @@ class AlertEngine:
             alerts = []
             for status_part in status_parts:
                 alert = self._create_alert_for_status(
-                    status, status_part.strip(), item.name
+                    status,
+                    status_part.strip(),
+                    item.name,
+                    bool(item.is_consumable),
+                    category_name,
                 )
                 if alert:
                     alerts.append(alert)
@@ -161,7 +178,12 @@ class AlertEngine:
             return None
 
     def _create_alert_for_status(
-        self, status: ItemStatus, status_part: str, item_name: str
+        self,
+        status: ItemStatus,
+        status_part: str,
+        item_name: str,
+        is_consumable: bool,
+        category_name: Optional[str],
     ) -> Optional[Alert]:
         """
         Create an alert for a specific status part.
@@ -176,9 +198,9 @@ class AlertEngine:
         """
         # Determine alert type using specific, display-friendly labels
         if status_part == "EXPIRED":
-            alert_type = "expired"
+            alert_type = "expired" if is_consumable else "disposal overdue"
         elif status_part == "EXPIRING":
-            alert_type = "expiring"
+            alert_type = "expiring" if is_consumable else "disposal warning"
         elif status_part == "CAL_WARNING":
             alert_type = "calibration warning"
         elif status_part == "CAL_DUE":
@@ -187,7 +209,7 @@ class AlertEngine:
             return None
 
         # Determine severity
-        severity = self._determine_severity(status)
+        severity = self._determine_severity(status_part, status.days_until)
 
         # Ensure we have a valid reference date
         if not status.reference_date:
@@ -200,9 +222,10 @@ class AlertEngine:
             reference_date=status.reference_date,
             days_until=status.days_until or 0,
             severity=severity,
+            category_name=category_name,
         )
 
-    def _determine_severity(self, status: ItemStatus) -> str:
+    def _determine_severity(self, status_part: str, days_until: Optional[int]) -> str:
         """
         Determine alert severity based on status and days remaining.
 
@@ -212,9 +235,9 @@ class AlertEngine:
         Returns:
             Severity level: 'Critical', 'Warning', or 'Info'
         """
-        days_until = status.days_until or 0
+        days_until = days_until or 0
 
-        if status.status in ["EXPIRED", "CAL_DUE"]:
+        if status_part in ["EXPIRED", "CAL_DUE"]:
             return "Critical"  # Already past due
         elif days_until < 0:
             return "Critical"  # Already past due

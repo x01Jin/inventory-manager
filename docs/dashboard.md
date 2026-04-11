@@ -65,11 +65,17 @@ The Schedule Chart displays upcoming requisitions for operational planning:
 
 Real-time alerts for items requiring immediate attention:
 
+The panel has two tabs:
+
+- `Summary`: compact view with up to 50 rows and low-stock entries included.
+- `All Alerts`: full lifecycle-alert list (no summary cap) with category, due date, and days-left columns.
+
 **Alert Types:**
 
 | Alert Type | Source | Threshold |
 | ----------- | -------- | ----------- |
-| **Expired** | Expiration/disposal/calibration date passed | Already past due → Critical |
+| **Expired** | Consumable expiration date passed | Already past due → Critical |
+| **Disposal Overdue** | Non-consumable disposal date passed | Already past due → Critical |
 | **Expiring Soon** | Consumable expiration | Within 180 days (6 months) |
 | **Disposal Warning** | Non-consumable disposal | Within 90 days (3 months) |
 | **Calibration Warning** | Equipment calibration | Within 90 days (3 months) |
@@ -89,7 +95,8 @@ Real-time alerts for items requiring immediate attention:
 
 **Display Rules:**
 
-- Maximum 50 alert rows displayed (tooltip indicates additional alerts if exceeded)
+- `Summary` tab: maximum 50 alert rows displayed (tooltip indicates additional alerts if exceeded)
+- `All Alerts` tab: complete lifecycle alert list, sortable by column
 - Critical alerts (overdue/expired) appear first
 - Color-coded: Critical (red/pink), Warning (yellow), Info (default)
 - Alerts are deduplicated by item
@@ -129,7 +136,7 @@ The dashboard is read-only and non-configurable. Data sources and thresholds are
 - Dashboard provides overview only; detailed operations require navigation to specific pages
 - No export functionality; use Reports page for exports
 - Activity storage is unlimited; the dashboard intentionally renders a compact recent subset
-- Alert display is capped at 50 rows for UI performance
+- Summary alert display is capped at 50 rows for compact dashboard rendering
 
 ## Performance Optimizations
 

@@ -8,6 +8,11 @@ from inventory_app.gui.inventory.inventory_model import ItemRow
 from inventory_app.gui.inventory.inventory_table import InventoryTable
 
 
+class _FakeStatus:
+    def __init__(self, status: str):
+        self.status = status
+
+
 @pytest.fixture
 def mock_inventory_data(monkeypatch):
     """Fixture to mock inventory data loading for UI tests."""
@@ -178,6 +183,74 @@ def test_task12_inventory_page_filters_compose(qtbot, monkeypatch):
     filtered = page.model.get_filtered_items()
     assert len(filtered) == 1
     assert filtered[0].id == 1
+
+
+def test_inventory_status_filter_targets_alert_state(qtbot, monkeypatch):
+    """Status filter should return only rows matching requested status token."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=1,
+                name="Expired Chemical",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size=None,
+                brand=None,
+                supplier_name=None,
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2024, 1, 10),
+                last_modified=None,
+                total_stock=10,
+                available_stock=8,
+            ),
+            ItemRow(
+                id=2,
+                name="Calibration Soon",
+                category_name="Equipment",
+                item_type="Non-consumable",
+                size=None,
+                brand=None,
+                supplier_name=None,
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 10),
+                last_modified=None,
+                total_stock=12,
+                available_stock=12,
+            ),
+        ]
+    )
+    page.model.set_status_lookup(
+        {
+            1: _FakeStatus("EXPIRED"),
+            2: _FakeStatus("CAL_WARNING"),
+        }
+    )
+
+    page.filters.status_combo.setCurrentIndex(
+        page.filters.status_combo.findData("CAL_WARNING")
+    )
+    page._apply_current_filters()
+
+    filtered = page.model.get_filtered_items()
+    assert len(filtered) == 1
+    assert filtered[0].id == 2
 
 
 def test_task12_double_click_opens_item_history_dialog(qtbot, monkeypatch):

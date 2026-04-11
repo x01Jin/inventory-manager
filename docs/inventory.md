@@ -6,7 +6,7 @@ The Inventory page is the main workspace for item records, stock visibility, and
 
 - View inventory rows with stock and alert context.
 - Add, edit, delete, and import items.
-- Search and filter by text, category, supplier, item type, and acquisition date range.
+- Search and filter by text, category, supplier, item type, lifecycle status, and acquisition date range.
 - Surface date-based alert states through row coloring.
 - Open per-item usage history directly from the inventory table.
 - Open and maintain Safety Data Sheets (SDS) for chemical items.
@@ -77,6 +77,7 @@ When category and acquisition date are set, default dates are auto-filled:
 - Consumables: expiration date from category shelf-life rule.
 - Non-consumables: disposal date from category lifespan rule.
 - Equipment only: calibration date (initially one year from acquisition).
+- For non-consumables, `calibration_date` is treated as the last calibration date; next due is computed as +1 year.
 
 Users can manually override dates before saving.
 
@@ -129,6 +130,7 @@ The system prevents stock from going negative.
 - Search is case-insensitive and matches item name, category, and supplier text.
 - Search and filter controls use responsive horizontal sizing and expand to fill available panel width.
 - Category, supplier, and item type filters are exact-match dropdown filters.
+- Status filter supports `Expiring`, `Expired/Overdue`, `Calibration Warning`, and `Calibration Due`.
 - Filters compose as intersection logic. Applying multiple filters narrows to rows that satisfy all active criteria.
 - Acquisition date range filter is optional and filters by `Items.acquisition_date` when enabled.
 - `Clear Filters` resets all filters and returns the full inventory list without forcing a reload.

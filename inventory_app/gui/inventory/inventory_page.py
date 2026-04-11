@@ -181,6 +181,7 @@ class InventoryPage(QWidget):
         self.filters.category_filter_changed.connect(self._on_category_filter_changed)
         self.filters.supplier_filter_changed.connect(self._on_supplier_filter_changed)
         self.filters.item_type_filter_changed.connect(self._on_item_type_filter_changed)
+        self.filters.status_filter_changed.connect(self._on_status_filter_changed)
         self.filters.date_range_filter_changed.connect(
             self._on_date_range_filter_changed
         )
@@ -301,6 +302,7 @@ class InventoryPage(QWidget):
                 logger.debug(
                     f"Pre-fetched {len(statuses)} statuses for {len(item_ids)} items"
                 )
+            self.model.set_status_lookup(statuses)
 
             # Update table with batched row insertion and pre-fetched statuses
             self._populate_table_async(raw_data, statuses)
@@ -541,6 +543,10 @@ class InventoryPage(QWidget):
         """Handle acquisition date-range filter changes."""
         self._apply_current_filters()
 
+    def _on_status_filter_changed(self, status: str):
+        """Handle status filter changes."""
+        self._apply_current_filters()
+
     def _apply_current_filters(self):
         """Apply all active filter controls to the inventory model."""
         date_from, date_to = self.filters.get_date_range()
@@ -549,6 +555,7 @@ class InventoryPage(QWidget):
             category=self.filters.get_selected_category(),
             supplier=self.filters.get_selected_supplier(),
             item_type=self.filters.get_selected_item_type(),
+            status=self.filters.get_selected_status(),
             date_from=date_from,
             date_to=date_to,
         )
@@ -578,7 +585,8 @@ class InventoryPage(QWidget):
             controller=self.controller,
             parent=self,
         )
-        dialog.defective_data_changed.connect(self._on_defective_data_changed)
+        if hasattr(dialog, "defective_data_changed"):
+            dialog.defective_data_changed.connect(self._on_defective_data_changed)
         dialog.exec()
 
     def _update_filtered_table(self):
@@ -735,7 +743,8 @@ class InventoryPage(QWidget):
                 initial_event_filter="Defective",
                 parent=self,
             )
-            dialog.defective_data_changed.connect(self._on_defective_data_changed)
+            if hasattr(dialog, "defective_data_changed"):
+                dialog.defective_data_changed.connect(self._on_defective_data_changed)
             dialog.exec()
 
         except Exception as e:

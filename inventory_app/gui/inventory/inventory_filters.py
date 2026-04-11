@@ -30,6 +30,7 @@ class InventoryFilters(QWidget):
     category_filter_changed = pyqtSignal(str)  # Category filter changed
     supplier_filter_changed = pyqtSignal(str)  # Supplier filter changed
     item_type_filter_changed = pyqtSignal(str)  # Item type filter changed
+    status_filter_changed = pyqtSignal(str)  # Status filter changed
     date_range_filter_changed = pyqtSignal(object, object)  # Acquisition date range
     clear_filters_requested = pyqtSignal()  # Clear all filters
 
@@ -109,6 +110,21 @@ class InventoryFilters(QWidget):
             QSizePolicy.Policy.Fixed,
         )
 
+        # Status filter
+        status_label = QLabel("🚨 Status:")
+        self.status_combo = QComboBox()
+        self.status_combo.addItem("All Statuses", "")
+        self.status_combo.addItem("Expiring", "EXPIRING")
+        self.status_combo.addItem("Expired / Overdue", "EXPIRED")
+        self.status_combo.addItem("Calibration Warning", "CAL_WARNING")
+        self.status_combo.addItem("Calibration Due", "CAL_DUE")
+        self.status_combo.currentTextChanged.connect(self._on_status_changed)
+        self.status_combo.setMinimumWidth(170)
+        self.status_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
         # Acquisition date-range filter
         self.use_date_range_checkbox = QCheckBox("Filter by acquisition date")
         self.use_date_range_checkbox.toggled.connect(self._on_date_range_toggled)
@@ -145,9 +161,12 @@ class InventoryFilters(QWidget):
         primary_filters_row.addWidget(self.supplier_combo)
         primary_filters_row.addWidget(item_type_label)
         primary_filters_row.addWidget(self.item_type_combo)
+        primary_filters_row.addWidget(status_label)
+        primary_filters_row.addWidget(self.status_combo)
         primary_filters_row.setStretch(1, 1)
         primary_filters_row.setStretch(3, 1)
         primary_filters_row.setStretch(5, 1)
+        primary_filters_row.setStretch(7, 1)
 
         # Secondary filters row
         secondary_filters_row = QHBoxLayout()
@@ -244,6 +263,10 @@ class InventoryFilters(QWidget):
         """Get currently selected item type filter."""
         return self.item_type_combo.currentData() or ""
 
+    def get_selected_status(self) -> str:
+        """Get currently selected status filter."""
+        return self.status_combo.currentData() or ""
+
     def get_date_range(self) -> Tuple[Optional[date], Optional[date]]:
         """Get selected acquisition date range filter."""
         if not self.use_date_range_checkbox.isChecked():
@@ -259,6 +282,7 @@ class InventoryFilters(QWidget):
         self.category_combo.setCurrentIndex(0)
         self.supplier_combo.setCurrentIndex(0)
         self.item_type_combo.setCurrentIndex(0)
+        self.status_combo.setCurrentIndex(0)
         self.use_date_range_checkbox.setChecked(False)
         self.date_from_edit.setDate(QDate.currentDate().addDays(-30))
         self.date_to_edit.setDate(QDate.currentDate())
@@ -282,6 +306,11 @@ class InventoryFilters(QWidget):
         """Handle item type filter change."""
         item_type = self.item_type_combo.currentData() or ""
         self.item_type_filter_changed.emit(item_type)
+
+    def _on_status_changed(self, text: str):
+        """Handle status filter change."""
+        status = self.status_combo.currentData() or ""
+        self.status_filter_changed.emit(status)
 
     def _on_date_range_toggled(self, checked: bool):
         """Enable or disable acquisition date range filtering."""

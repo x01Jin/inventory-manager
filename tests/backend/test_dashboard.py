@@ -8,6 +8,7 @@ from inventory_app.gui.reports.data_sources import (
     get_expiration_data,
     get_calibration_due_data,
 )
+from inventory_app.services.alert_engine import alert_engine
 
 
 @pytest.fixture
@@ -217,3 +218,44 @@ def test_calibration_report_filters_to_calibration_categories(temp_db):
 
     assert "equipment cal item" in item_names
     assert "apparatus cal item" not in item_names
+
+
+def test_disposal_alert_labels_for_non_consumables(temp_db):
+    """Non-consumables should surface disposal-specific alert labels."""
+    today = date.today()
+
+    categories = db.execute_query("SELECT id, name FROM Categories")
+    cat_ids = {row["name"]: row["id"] for row in categories}
+
+    warning_item = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable, expiration_date) VALUES (?, ?, ?, ?)",
+        (
+            "Apparatus Warning",
+            cat_ids["Apparatus"],
+            0,
+            (today + timedelta(days=30)).isoformat(),
+        ),
+        return_last_id=True,
+    )[1]
+    overdue_item = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable, expiration_date) VALUES (?, ?, ?, ?)",
+        (
+            "Apparatus Overdue",
+            cat_ids["Apparatus"],
+            0,
+            (today - timedelta(days=1)).isoformat(),
+        ),
+        return_last_id=True,
+    )[1]
+
+    for item_id in (warning_item, overdue_item):
+        db.execute_update(
+            "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+            (item_id, 1, 1, today.isoformat()),
+        )
+
+    alerts = alert_engine.get_all_alerts()
+    alerts_by_name = {a.item_name: a.alert_type for a in alerts}
+
+    assert alerts_by_name.get("Apparatus Warning") == "disposal warning"
+    assert alerts_by_name.get("Apparatus Overdue") == "disposal overdue"

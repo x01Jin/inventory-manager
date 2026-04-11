@@ -3,7 +3,14 @@ Dashboard page component for the laboratory inventory application.
 Focused on key metrics and quick access to main functions.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QGroupBox
+from PyQt6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QGridLayout,
+    QLabel,
+    QGroupBox,
+    QTabWidget,
+)
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from inventory_app.gui.styles import get_current_theme
@@ -18,6 +25,7 @@ from inventory_app.gui.utils.worker import worker_pool, Worker
 
 class DashboardSignals(QObject):
     """Signals for dashboard data loading."""
+
     metrics_loaded = pyqtSignal(dict)
     activity_loaded = pyqtSignal(list)
     alerts_loaded = pyqtSignal(list)
@@ -51,6 +59,7 @@ class DashboardPage(QWidget):
         self.metrics_widget = self.metrics_manager.create_metrics_widget(loading=True)
         self.activity_text = self.activity_manager.create_activity_widget()
         self.alerts_table = self.alerts_manager.create_alerts_table()
+        self.all_alerts_table = self.alerts_manager.create_full_alerts_table()
         self.schedule_placeholder = self.schedule_manager.create_schedule_chart_widget()
 
         grid_layout = QGridLayout()
@@ -73,7 +82,10 @@ class DashboardPage(QWidget):
 
         alerts_group = QGroupBox("🚨 Critical Alerts")
         alerts_layout = QVBoxLayout(alerts_group)
-        alerts_layout.addWidget(self.alerts_table)
+        alerts_tabs = QTabWidget()
+        alerts_tabs.addTab(self.alerts_table, "Summary")
+        alerts_tabs.addTab(self.all_alerts_table, "All Alerts")
+        alerts_layout.addWidget(alerts_tabs)
         grid_layout.addWidget(alerts_group, 1, 1)
 
         grid_layout.setColumnStretch(0, 1)
@@ -145,11 +157,23 @@ class DashboardPage(QWidget):
         if self._alerts_worker:
             self._alerts_worker.cancel()
 
-        self._alerts_worker = Worker(self.alerts_manager.load_alerts_data)
-        self._alerts_worker.signals.result.connect(
-            lambda data: self.alerts_manager.populate_alerts_table(self.alerts_table, data)
-        )
+        self._alerts_worker = Worker(self.alerts_manager.load_alerts_payload)
+        self._alerts_worker.signals.result.connect(self._on_alerts_loaded)
         self._alerts_worker.signals.error.connect(
             lambda e: logger.error(f"Alerts loading failed: {e}")
         )
         worker_pool.start(self._alerts_worker)
+
+    def _on_alerts_loaded(self, payload):
+        """Render both summary and full alerts tabs from loaded payload."""
+        if not isinstance(payload, dict):
+            payload = {"summary": [], "full": []}
+
+        self.alerts_manager.populate_alerts_table(
+            self.alerts_table,
+            payload.get("summary", []),
+        )
+        self.alerts_manager.populate_full_alerts_table(
+            self.all_alerts_table,
+            payload.get("full", []),
+        )

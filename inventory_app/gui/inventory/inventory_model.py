@@ -72,12 +72,14 @@ class InventoryModel:
         self.suppliers: List[str] = []
         self.sizes: List[str] = []
         self.brands: List[str] = []
+        self.status_lookup: Dict[int, Any] = {}
 
         # Active filter state.
         self.search_term: str = ""
         self.category_filter: str = ""
         self.supplier_filter: str = ""
         self.item_type_filter: str = ""
+        self.status_filter: str = ""
         self.date_from_filter: Optional[date] = None
         self.date_to_filter: Optional[date] = None
 
@@ -111,6 +113,16 @@ class InventoryModel:
         self.item_type_filter = item_type.strip()
         self._apply_filters()
 
+    def set_status_lookup(self, status_lookup: Dict[int, Any]) -> None:
+        """Set latest status lookup map used for status filtering."""
+        self.status_lookup = status_lookup or {}
+        self._apply_filters()
+
+    def filter_by_status(self, status_filter: str) -> None:
+        """Filter items by lifecycle status."""
+        self.status_filter = status_filter.strip()
+        self._apply_filters()
+
     def filter_by_date_range(
         self,
         start_date: Optional[date],
@@ -127,6 +139,7 @@ class InventoryModel:
         category: str = "",
         supplier: str = "",
         item_type: str = "",
+        status: str = "",
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> None:
@@ -135,6 +148,7 @@ class InventoryModel:
         self.category_filter = category.strip()
         self.supplier_filter = supplier.strip()
         self.item_type_filter = item_type.strip()
+        self.status_filter = status.strip()
         self.date_from_filter = date_from
         self.date_to_filter = date_to
         self._apply_filters()
@@ -175,6 +189,7 @@ class InventoryModel:
         self.category_filter = ""
         self.supplier_filter = ""
         self.item_type_filter = ""
+        self.status_filter = ""
         self.date_from_filter = None
         self.date_to_filter = None
         self.filtered_items = self.items.copy()
@@ -222,21 +237,41 @@ class InventoryModel:
                 )
             ]
 
+        if self.status_filter:
+            filtered = [item for item in filtered if self._matches_status_filter(item)]
+
         if self.date_from_filter or self.date_to_filter:
             filtered = [item for item in filtered if self._matches_date_range(item)]
 
         self.filtered_items = filtered
         logger.debug(
             "Applied filters: search='%s', category='%s', supplier='%s', item_type='%s', "
-            "date_from=%s, date_to=%s -> %s items",
+            "status='%s', date_from=%s, date_to=%s -> %s items",
             self.search_term,
             self.category_filter,
             self.supplier_filter,
             self.item_type_filter,
+            self.status_filter,
             self.date_from_filter,
             self.date_to_filter,
             len(self.filtered_items),
         )
+
+    def _matches_status_filter(self, item: ItemRow) -> bool:
+        """Check whether row matches selected status filter token."""
+        if not item.id:
+            return False
+
+        status_obj = self.status_lookup.get(item.id)
+        if not status_obj or not getattr(status_obj, "status", None):
+            return False
+
+        status_parts = [
+            segment.strip()
+            for segment in str(status_obj.status).split(" and ")
+            if segment.strip()
+        ]
+        return self.status_filter in status_parts
 
     def _matches_date_range(self, item: ItemRow) -> bool:
         """Check whether item acquisition date matches active date-range filters."""
