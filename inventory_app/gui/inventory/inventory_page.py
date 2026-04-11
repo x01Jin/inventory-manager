@@ -174,6 +174,7 @@ class InventoryPage(QWidget):
         # Table selection changes
         self.table.itemSelectionChanged.connect(self._on_table_selection_changed)
         self.table.sds_requested.connect(self._handle_sds_row_action)
+        self.table.defective_requested.connect(self._handle_defective_row_action)
 
         # Filter signals
         self.filters.search_changed.connect(self._on_search_changed)
@@ -278,6 +279,8 @@ class InventoryPage(QWidget):
                     acquisition_date=self._parse_date(row.get("acquisition_date")),
                     last_modified=self._parse_datetime(row.get("last_modified")),
                     has_sds=bool(row.get("has_sds", 0)),
+                    has_defective=bool(row.get("has_defective", 0)),
+                    defective_count=int(row.get("defective_count", 0) or 0),
                     is_consumable=bool(row.get("is_consumable", 1)),
                     total_stock=row.get("total_stock", 0),
                     available_stock=row.get("available_stock", 0),
@@ -575,6 +578,7 @@ class InventoryPage(QWidget):
             controller=self.controller,
             parent=self,
         )
+        dialog.defective_data_changed.connect(self._on_defective_data_changed)
         dialog.exec()
 
     def _update_filtered_table(self):
@@ -604,6 +608,8 @@ class InventoryPage(QWidget):
                 if item.last_modified
                 else None,
                 "has_sds": 1 if item.has_sds else 0,
+                "has_defective": 1 if item.has_defective else 0,
+                "defective_count": item.defective_count,
                 "is_consumable": item.is_consumable,
                 "total_stock": item.total_stock,
                 "available_stock": item.available_stock,
@@ -705,6 +711,43 @@ class InventoryPage(QWidget):
                 self, "Error", f"Failed to handle SDS action: {str(e)}"
             )
 
+    def _handle_defective_row_action(self, item_id: int):
+        """Open item history pre-filtered to defective events for the clicked item."""
+        if not item_id:
+            return
+
+        try:
+            selected_item = next(
+                (
+                    entry
+                    for entry in self.model.get_filtered_items()
+                    if entry.id == item_id
+                ),
+                None,
+            )
+            if not selected_item:
+                return
+
+            dialog = ItemHistoryDialog(
+                item_id=item_id,
+                item_name=selected_item.name,
+                controller=self.controller,
+                initial_event_filter="Defective",
+                parent=self,
+            )
+            dialog.defective_data_changed.connect(self._on_defective_data_changed)
+            dialog.exec()
+
+        except Exception as e:
+            logger.error(
+                f"Failed handling defective row action for item {item_id}: {e}"
+            )
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open item history: {str(e)}",
+            )
+
     def _open_sds_dialog(self, item_id: int):
         """Open SDS settings dialog for a specific item."""
         if not item_id:
@@ -728,3 +771,8 @@ class InventoryPage(QWidget):
         except Exception as e:
             logger.error(f"Failed to open SDS dialog for item {item_id}: {e}")
             QMessageBox.critical(self, "Error", f"Failed to open SDS dialog: {str(e)}")
+
+    def _on_defective_data_changed(self):
+        """Refresh inventory data after defective confirmation updates."""
+        self.refresh_data()
+        self.data_changed.emit()

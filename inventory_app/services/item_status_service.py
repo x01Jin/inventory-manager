@@ -32,6 +32,8 @@ class ItemStatus:
     status: str  # 'OK', 'EXPIRING', 'EXPIRED', 'CAL_WARNING', 'CAL_DUE'
     days_until: Optional[int] = None
     reference_date: Optional[date] = None
+    has_defective: bool = False
+    defective_count: int = 0
 
 
 class ItemStatusService:
@@ -79,19 +81,40 @@ class ItemStatusService:
         result: Dict[int, Optional[ItemStatus]] = {}
 
         try:
-            # Build a single query that fetches all needed data
-            # Use parameterized query with chunked IDs
-            query = """
-            SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
-                   i.acquisition_date, c.name as category_name
-            FROM Items i
-            LEFT JOIN Categories c ON i.category_id = c.id
-            WHERE i.id IN ({})
-            """.format(",".join("?" * len(unique_ids)))
-
             # Execute for each chunk and merge results
             all_rows = []
             for chunk in chunks:
+                query = """
+                SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
+                       i.acquisition_date, c.name as category_name,
+                       COALESCE(dc.defective_count, 0) as defective_count
+                FROM Items i
+                LEFT JOIN Categories c ON i.category_id = c.id
+                LEFT JOIN (
+                    SELECT
+                        current_defectives.item_id,
+                        COALESCE(SUM(current_defectives.current_defective_qty), 0) AS defective_count
+                    FROM (
+                        SELECT
+                            di.id,
+                            di.item_id,
+                            MAX(0,
+                                di.quantity - COALESCE(SUM(
+                                    CASE
+                                        WHEN dia.action_type IN ('DISPOSED', 'NOT_DEFECTIVE')
+                                        THEN dia.quantity
+                                        ELSE 0
+                                    END
+                                ), 0)
+                            ) AS current_defective_qty
+                        FROM Defective_Items di
+                        LEFT JOIN Defective_Item_Actions dia ON dia.defective_item_id = di.id
+                        GROUP BY di.id, di.item_id, di.quantity
+                    ) current_defectives
+                    GROUP BY current_defectives.item_id
+                ) dc ON i.id = dc.item_id
+                WHERE i.id IN ({})
+                """.format(",".join("?" * len(chunk)))
                 rows = db.execute_query(query, tuple(chunk))
                 all_rows.extend(rows)
 
@@ -125,9 +148,33 @@ class ItemStatusService:
             # Get item data
             query = """
             SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
-                   i.acquisition_date, c.name as category_name
+                     i.acquisition_date, c.name as category_name,
+                     COALESCE(dc.defective_count, 0) as defective_count
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
+                 LEFT JOIN (
+                  SELECT
+                      current_defectives.item_id,
+                      COALESCE(SUM(current_defectives.current_defective_qty), 0) AS defective_count
+                  FROM (
+                      SELECT
+                          di.id,
+                          di.item_id,
+                          MAX(0,
+                              di.quantity - COALESCE(SUM(
+                                  CASE
+                                      WHEN dia.action_type IN ('DISPOSED', 'NOT_DEFECTIVE')
+                                      THEN dia.quantity
+                                      ELSE 0
+                                  END
+                              ), 0)
+                          ) AS current_defective_qty
+                      FROM Defective_Items di
+                      LEFT JOIN Defective_Item_Actions dia ON dia.defective_item_id = di.id
+                      GROUP BY di.id, di.item_id, di.quantity
+                  ) current_defectives
+                  GROUP BY current_defectives.item_id
+                 ) dc ON i.id = dc.item_id
             WHERE i.id = ?
             """
             rows = db.execute_query(query, (item_id,))
@@ -155,9 +202,33 @@ class ItemStatusService:
 
             query = f"""
             SELECT i.id, i.name, i.is_consumable, i.expiration_date, i.calibration_date,
-                   i.acquisition_date, c.name as category_name
+                   i.acquisition_date, c.name as category_name,
+                   COALESCE(dc.defective_count, 0) as defective_count
             FROM Items i
             LEFT JOIN Categories c ON i.category_id = c.id
+            LEFT JOIN (
+                SELECT
+                    current_defectives.item_id,
+                    COALESCE(SUM(current_defectives.current_defective_qty), 0) AS defective_count
+                FROM (
+                    SELECT
+                        di.id,
+                        di.item_id,
+                        MAX(0,
+                            di.quantity - COALESCE(SUM(
+                                CASE
+                                    WHEN dia.action_type IN ('DISPOSED', 'NOT_DEFECTIVE')
+                                    THEN dia.quantity
+                                    ELSE 0
+                                END
+                            ), 0)
+                        ) AS current_defective_qty
+                    FROM Defective_Items di
+                    LEFT JOIN Defective_Item_Actions dia ON dia.defective_item_id = di.id
+                    GROUP BY di.id, di.item_id, di.quantity
+                ) current_defectives
+                GROUP BY current_defectives.item_id
+            ) dc ON i.id = dc.item_id
             LEFT JOIN (
                 {query}
             ) stock ON i.id = stock.item_id
@@ -245,14 +316,19 @@ class ItemStatusService:
         try:
             item_id = item_data["id"]
             is_consumable = item_data["is_consumable"] == 1
+            defective_count = int(item_data.get("defective_count") or 0)
             today = date.today()
 
             if is_consumable:
                 # Handle consumable items
-                return self._calculate_consumable_status(item_id, item_data, today)
+                return self._calculate_consumable_status(
+                    item_id, item_data, today, defective_count
+                )
             else:
                 # Handle non-consumable items
-                return self._calculate_non_consumable_status(item_id, item_data, today)
+                return self._calculate_non_consumable_status(
+                    item_id, item_data, today, defective_count
+                )
 
         except Exception as e:
             logger.error(
@@ -261,7 +337,7 @@ class ItemStatusService:
             return None
 
     def _calculate_consumable_status(
-        self, item_id: int, item_data: Dict, today: date
+        self, item_id: int, item_data: Dict, today: date, defective_count: int
     ) -> ItemStatus:
         """
         Calculate status for consumable items.
@@ -281,7 +357,12 @@ class ItemStatusService:
 
         if not expiration_date:
             # No expiration date - assume OK
-            return ItemStatus(item_id=item_id, status="OK")
+            return ItemStatus(
+                item_id=item_id,
+                status="OK",
+                has_defective=defective_count > 0,
+                defective_count=defective_count,
+            )
 
         try:
             exp_date = date.fromisoformat(expiration_date)
@@ -294,6 +375,8 @@ class ItemStatusService:
                     status="EXPIRED",
                     days_until=days_until,
                     reference_date=exp_date,
+                    has_defective=defective_count > 0,
+                    defective_count=defective_count,
                 )
             elif days_until <= CHEMICAL_EXPIRY_WARNING_DAYS:  # 6 months for chemicals
                 # Expiring soon
@@ -302,19 +385,31 @@ class ItemStatusService:
                     status="EXPIRING",
                     days_until=days_until,
                     reference_date=exp_date,
+                    has_defective=defective_count > 0,
+                    defective_count=defective_count,
                 )
             else:
                 # OK
-                return ItemStatus(item_id=item_id, status="OK")
+                return ItemStatus(
+                    item_id=item_id,
+                    status="OK",
+                    has_defective=defective_count > 0,
+                    defective_count=defective_count,
+                )
 
         except (ValueError, TypeError):
             logger.warning(
                 f"Invalid expiration date format for item {item_id}: {expiration_date}"
             )
-            return ItemStatus(item_id=item_id, status="OK")
+            return ItemStatus(
+                item_id=item_id,
+                status="OK",
+                has_defective=defective_count > 0,
+                defective_count=defective_count,
+            )
 
     def _calculate_non_consumable_status(
-        self, item_id: int, item_data: Dict, today: date
+        self, item_id: int, item_data: Dict, today: date, defective_count: int
     ) -> ItemStatus:
         """
         Calculate status for non-consumable items.
@@ -400,13 +495,20 @@ class ItemStatusService:
 
         # Return combined status if multiple alerts, otherwise single status or OK
         if not statuses:
-            return ItemStatus(item_id=item_id, status="OK")
+            return ItemStatus(
+                item_id=item_id,
+                status="OK",
+                has_defective=defective_count > 0,
+                defective_count=defective_count,
+            )
         elif len(statuses) == 1:
             return ItemStatus(
                 item_id=item_id,
                 status=statuses[0],
                 days_until=days_list[0],
                 reference_date=reference_dates[0],
+                has_defective=defective_count > 0,
+                defective_count=defective_count,
             )
         else:
             # Multiple statuses - combine with "and" separator
@@ -418,6 +520,8 @@ class ItemStatusService:
                 status=combined_status,
                 days_until=days_list[most_urgent_idx],
                 reference_date=reference_dates[most_urgent_idx],
+                has_defective=defective_count > 0,
+                defective_count=defective_count,
             )
 
 

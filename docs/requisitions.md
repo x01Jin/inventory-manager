@@ -55,6 +55,12 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
   - Quantity defective (separate from lost count)
   - Required notes describing the defect
 - Defective items are recorded to the `Defective_Items` table for reporting
+- Inventory rows with defective records display a DEF badge in the Name column for quick visibility
+- Clicking DEF opens item usage history with defective filtering enabled by default
+- Item usage history always includes defective controls and filtering, even when opened by double-click
+- Custodians can confirm quantities as `Disposed` or `Not Defective` with explicit quantity selection
+- Current Stock subtracts unresolved defectives; `Disposed` confirmations subtract from Total Stock only
+- Lifecycle alert colors remain primary for row highlighting; the defective badge is a secondary indicator
 - Defective Items Report available in Reports page
 
 ## Print Functionality

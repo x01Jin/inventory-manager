@@ -88,6 +88,7 @@ class InventoryTable(QTableWidget):
     """Table widget for displaying inventory items with optimized progressive styling."""
 
     sds_requested = pyqtSignal(int)
+    defective_requested = pyqtSignal(int)
 
     CHEMICAL_CATEGORIES = {"Chemicals-Solid", "Chemicals-Liquid"}
 
@@ -104,6 +105,20 @@ class InventoryTable(QTableWidget):
         "Acquisition Date",
         "Last Modified",
     ]
+
+    COLUMN_WIDTH_LIMITS = {
+        0: (110, 180),
+        1: (220, 520),
+        2: (80, 180),
+        3: (90, 180),
+        4: (120, 260),
+        5: (110, 240),
+        6: (110, 180),
+        7: (120, 200),
+        8: (110, 180),
+        9: (110, 180),
+        10: (130, 220),
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -135,20 +150,11 @@ class InventoryTable(QTableWidget):
         if header:
             header.setSortIndicatorShown(False)
             header.setSectionsMovable(False)
-            header.setStretchLastSection(True)
+            header.setStretchLastSection(False)
             header.sectionClicked.connect(self._on_header_clicked)
 
-            self.setColumnWidth(0, 140)
-            self.setColumnWidth(1, 200)
-            self.setColumnWidth(2, 80)
-            self.setColumnWidth(3, 100)
-            self.setColumnWidth(4, 120)
-            self.setColumnWidth(5, 120)
-            self.setColumnWidth(6, 100)
-            self.setColumnWidth(7, 100)
-            self.setColumnWidth(8, 80)
-            self.setColumnWidth(9, 100)
-            self.setColumnWidth(10, 120)
+            for col, limits in self.COLUMN_WIDTH_LIMITS.items():
+                self.setColumnWidth(col, limits[0])
 
         v_header = self.verticalHeader()
         if v_header:
@@ -282,6 +288,18 @@ class InventoryTable(QTableWidget):
                 else:
                     item_status = item_status_service.get_item_status(item_id)
 
+            defective_count = int(item.get("defective_count") or 0)
+            has_defective = bool(item.get("has_defective", 0))
+            if item_status is not None and hasattr(item_status, "defective_count"):
+                status_defective_count = int(
+                    getattr(item_status, "defective_count", 0) or 0
+                )
+                if status_defective_count > defective_count:
+                    defective_count = status_defective_count
+                    has_defective = True
+            if has_defective and defective_count <= 0:
+                defective_count = 1
+
             stock_item = self.SortableTableItem(stock_display)
             try:
                 stock_item.setData(SORT_ROLE, -int(available_stock))
@@ -292,17 +310,26 @@ class InventoryTable(QTableWidget):
             name_item = self.SortableTableItem(name)
             name_item.setData(SORT_ROLE, (name or "").lower())
             self.setItem(row, 1, name_item)
-            if (
-                item.get("category_name") in self.CHEMICAL_CATEGORIES
-                and item_id is not None
-            ):
-                # Prevent double-rendering text under the inline SDS widget.
+            is_chemical = item.get("category_name") in self.CHEMICAL_CATEGORIES
+            if item_id is not None and (is_chemical or has_defective):
+                # Prevent double-rendering text under the inline action widget.
                 name_item.setText("")
                 has_sds = bool(item.get("has_sds", 0))
                 self.setCellWidget(
                     row,
                     1,
-                    self._build_sds_name_widget(name, item_id, has_sds),
+                    self._build_name_actions_widget(
+                        name,
+                        item_id,
+                        show_sds_action=is_chemical,
+                        has_sds=has_sds,
+                        has_defective=has_defective,
+                        defective_count=defective_count,
+                    ),
+                )
+            if has_defective:
+                name_item.setToolTip(
+                    f"Defective quantity recorded for this item: {defective_count}"
                 )
             self.setItem(row, 2, QTableWidgetItem(size or "N/A"))
             self.setItem(row, 3, QTableWidgetItem(brand or "N/A"))
@@ -497,9 +524,26 @@ class InventoryTable(QTableWidget):
             for col in range(self.columnCount()):
                 self.resizeColumnToContents(col)
                 width = self.columnWidth(col)
-                self.setColumnWidth(col, max(80, min(width, 200)))
+                min_width, max_width = self.COLUMN_WIDTH_LIMITS.get(col, (80, 220))
+
+                if col == 1:
+                    width = max(width, self._get_name_column_widget_width())
+
+                self.setColumnWidth(col, max(min_width, min(width, max_width)))
         except Exception as e:
             logger.error(f"Error resizing columns: {e}")
+
+    def _get_name_column_widget_width(self) -> int:
+        """Compute required width for Name column widgets (name text + inline action buttons)."""
+        max_widget_width = 0
+        for row in range(self.rowCount()):
+            widget = self.cellWidget(row, 1)
+            if widget is None:
+                continue
+            hint = widget.sizeHint()
+            if hint is not None:
+                max_widget_width = max(max_widget_width, hint.width() + 16)
+        return max_widget_width
 
     def get_selected_item_id(self) -> Optional[int]:
         """Get the ID of the currently selected item."""
@@ -532,8 +576,16 @@ class InventoryTable(QTableWidget):
         """Get the number of rows in the table."""
         return self.rowCount()
 
-    def _build_sds_name_widget(self, name: str, item_id: int, has_sds: bool) -> QWidget:
-        """Create a Name + SDS action widget for chemical items."""
+    def _build_name_actions_widget(
+        self,
+        name: str,
+        item_id: int,
+        show_sds_action: bool,
+        has_sds: bool,
+        has_defective: bool = False,
+        defective_count: int = 0,
+    ) -> QWidget:
+        """Create a Name + row actions widget for chemical and defective items."""
         wrapper = QWidget(self.viewport())
         wrapper.setObjectName("sdsInlineWrapper")
         wrapper.setAutoFillBackground(False)
@@ -547,29 +599,64 @@ class InventoryTable(QTableWidget):
         name_label.setObjectName("chemicalNameLabel")
         name_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         name_label.setStyleSheet("background: transparent; border: none;")
-        sds_button = QPushButton("SDS")
-        sds_button.setObjectName("sdsInlineButton")
-        sds_button.setFlat(True)
-        sds_button.setStyleSheet(
-            "QPushButton#sdsInlineButton {"
-            "padding: 0 6px;"
-            "margin: 0;"
-            "background: transparent;"
-            "border: 1px solid rgba(180, 180, 180, 0.45);"
-            "border-radius: 7px;"
-            "font-size: 9pt;"
-            "}"
-            "QPushButton#sdsInlineButton:hover {"
-            "border: 1px solid rgba(200, 200, 200, 0.75);"
-            "}"
-        )
-        sds_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        sds_button.setFixedHeight(18)
-        sds_button.setMinimumWidth(36)
-        sds_button.clicked.connect(lambda _, iid=item_id: self.sds_requested.emit(iid))
+
+        defective_button = None
+        if has_defective:
+            defective_button = QPushButton(f"DEF x{max(1, defective_count)}")
+            defective_button.setObjectName("defectiveInlineButton")
+            defective_button.setFlat(True)
+            defective_button.setStyleSheet(
+                "QPushButton#defectiveInlineButton {"
+                "padding: 0 6px;"
+                "margin: 0;"
+                "background: transparent;"
+                "border: 1px solid rgba(184, 107, 0, 0.9);"
+                "border-radius: 7px;"
+                "font-size: 9pt;"
+                "}"
+                "QPushButton#defectiveInlineButton:hover {"
+                "border: 1px solid rgba(210, 130, 20, 1.0);"
+                "}"
+            )
+            defective_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            defective_button.setFixedHeight(18)
+            defective_button.setToolTip(
+                f"Defective quantity recorded for this item: {max(1, defective_count)}"
+            )
+            defective_button.clicked.connect(
+                lambda _, iid=item_id: self.defective_requested.emit(iid)
+            )
+
+        sds_button = None
+        if show_sds_action:
+            sds_button = QPushButton("SDS")
+            sds_button.setObjectName("sdsInlineButton")
+            sds_button.setFlat(True)
+            sds_button.setStyleSheet(
+                "QPushButton#sdsInlineButton {"
+                "padding: 0 6px;"
+                "margin: 0;"
+                "background: transparent;"
+                "border: 1px solid rgba(180, 180, 180, 0.45);"
+                "border-radius: 7px;"
+                "font-size: 9pt;"
+                "}"
+                "QPushButton#sdsInlineButton:hover {"
+                "border: 1px solid rgba(200, 200, 200, 0.75);"
+                "}"
+            )
+            sds_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            sds_button.setFixedHeight(18)
+            sds_button.setMinimumWidth(36)
+            sds_button.clicked.connect(
+                lambda _, iid=item_id: self.sds_requested.emit(iid)
+            )
 
         layout.addWidget(name_label, 1)
-        layout.addWidget(sds_button, 0)
+        if defective_button is not None:
+            layout.addWidget(defective_button, 0)
+        if sds_button is not None:
+            layout.addWidget(sds_button, 0)
         return wrapper
 
     def _apply_row_styling(self, row: int, item_status) -> None:

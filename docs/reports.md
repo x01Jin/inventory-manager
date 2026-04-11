@@ -226,6 +226,7 @@ Common Reports
 - **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them
 - **Defective Items Report** - Shows defective/broken items returned with condition type, notes, reporter, and date
 - **Audit Log Report** - Shows centralized history across item/requisition edits, disposals, defective recordings, and activity events, including field-level old/new values when available
+- Defective return processing now emits a dedicated activity type (`ITEM_MARKED_DEFECTIVE`) so dashboard/activity feeds can distinguish defect recordings from generic return-finalization events
 - **Usage by Grade Level Report** - Shows item usage grouped by grade level and section, with optional filter for individual requests only
 
 ## Usage by Grade Level Report

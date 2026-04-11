@@ -203,6 +203,48 @@ class RequisitionActivityManager:
             logger.error(f"Error logging requisition deletion activity: {e}")
             return False
 
+    def log_defective_recorded(
+        self,
+        requisition_id: int,
+        item_id: int,
+        quantity: int,
+        user_name: str = "System",
+    ) -> bool:
+        """Log a defective item recording activity from return processing."""
+        try:
+            requester_name = self._get_requester_name(requisition_id)
+            description = (
+                f"recorded defective item quantity {quantity} for {requester_name} "
+                f"(item_id={item_id})"
+            )
+
+            success = activity_logger.log_activity(
+                activity_type=activity_logger.ITEM_MARKED_DEFECTIVE,
+                description=description,
+                entity_id=item_id,
+                entity_type="item",
+                user_name=user_name,
+            )
+
+            if success:
+                logger.info(
+                    "Logged defective item activity for requisition %s (item %s)",
+                    requisition_id,
+                    item_id,
+                )
+            else:
+                logger.error(
+                    "Failed to log defective item activity for requisition %s (item %s)",
+                    requisition_id,
+                    item_id,
+                )
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error logging defective item activity: {e}")
+            return False
+
     def get_requisition_activities(self, limit: int = 50) -> List[Dict]:
         """
         Get recent requisition-related activities.
@@ -360,9 +402,11 @@ class RequisitionActivityManager:
             WHERE req.id = ?
             """
             rows = db.execute_query(query, (requisition_id,))
-            return rows[0]['name'] if rows else "Unknown"
+            return rows[0]["name"] if rows else "Unknown"
         except Exception as e:
-            logger.error(f"Failed to get requester name for requisition {requisition_id}: {e}")
+            logger.error(
+                f"Failed to get requester name for requisition {requisition_id}: {e}"
+            )
             return "Unknown"
 
 

@@ -482,6 +482,257 @@ def test_task12_item_usage_history_includes_defective_and_date_range(temp_db):
     assert usage_only_rows[0]["event_type"] == "Usage"
 
 
+def test_inventory_data_includes_defective_indicator_fields(temp_db):
+    """Inventory data should expose defective flags and counts for row indicators."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Indicator Item", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 2, "2026-01-01"),
+    )
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Indicator Requester",),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-02 09:00:00",
+            "2026-01-02 10:00:00",
+            "returned",
+            "Indicator Lab",
+            "2026-01-02",
+        ),
+        return_last_id=True,
+    )[1]
+    assert requisition_id is not None
+
+    db.execute_update(
+        "INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by, reported_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            item_id,
+            requisition_id,
+            2,
+            "Broken handle",
+            "custodian",
+            "2026-01-02",
+        ),
+    )
+
+    rows = InventoryController().load_inventory_data()
+    target = next((row for row in rows if row["id"] == item_id), None)
+    assert target is not None
+    assert target["has_defective"] == 1
+    assert target["defective_count"] == 2
+    assert target["total_stock"] == 2
+    assert target["available_stock"] == 0
+
+    status = item_status_service.get_item_status(item_id)
+    assert status is not None
+    assert status.has_defective is True
+    assert status.defective_count == 2
+
+    # Aggregate total stock metric remains based on stock movements policy,
+    # and only disposed confirmations permanently reduce total stock.
+    batch_stats = InventoryController().get_batch_statistics()
+    assert batch_stats["total_stock"] == 2
+
+
+def test_inventory_controller_returns_defective_details(temp_db):
+    """Defective details query should return descriptions and context for item rows."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Defective Detail Item", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Defective Detail Requester",),
+        return_last_id=True,
+    )[1]
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-03 09:00:00",
+            "2026-01-03 11:00:00",
+            "returned",
+            "Glassware Activity",
+            "2026-01-03",
+        ),
+        return_last_id=True,
+    )[1]
+
+    db.execute_update(
+        "INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by, editor_name, reported_date) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            item_id,
+            requisition_id,
+            1,
+            "Hairline crack on base",
+            "custodian-a",
+            "custodian-a",
+            "2026-01-03",
+        ),
+    )
+
+    rows = InventoryController().get_item_defective_details(item_id)
+    assert len(rows) == 1
+    assert rows[0]["quantity"] == 1
+    assert rows[0]["notes"] == "Hairline crack on base"
+    assert rows[0]["lab_activity"] == "Glassware Activity"
+    assert rows[0]["requester_name"] == "Defective Detail Requester"
+
+
+def test_defective_confirmation_actions_update_history_and_stock(temp_db):
+    """Disposed/not-defective confirmations should be recorded and affect stock behavior correctly."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Defective Confirm Item", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 5, "2026-01-01"),
+    )
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Confirm User",),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-02 09:00:00",
+            "2026-01-02 10:00:00",
+            "returned",
+            "Confirm Activity",
+            "2026-01-02",
+        ),
+        return_last_id=True,
+    )[1]
+    assert requisition_id is not None
+    defective_id = db.execute_update(
+        "INSERT INTO Defective_Items (item_id, requisition_id, quantity, notes, reported_by, editor_name, reported_date) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            item_id,
+            requisition_id,
+            3,
+            "Potential crack",
+            "custodian",
+            "custodian",
+            "2026-01-02",
+        ),
+        return_last_id=True,
+    )[1]
+    assert defective_id is not None
+
+    controller = InventoryController()
+    assert controller.apply_defective_action(
+        defective_item_id=defective_id,
+        action_type="NOT_DEFECTIVE",
+        quantity=1,
+        acted_by="reviewer-1",
+        notes="Passed re-check",
+    )
+    assert controller.apply_defective_action(
+        defective_item_id=defective_id,
+        action_type="DISPOSED",
+        quantity=2,
+        acted_by="reviewer-1",
+        notes="Confirmed cracked",
+    )
+
+    rows = controller.load_inventory_data()
+    target = next((row for row in rows if row["id"] == item_id), None)
+    assert target is not None
+    assert target["defective_count"] == 0
+    assert target["total_stock"] == 3
+
+    history_rows = controller.get_item_usage_history(item_id)
+    event_types = {row.get("event_type") for row in history_rows}
+    assert "Disposed" in event_types
+    assert "Not Defective" in event_types
+
+    disposal_movements = db.execute_query(
+        "SELECT quantity FROM Stock_Movements WHERE item_id = ? AND movement_type = ?",
+        (item_id, "DISPOSAL"),
+    )
+    assert disposal_movements
+    assert sum(int(row["quantity"]) for row in disposal_movements) == 2
+
+    batch_stats = controller.get_batch_statistics()
+    assert batch_stats["total_stock"] == 3
+
+
+def test_non_consumable_usage_history_includes_borrow_and_return_events(temp_db):
+    """Non-consumables should include borrow/return/lost movement timeline in item history."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("History Asset", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name, grade_level, section) VALUES (?, ?, ?)",
+        ("Borrower", "Grade 9", "B"),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-04 09:00:00",
+            "2026-01-04 11:00:00",
+            "returned",
+            "Asset Lab",
+            "2026-01-04",
+        ),
+        return_last_id=True,
+    )[1]
+    assert requisition_id is not None
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_id, 3),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note) VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, "REQUEST", 3, "2026-01-04", requisition_id, "Borrowed for class"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note) VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, "RETURN", 2, "2026-01-05", requisition_id, "Returned after class"),
+    )
+
+    rows = InventoryController().get_item_usage_history(item_id)
+    event_types = {row["event_type"] for row in rows}
+    assert "Usage" in event_types
+    assert "Borrowed" in event_types
+    assert "Returned" in event_types
+
+
 def test_task10_inventory_stats_total_stock_deducts_finalized_usage(temp_db):
     """Inventory quick stats total stock should permanently deduct finalized consumable usage."""
     from inventory_app.gui.inventory.inventory_controller import InventoryController

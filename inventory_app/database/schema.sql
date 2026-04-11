@@ -313,6 +313,25 @@ CREATE INDEX idx_defective_item ON Defective_Items(item_id);
 CREATE INDEX idx_defective_requisition ON Defective_Items(requisition_id);
 CREATE INDEX idx_defective_date ON Defective_Items(reported_date);
 
+-- 16. Defective_Item_Actions: Confirmation actions for defective records
+-- Tracks whether defective quantities were disposed or marked as not defective.
+CREATE TABLE Defective_Item_Actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    defective_item_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL CHECK (action_type IN ('DISPOSED', 'NOT_DEFECTIVE')),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    notes TEXT,
+    acted_by TEXT NOT NULL,
+    action_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (defective_item_id) REFERENCES Defective_Items(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_defective_actions_defective_item ON Defective_Item_Actions(defective_item_id);
+CREATE INDEX idx_defective_actions_item ON Defective_Item_Actions(item_id);
+CREATE INDEX idx_defective_actions_date ON Defective_Item_Actions(action_date DESC);
+
 -- Activity_Log retention is intentionally unlimited.
 -- Dashboard/activity views should use display/query limits only.
 

@@ -152,6 +152,8 @@ The Quick Statistics block shows several counts and small alerts:
 - The dialog shows item usage events from requisitions and defective/broken return events.
 - Each history row includes requester name, grade/section, activity date, lab activity, quantity, request/return dates, and notes.
 - Default view is all-time. Enable date range in the dialog to filter by date.
+- `Show Defective Events Only` is always available for quick review of defective rows.
+- Defective rows can be confirmed as `Disposed` or `Not Defective` with quantity selection.
 
 ## **How available stock is calculated (brief, factual)**
 
@@ -159,6 +161,10 @@ The Quick Statistics block shows several counts and small alerts:
   - Consumables: `received - consumption - disposal + return`
   - Non-consumables: `received - disposal` (borrow/request and return do not permanently change stock)
 - `Available Stock` subtracts active reservations/requests so it reflects what can actually be allocated now.
+- Defective handling:
+  - Reported defectives reduce current usable availability until resolved.
+  - `Not Defective` restores usable availability.
+  - `Disposed` permanently reduces total stock.
 
 ## **Common tasks / quick recipes**
 

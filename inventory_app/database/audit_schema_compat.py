@@ -71,6 +71,33 @@ def ensure_audit_schema() -> bool:
                 "UPDATE Defective_Items SET editor_name = reported_by WHERE editor_name IS NULL"
             )
 
+            # Track confirmation actions for defective entries.
+            db.execute_update(
+                """
+                CREATE TABLE IF NOT EXISTS Defective_Item_Actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    defective_item_id INTEGER NOT NULL,
+                    item_id INTEGER NOT NULL,
+                    action_type TEXT NOT NULL CHECK (action_type IN ('DISPOSED', 'NOT_DEFECTIVE')),
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    notes TEXT,
+                    acted_by TEXT NOT NULL,
+                    action_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (defective_item_id) REFERENCES Defective_Items(id) ON DELETE CASCADE,
+                    FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE
+                )
+                """
+            )
+            db.execute_update(
+                "CREATE INDEX IF NOT EXISTS idx_defective_actions_defective_item ON Defective_Item_Actions(defective_item_id)"
+            )
+            db.execute_update(
+                "CREATE INDEX IF NOT EXISTS idx_defective_actions_item ON Defective_Item_Actions(item_id)"
+            )
+            db.execute_update(
+                "CREATE INDEX IF NOT EXISTS idx_defective_actions_date ON Defective_Item_Actions(action_date DESC)"
+            )
+
         logger.info("Task 9 audit schema compatibility checks completed")
         return True
     except Exception as exc:

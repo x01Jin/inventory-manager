@@ -29,6 +29,24 @@ Yes, as long as it is not finalized/returned. Changes are recorded in requisitio
 
 After return processing, the requisition becomes finalized and is no longer editable.
 
+## How do defective items affect stock?
+
+- Reported defective quantities reduce Current Stock (usable stock) immediately.
+- Defective review is done in Item Usage History for that item.
+- `Disposed` and `Not Defective` confirmations are tracked separately in history.
+- `Not Defective` quantity is returned to Current Stock.
+- `Disposed` confirmations will deduct it from Total Stock.
+
+## Where do I confirm defective outcomes?
+
+1. Open Inventory.
+2. Open item usage history (double-click row, or click DEF badge).
+3. Use `Show Defective Events Only` when needed.
+4. Select a `Defective` row with pending quantity.
+5. Enter quantity and confirm as `Disposed` or `Not Defective`.
+
+The defective controls are always available in Item Usage History, not only when opening from DEF.
+
 ## What are the active alert rules?
 
 | Rule | Warning Window | Overdue Condition |

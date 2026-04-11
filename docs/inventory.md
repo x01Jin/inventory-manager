@@ -105,6 +105,10 @@ Items with `0` current stock remain stored for history and requisition integrity
 
 - Consumables: stock changes with issue/return/disposal movements.
 - Non-consumables: item count is effectively retained while movement history tracks usage and returns.
+- Defective reports reduce current usable availability until confirmed.
+- Defective confirmation outcomes:
+  - `Not Defective`: returns quantity to current usable availability.
+  - `Disposed`: permanently reduces total stock.
 
 The system prevents stock from going negative.
 
@@ -130,3 +134,6 @@ The system prevents stock from going negative.
 - `Clear Filters` resets all filters and returns the full inventory list without forcing a reload.
 - Double-click an item row to open usage history. The history view includes requisition usage events and defective/broken return events.
 - History defaults to all-time. Users can enable a date range and filter by activity/reported date.
+- The `Show Defective Events Only` toggle is always available in usage history.
+- Defective confirmations (`Disposed` and `Not Defective`) are always available in usage history when an actionable defective row is selected.
+- After a defective confirmation is applied, the inventory page refreshes automatically so stock and DEF indicators stay in sync.

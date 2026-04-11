@@ -152,6 +152,7 @@ class ReturnProcessor:
                             self._record_defective_item(
                                 requisition_id,
                                 return_item.item_id,
+                                return_item.batch_id,
                                 return_item.quantity_defective,
                                 return_item.defective_notes,
                                 editor_name,
@@ -319,6 +320,7 @@ class ReturnProcessor:
         self,
         requisition_id: int,
         item_id: int,
+        batch_id: Optional[int],
         quantity: int,
         notes: str,
         editor_name: str,
@@ -331,6 +333,7 @@ class ReturnProcessor:
         Args:
             requisition_id: ID of the requisition
             item_id: ID of the item
+            batch_id: ID of the affected item batch
             quantity: Number of defective items
             notes: Description of the defect
             editor_name: Name of person reporting/editing
@@ -357,6 +360,19 @@ class ReturnProcessor:
                 f"Recorded {quantity} defective items (ID: {item_id}) "
                 f"for requisition {requisition_id}"
             )
+
+            logged = requisition_activity_manager.log_defective_recorded(
+                requisition_id=requisition_id,
+                item_id=item_id,
+                quantity=quantity,
+                user_name=editor_name,
+            )
+            if not logged:
+                logger.warning(
+                    "Failed to add defective item activity entry for requisition %s item %s",
+                    requisition_id,
+                    item_id,
+                )
         except Exception as e:
             logger.error(
                 f"Failed to record defective item {item_id} for requisition {requisition_id}: {e}"

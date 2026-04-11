@@ -279,3 +279,83 @@ def test_requisition_lifecycle(temp_db):
     # Task 10 stock assertions after final return processing
     assert stock_calculation_service.calculate_total_stock(item_id) == 9
     assert stock_calculation_service.calculate_total_stock(asset_id) == 4
+
+
+def test_defective_return_records_activity_event(temp_db):
+    """Defective return processing should create a dedicated activity entry."""
+    from inventory_app.gui.requisitions.requisition_management.return_processor import (
+        ReturnItem,
+        ReturnProcessor,
+    )
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Defect Activity User",),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Defect Activity Item", 1, 0),
+        return_last_id=True,
+    )[1]
+    assert item_id is not None
+
+    batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 3, "2026-01-01"),
+        return_last_id=True,
+    )[1]
+    assert batch_id is not None
+
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "2026-01-02 08:00:00",
+            "2026-01-02 12:00:00",
+            "active",
+            "Defect Log Activity",
+            "2026-01-02",
+        ),
+        return_last_id=True,
+    )[1]
+    assert requisition_id is not None
+
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_id, 2),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (item_id, batch_id, "REQUEST", 2, "2026-01-02", requisition_id),
+    )
+
+    ok = ReturnProcessor().process_returns(
+        requisition_id,
+        [
+            ReturnItem(
+                item_id=item_id,
+                batch_id=batch_id,
+                quantity_requested=2,
+                quantity_lost=0,
+                quantity_defective=1,
+                is_consumable=False,
+                defective_notes="Chip on rim",
+            )
+        ],
+        editor_name="qa-user",
+    )
+    assert ok is True
+
+    activity_rows = db.execute_query(
+        "SELECT activity_type, description, entity_id, entity_type, user_name FROM Activity_Log "
+        "WHERE activity_type = ? ORDER BY id DESC LIMIT 1",
+        ("ITEM_MARKED_DEFECTIVE",),
+    )
+    assert activity_rows
+    assert activity_rows[0]["entity_id"] == item_id
+    assert activity_rows[0]["entity_type"] == "item"
+    assert activity_rows[0]["user_name"] == "qa-user"
