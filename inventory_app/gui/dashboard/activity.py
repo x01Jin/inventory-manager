@@ -163,8 +163,8 @@ class ActivityManager:
             time_item = QTableWidgetItem(time_str)
             table.setItem(row, 2, time_item)
 
-        table.resizeRowsToContents()
         if table_group.title() == "Latest Activity":
+            table.resizeRowsToContents()
             self._adjust_latest_activity_height(table)
         logger.debug(f"Populated table with {len(activities)} rows")
 

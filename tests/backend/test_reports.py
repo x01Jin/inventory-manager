@@ -12,6 +12,7 @@ from inventory_app.gui.reports.data_sources import (
     get_audit_log_data,
     get_usage_by_grade_level_data,
     get_trends_data,
+    get_dynamic_report_data,
 )
 from inventory_app.gui.reports.monthly_usage_report import generate_monthly_usage_report
 from inventory_app.gui.reports.report_utils import date_formatter
@@ -494,6 +495,101 @@ def test_trends_data_respects_category_filter(temp_db):
     assert all(row.get("CATEGORIES") == "Equipment" for row in rows)
     assert any(row.get("ITEMS") == "Equipment Trend Item" for row in rows)
     assert all(row.get("ITEMS") != "Apparatus Trend Item" for row in rows)
+
+
+def test_usage_report_supplier_filter_targets_item_supplier(temp_db):
+    """Supplier filter should target item supplier names, not requester fields."""
+    supplier_a = db.execute_update(
+        "INSERT INTO Suppliers (name) VALUES (?)",
+        ("Supplier A",),
+        return_last_id=True,
+    )[1]
+    supplier_b = db.execute_update(
+        "INSERT INTO Suppliers (name) VALUES (?)",
+        ("Supplier B",),
+        return_last_id=True,
+    )[1]
+
+    item_a = db.execute_update(
+        "INSERT INTO Items (name, category_id, supplier_id) VALUES (?, ?, ?)",
+        ("Supplier A Item", 1, supplier_a),
+        return_last_id=True,
+    )[1]
+    item_b = db.execute_update(
+        "INSERT INTO Items (name, category_id, supplier_id) VALUES (?, ?, ?)",
+        ("Supplier B Item", 1, supplier_b),
+        return_last_id=True,
+    )[1]
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name, department) VALUES (?, ?)",
+        ("Requester", "Not a Supplier"),
+        return_last_id=True,
+    )[1]
+
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "requested",
+            "2025-02-01",
+            "Supplier Filter Activity",
+            "2025-02-01 09:00:00",
+            "2025-02-01 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_a, 5),
+    )
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_b, 3),
+    )
+
+    rows = get_dynamic_report_data(
+        start_date=date(2025, 2, 1),
+        end_date=date(2025, 2, 1),
+        granularity="daily",
+        supplier_filter="Supplier A",
+    )
+
+    assert rows
+    assert len(rows) == 1
+    assert rows[0]["ITEMS"] == "Supplier A Item"
+    assert rows[0]["SUPPLIER"] == "Supplier A"
+
+
+def test_stock_levels_data_includes_supplier_column(temp_db):
+    """Stock levels data should include supplier name for Task 14 output completeness."""
+    supplier_id = db.execute_update(
+        "INSERT INTO Suppliers (name) VALUES (?)",
+        ("Stock Supplier",),
+        return_last_id=True,
+    )[1]
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, supplier_id, is_consumable) VALUES (?, ?, ?, ?)",
+        ("Stock Supplier Item", 1, supplier_id, 1),
+        return_last_id=True,
+    )[1]
+    batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 25, "2025-02-01"),
+        return_last_id=True,
+    )[1]
+
+    assert batch_id is not None
+
+    rows = get_stock_levels_data()
+    row = next(
+        (entry for entry in rows if entry.get("Item Name") == "Stock Supplier Item"),
+        None,
+    )
+
+    assert row is not None
+    assert row["Supplier"] == "Stock Supplier"
 
 
 def test_report_worker_passes_trends_category_filter(monkeypatch):

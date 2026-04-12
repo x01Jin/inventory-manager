@@ -618,6 +618,9 @@ class ItemEditor(QDialog):
 
     def save_item(self):
         """Save the item data."""
+        save_label = self.save_button.text()
+        self.save_button.setEnabled(False)
+        self.save_button.setText("Saving...")
         try:
             # Validate required fields with specific guidance before saving
             validation_issues = []
@@ -816,6 +819,10 @@ class ItemEditor(QDialog):
         except Exception as e:
             logger.error(f"Error saving item: {e}")
             QMessageBox.critical(self, "Error", f"Failed to save item: {str(e)}")
+        finally:
+            if self.isVisible():
+                self.save_button.setEnabled(True)
+                self.save_button.setText(save_label)
 
     def _normalize_optional_text_value(self, value: Optional[str]) -> Optional[str]:
         """Normalize optional text dropdown value to None when empty."""

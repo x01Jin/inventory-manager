@@ -74,6 +74,7 @@ Generates a time-series usage report for any custom date range with automatic gr
   - Period keys include "excess" ranges for partial weeks/months
   - Parameterized SQL queries to prevent injection
   - Filterable by category
+  - Includes Supplier as a base column in exported rows
   - Optional consumable item inclusion
   - Preset date ranges for quick selection (Last 7/30/90 Days, This/Last Month, This/Last Year)
 
@@ -81,6 +82,7 @@ Generates a time-series usage report for any custom date range with automatic gr
   - Custom date range selection via DateRangeSelector
   - Preset date ranges for quick access
   - Category filter (All Categories or specific)
+  - Supplier filter support is available programmatically through report APIs (`supplier_filter`), using item supplier names
   - **Individual Requests Filter**: "Show only individual requests" checkbox to filter for ad-hoc/unaffiliated requisitions
   - Consumable items checkbox (enabled by default)
 
@@ -161,6 +163,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Stock Levels Report:
     - Consumables: `Original - Consumption - Disposal + Return`
     - Non-consumables: `Original - Disposal` (active borrow/request affects availability, not baseline stock)
+    - Includes Supplier column in addition to item/category/size/brand/specifications
   - Expiration Report — items with `expiration_date` within the given range. Addresses beta test requirement #10 for expiration alerts.
   - Calibration Due Report — items in calibration-enabled categories with `calibration_date` within the range (default policy: Equipment). Addresses beta test requirement #11 for calibration alerts.
   - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.
@@ -176,7 +179,8 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 Background Processing and UI Integration
 
 - The `ReportsPage` UI uses a `DateRangeSelector`, filters, and other controls in `reports_page.py` plus `ReportWorker` to run the chosen report in a separate thread.
-- The `ReportWorker` emits progress updates and handles report generation — the UI listens to `progress`, `finished`, and `error` signals and updates `ReportUIUpdater` (status, recent files list, auto-launch on Windows). Failed report payloads are emitted through `error` and do not trigger success-state completion messaging.
+- The `ReportWorker` emits progress updates and handles report generation — the UI listens to `progress`, `finished`, and `error` signals and updates `ReportUIUpdater` (status and recent files list). Failed report payloads are emitted through `error` and do not trigger success-state completion messaging.
+- After generation, report opening is user-driven through panel actions (`Open Report`, `Open Folder`).
 - `ReportConfig` centralizes UI strings, granularity descriptions, and styling for the report UI.
 
 Security and SQL Safety
@@ -209,6 +213,7 @@ Developer Notes
 Examples and APIs Referenced in Code
 
 - Query building: `ReportQueryBuilder.build_dynamic_report_query(start, end, granularity, category_filter, supplier_filter, include_consumables)` returns `(sql, params)`.
+- Supplier filtering in query builders targets `Items.supplier_id -> Suppliers.name`, not requester profile fields.
 - Headers: Excel headers are normalized via `REPORT_HEADER_MAP` (e.g., `ITEMS`/`Item Name` -> `Item`, `TOTAL QUANTITY` -> `Total Quantity`).
 - Headers: Excel headers are normalized via `header_utils.format_excel_headers` (maps canonical names and formats period keys into human-friendly labels).
 - Excel creation: Use `excel_utils.create_excel_report(data, output_path, title, start_date, end_date, granularity=None)` to write styled workbooks programmatically.

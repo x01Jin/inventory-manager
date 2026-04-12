@@ -59,6 +59,7 @@ def get_dynamic_report_data(
                     row.get("SIZE"),
                     row.get("BRAND"),
                     row.get("OTHER SPECIFICATIONS"),
+                    row.get("SUPPLIER"),
                 )
                 if item_key not in pivoted:
                     base = {
@@ -68,6 +69,7 @@ def get_dynamic_report_data(
                         "SIZE": item_key[3],
                         "BRAND": item_key[4],
                         "OTHER SPECIFICATIONS": item_key[5],
+                        "SUPPLIER": item_key[6],
                     }
                     for k in period_keys:
                         base[k] = 0
@@ -117,6 +119,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
+                COALESCE(s.name, 'N/A') AS "Supplier",
                 COALESCE(stock.original_stock, 0) AS "Original Stock",
                 CASE
                     WHEN i.is_consumable = 1 THEN
@@ -134,6 +137,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                 i.is_consumable AS "Is Consumable"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
             LEFT JOIN (
                 SELECT
                     ib.item_id,
@@ -162,7 +166,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, s.name, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
 
         # Filter out items with 0 current stock (depleted/disposed items)
         query += ' HAVING "Current Stock" > 0'
@@ -212,6 +216,7 @@ def get_trends_data(
                 "SIZE",
                 "BRAND",
                 "OTHER SPECIFICATIONS",
+                "SUPPLIER",
                 "TOTAL QUANTITY",
             }
         ]

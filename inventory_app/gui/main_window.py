@@ -70,15 +70,10 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         self.inventory_page = None
         self.requisitions_page = None
-        from inventory_app.gui.requesters.requesters_page import RequestersPage
-        from inventory_app.gui.reports.reports_page import ReportsPage
-        from inventory_app.gui.settings.settings_page import SettingsPage
-        from inventory_app.gui.help.help_page import HelpPage
-
-        self.requesters_page = RequestersPage()
-        self.reports_page = ReportsPage()
-        self.settings_page = SettingsPage()
-        self.help_page = HelpPage()
+        self.requesters_page = None
+        self.reports_page = None
+        self.settings_page = None
+        self.help_page = None
 
         # Add pages to stack
         self.content_stack.addWidget(self.dashboard_page)  # Index 0
@@ -88,17 +83,21 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(
             self.create_placeholder("Requisitions", "Loading requisitions page...")
         )  # Index 2
-        self.content_stack.addWidget(self.requesters_page)  # Index 3
-        self.content_stack.addWidget(self.reports_page)  # Index 4
-        self.content_stack.addWidget(self.settings_page)  # Index 5
-        self.content_stack.addWidget(self.help_page)  # Index 6
+        self.content_stack.addWidget(
+            self.create_placeholder("Requesters", "Loading requesters page...")
+        )  # Index 3
+        self.content_stack.addWidget(
+            self.create_placeholder("Reports", "Loading reports page...")
+        )  # Index 4
+        self.content_stack.addWidget(
+            self.create_placeholder("Settings", "Loading settings page...")
+        )  # Index 5
+        self.content_stack.addWidget(
+            self.create_placeholder("Help", "Loading help page...")
+        )  # Index 6
 
         self._page_instances: dict[int, Any] = {
             0: self.dashboard_page,
-            3: self.requesters_page,
-            4: self.reports_page,
-            5: self.settings_page,
-            6: self.help_page,
         }
 
         # Connect navigation

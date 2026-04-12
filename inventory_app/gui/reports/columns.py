@@ -20,6 +20,7 @@ REPORT_BASE_COLUMNS: List[str] = [
     "i.size AS SIZE",
     "i.brand AS BRAND",
     'i.other_specifications AS "OTHER SPECIFICATIONS"',
+    "COALESCE(s.name, 'N/A') AS SUPPLIER",
 ]
 
 
@@ -29,6 +30,7 @@ INVENTORY_BASE_COLUMNS: List[str] = [
     'c.name AS "Category"',
     'i.size AS "Size"',
     'i.brand AS "Brand"',
+    'COALESCE(s.name, "N/A") AS "Supplier"',
     "CASE WHEN i.is_consumable = 1 "
     "THEN COALESCE(SUM(ib.quantity_received), 0) "
     '- COALESCE(SUM(CASE WHEN sm.movement_type = "CONSUMPTION" THEN sm.quantity ELSE 0 END), 0) '
@@ -45,6 +47,7 @@ INVENTORY_IDENT_COLUMNS: List[str] = [
     'c.name AS "Category"',
     'i.size AS "Size"',
     'i.brand AS "Brand"',
+    'COALESCE(s.name, "N/A") AS "Supplier"',
     'i.other_specifications AS "Specifications"',
 ]
 

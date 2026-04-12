@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QProgressBar,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from inventory_app.gui.styles import get_current_theme
@@ -80,6 +80,9 @@ class InventoryPage(QWidget):
         self._stats_worker: Optional[Worker] = None
         self._parallel_loader: Optional[ParallelDataLoader] = None
         self._is_loading = False
+        self._filter_debounce_timer = QTimer(self)
+        self._filter_debounce_timer.setSingleShot(True)
+        self._filter_debounce_timer.timeout.connect(self._apply_current_filters)
 
         # Store loaded data for reuse
         self._cached_raw_data: Optional[List[Dict]] = None
@@ -592,27 +595,37 @@ class InventoryPage(QWidget):
 
     def _on_search_changed(self, search_term: str):
         """Handle search term changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(250)
 
     def _on_category_filter_changed(self, category: str):
         """Handle category filter changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(0)
 
     def _on_supplier_filter_changed(self, supplier: str):
         """Handle supplier filter changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(0)
 
     def _on_item_type_filter_changed(self, item_type: str):
         """Handle item type filter changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(0)
 
     def _on_date_range_filter_changed(self, start_date, end_date):
         """Handle acquisition date-range filter changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(0)
 
     def _on_status_filter_changed(self, status: str):
         """Handle status filter changes."""
-        self._apply_current_filters()
+        self._schedule_filter_apply(0)
+
+    def _schedule_filter_apply(self, delay_ms: int = 0):
+        """Schedule filter application to reduce repeated table repopulation bursts."""
+        if delay_ms <= 0:
+            if self._filter_debounce_timer.isActive():
+                self._filter_debounce_timer.stop()
+            self._apply_current_filters()
+            return
+
+        self._filter_debounce_timer.start(delay_ms)
 
     def _apply_current_filters(self):
         """Apply all active filter controls to the inventory model."""
@@ -630,6 +643,8 @@ class InventoryPage(QWidget):
 
     def _on_clear_filters(self):
         """Handle clear filters request."""
+        if self._filter_debounce_timer.isActive():
+            self._filter_debounce_timer.stop()
         self.model.clear_filters()
         self._update_filtered_table()
 

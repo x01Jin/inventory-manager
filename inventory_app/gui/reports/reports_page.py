@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QListWidget,
+    QListWidgetItem,
     QSpinBox,
     QSplitter,
     QMessageBox,
@@ -43,6 +44,7 @@ class ReportsPage(QWidget):
         self.worker = None
         self.ui_updater = None
         self.current_report_type = "usage"
+        self._generated_report_paths: list[str] = []
         self.apply_theme()
         self.setup_ui()
 
@@ -654,6 +656,24 @@ class ReportsPage(QWidget):
         self.results_list = QListWidget()
         results_layout.addWidget(self.results_list)
 
+        actions_layout = QHBoxLayout()
+        self.open_report_btn = QPushButton("📂 Open Report")
+        self.open_report_btn.setEnabled(False)
+        self.open_report_btn.clicked.connect(self.open_selected_report)
+        actions_layout.addWidget(self.open_report_btn)
+
+        self.open_report_folder_btn = QPushButton("🗂️ Open Folder")
+        self.open_report_folder_btn.setEnabled(False)
+        self.open_report_folder_btn.clicked.connect(self.open_selected_report_folder)
+        actions_layout.addWidget(self.open_report_folder_btn)
+        actions_layout.addStretch()
+        results_layout.addLayout(actions_layout)
+
+        self.results_list.currentRowChanged.connect(self._on_results_selection_changed)
+        self.results_list.itemDoubleClicked.connect(
+            lambda _item: self.open_selected_report()
+        )
+
         status_layout.addWidget(results_group)
 
         # Recent Reports
@@ -1167,21 +1187,67 @@ class ReportsPage(QWidget):
         self.ui_updater.update_status("✅ Report generated successfully!")
         self.ui_updater.update_status(f"📁 File saved to: {file_path}")
 
-        # Add to results list
-        self.results_list.addItem(f"✅ {os.path.basename(file_path)}")
+        # Add to results list and retain absolute path for open actions
+        result_item = QListWidgetItem(f"✅ {os.path.basename(file_path)}")
+        self.results_list.addItem(result_item)
+        self._generated_report_paths.append(file_path)
+        self.results_list.setCurrentRow(self.results_list.count() - 1)
 
         # Update recent reports
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.ui_updater.add_recent_report(os.path.basename(file_path), timestamp)
 
-        # Try to open the file
-        try:
-            os.startfile(file_path)  # Windows specific
-            self.ui_updater.update_status("📂 Opening Excel file...")
-        except Exception as e:
-            self.ui_updater.update_status(f"Could not auto-open file: {str(e)}")
+        self.ui_updater.update_status(
+            "✅ Report ready. Use Open Report or Open Folder."
+        )
 
         self.reset_ui()
+
+    def _on_results_selection_changed(self, row: int):
+        """Enable/disable report action buttons based on current selection."""
+        has_valid_selection = 0 <= row < len(self._generated_report_paths)
+        self.open_report_btn.setEnabled(has_valid_selection)
+        self.open_report_folder_btn.setEnabled(has_valid_selection)
+
+    def _get_selected_report_path(self) -> str:
+        """Return selected generated report path, or empty string if invalid."""
+        row = self.results_list.currentRow()
+        if 0 <= row < len(self._generated_report_paths):
+            return self._generated_report_paths[row]
+        return ""
+
+    def open_selected_report(self):
+        """Open selected report file with the operating system default handler."""
+        file_path = self._get_selected_report_path()
+        if not file_path:
+            return
+
+        try:
+            os.startfile(file_path)
+            if self.ui_updater:
+                self.ui_updater.update_status(
+                    f"📂 Opened report: {os.path.basename(file_path)}"
+                )
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Open Report Failed", f"Could not open report: {str(e)}"
+            )
+
+    def open_selected_report_folder(self):
+        """Open folder containing the selected generated report."""
+        file_path = self._get_selected_report_path()
+        if not file_path:
+            return
+
+        folder_path = os.path.dirname(file_path)
+        try:
+            os.startfile(folder_path)
+            if self.ui_updater:
+                self.ui_updater.update_status(f"🗂️ Opened folder: {folder_path}")
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Open Folder Failed", f"Could not open folder: {str(e)}"
+            )
 
     def on_report_error(self, error_message):
         """Handle report generation error."""

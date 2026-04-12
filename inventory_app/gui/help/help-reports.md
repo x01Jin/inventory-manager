@@ -29,10 +29,11 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 ## **What each report contains (at-a-glance)**
 
 - **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE, PRE/WEEK 1-4/POST, and Total Usage. ACTUAL INVENTORY follows Task 10 stock policy.
-- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels), and report title period text shows exact selected dates (example: `Jan 1, 2026 - Jan 5, 2026`). Filtered by category.
+- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels), and report title period text shows exact selected dates (example: `Jan 1, 2026 - Jan 5, 2026`). Includes supplier in base columns and supports category filtering in UI.
 - **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits:
   - Consumables: `Original - Consumption - Disposal + Return`
   - Non-consumables: `Original - Disposal` (borrow/request affects availability, not baseline stock)
+  - Includes supplier names in exported rows.
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).
@@ -51,12 +52,13 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
   - Date Range Usage: `[granularity]_report_[TIMESTAMP].xlsx` (e.g., `weekly_report_20251201_120000.xlsx`)
   - Inventory: `inventory_[report_type]_[TIMESTAMP].xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
   - Trends: `trends_report_[group_by]_[TIMESTAMP].xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
-- The application saves the file to the application's working directory and will attempt to open it automatically (on Windows the app uses the OS to open the file). If automatic opening fails, the saved file path is shown in the status area so you can open it manually.
+- The application saves the file to the application's working directory. After generation, use **Open Report** or **Open Folder** in the Reports panel to open outputs.
 
 ## **Status & results panels**
 
 - **Status:** Shows progress, success, and error messages (e.g., "Generating report...", "✅ Report generated successfully!", or specific errors such as invalid date ranges or "No data found"). Failed report generation does not emit success messaging.
 - **Generated Reports:** A short list of generated files from the current session for quick reference.
+- **Open Report / Open Folder:** Actions below Generated Reports open the selected file or its containing folder.
 - **Recent Reports:** A timestamped activity list of recent reports created by the application.
 
 ## **Validation & common warnings**
@@ -97,7 +99,7 @@ Items with current stock of 0 (fully consumed or disposed) are automatically exc
 
 ## **Troubleshooting & support**
 
-- If automatic opening fails, check the Status box for the saved file path and open it from your file manager.
+- If opening a report fails, select the report and use **Open Folder**, then open the file manually from your file manager.
 - If you get "No data found" and believe data should exist, try expanding the date range or removing filters. If results are still missing, contact your administrator and include the filters and date range you used.
 - For repeated permission or I/O issues, check available disk space and file permissions for the application's working directory.
 

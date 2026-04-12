@@ -112,6 +112,7 @@ class ReportQueryBuilder:
             JOIN Items i ON i.id = ri.item_id
             JOIN Categories c ON c.id = i.category_id
             JOIN Requesters req ON req.id = r.requester_id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
             LEFT JOIN (
                 SELECT
                     ib.item_id,
@@ -145,7 +146,7 @@ class ReportQueryBuilder:
             if category_filter:
                 query += " AND c.name = ?"
             if supplier_filter:
-                query += " AND req.department = ?"
+                query += " AND s.name = ?"
             if not include_consumables:
                 query += " AND i.is_consumable = 0"
             if show_individual_only:
@@ -153,7 +154,7 @@ class ReportQueryBuilder:
 
             # GROUP BY clause
             group_by_columns = (
-                "i.id, i.name, c.name, i.size, i.brand, i.other_specifications"
+                "i.id, i.name, c.name, i.size, i.brand, i.other_specifications, s.name"
             )
             if is_normalized:
                 group_by_columns += ", p.period_key"
@@ -417,7 +418,8 @@ class ReportStatisticsBuilder:
         SELECT SUM(ri.quantity_requested) as total_used
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
-        JOIN Requesters req ON req.id = r.requester_id
+        JOIN Items i ON i.id = ri.item_id
+        LEFT JOIN Suppliers s ON s.id = i.supplier_id
         WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
@@ -425,7 +427,7 @@ class ReportStatisticsBuilder:
 
         # Add filters
         if supplier_filter:
-            total_query += " AND req.department = ?"
+            total_query += " AND s.name = ?"
             params.append(supplier_filter)
 
         return total_query, tuple(params)
@@ -444,7 +446,7 @@ class ReportStatisticsBuilder:
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
         JOIN Categories c ON c.id = i.category_id
-        JOIN Requesters req ON req.id = r.requester_id
+        LEFT JOIN Suppliers s ON s.id = i.supplier_id
         WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
@@ -452,7 +454,7 @@ class ReportStatisticsBuilder:
 
         # Add filters
         if supplier_filter:
-            category_query += " AND req.department = ?"
+            category_query += " AND s.name = ?"
             params.append(supplier_filter)
 
         category_query += " GROUP BY c.id, c.name ORDER BY qty DESC"
@@ -473,7 +475,7 @@ class ReportStatisticsBuilder:
         FROM Requisition_Items ri
         JOIN Requisitions r ON r.id = ri.requisition_id
         JOIN Items i ON i.id = ri.item_id
-        JOIN Requesters req ON req.id = r.requester_id
+        LEFT JOIN Suppliers s ON s.id = i.supplier_id
         WHERE r.lab_activity_date BETWEEN ? AND ?
         """
 
@@ -481,7 +483,7 @@ class ReportStatisticsBuilder:
 
         # Add filters
         if supplier_filter:
-            top_items_query += " AND req.department = ?"
+            top_items_query += " AND s.name = ?"
             params.append(supplier_filter)
 
         top_items_query += " GROUP BY i.id, i.name ORDER BY qty DESC LIMIT ?"
