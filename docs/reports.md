@@ -19,7 +19,7 @@ Generates a detailed monthly report in the format specified in beta test require
   - Row 1: Empty (spacing)
   - Row 2: Title header merged in columns F-G ("REPORT ON THE USAGE OF LABORATORY MATERIALS, EQUIPMENT AND APPRATUSES, ETC. FOR THE MONTH OF [MONTH]")
   - Row 3: Empty (spacing)
-  - Row 4: Base column headers (ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS) + Month name centered over week columns + "Total Number of" header
+  - Row 4: Base column headers (ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE) + Month name centered over week columns + "Total Number of" header
   - Row 5: Week labels (PRE, WEEK 1, WEEK 2, WEEK 3, WEEK 4, POST) + "Usage per Item" header
   - Row 6: Date range labels under each week (e.g., "Oct 3-7", "Oct 10-14")
   - Row 7+: Data rows grouped by category with category header rows
@@ -39,10 +39,12 @@ Generates a detailed monthly report in the format specified in beta test require
 - **Columns**:
   - **ITEMS**: Item name (equipment, apparatus, etc.)
   - **CATEGORIES**: Category name (Apparatus, Equipment, Chemicals, etc.)
-  - **ACTUAL INVENTORY**: Current stock quantity from Item_Batches
+  - **ACTUAL INVENTORY**: Current stock using Task 10 policy (consumables deduct consumption/disposal and add returns; non-consumables deduct disposal only)
   - **SIZE**: Item size specification
   - **BRAND**: Item brand
   - **OTHER SPECIFICATIONS**: Additional specifications (wood, metal, glass, etc.)
+  - **GRADE 7 / GRADE 8 / GRADE 9 / GRADE 10**: Per-item grade usage tally within selected month
+  - **TOTAL GRADE USAGE**: Sum of Grade 7-10 usage for the item
   - **PRE/WEEK 1-4/POST**: Usage count for each period based on lab_activity_date
   - **Total Number of Usage per Item**: Sum of all weekly usage
 
@@ -236,14 +238,14 @@ Common Reports
 
 The Usage by Grade Level Report tracks item consumption across educational groups:
 
-- **Columns**: Item Name, Category, Grade Level, Section, Quantity Used, Lab Activity, Activity Date
+- **Columns**: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7, GRADE 8, GRADE 9, GRADE 10, TOTAL QUANTITY
 - **Filtering**:
   - By date range
   - By category
   - By grade level (All Grades or specific)
   - By section (All Sections or specific)
-  - **Individual Requests Only**: Checkbox to show only ad-hoc/unaffiliated requisitions (grade/section filters disabled when this is checked)
-- **Source**: Requisitions with Requesters joined to get grade/section data
+  - **Individual Requests Only**: Checkbox to show only ad-hoc/unaffiliated requisitions. When disabled, export includes both regular and individual requests.
+- **Source**: Requisitions joined with Requesters and grouped per item/category with grade-level SUM columns
 
 ## Defective Items Report
 

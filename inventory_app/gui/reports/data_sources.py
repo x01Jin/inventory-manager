@@ -55,7 +55,7 @@ def get_dynamic_report_data(
                 item_key = (
                     row.get("ITEMS"),
                     row.get("CATEGORIES"),
-                    row.get("ACTUAL_INVENTORY"),
+                    row.get("ACTUAL INVENTORY", row.get("ACTUAL_INVENTORY")),
                     row.get("SIZE"),
                     row.get("BRAND"),
                     row.get("OTHER SPECIFICATIONS"),
@@ -64,7 +64,7 @@ def get_dynamic_report_data(
                     base = {
                         "ITEMS": item_key[0],
                         "CATEGORIES": item_key[1],
-                        "ACTUAL_INVENTORY": item_key[2],
+                        "ACTUAL INVENTORY": item_key[2],
                         "SIZE": item_key[3],
                         "BRAND": item_key[4],
                         "OTHER SPECIFICATIONS": item_key[5],
@@ -605,20 +605,56 @@ def get_usage_by_grade_level_data(
         List of usage records by grade level
     """
     try:
+        grade_sum_columns = [
+            "SUM(CASE WHEN req.grade_level LIKE '%7%' THEN ri.quantity_requested ELSE 0 END) AS \"GRADE 7\"",
+            "SUM(CASE WHEN req.grade_level LIKE '%8%' THEN ri.quantity_requested ELSE 0 END) AS \"GRADE 8\"",
+            "SUM(CASE WHEN req.grade_level LIKE '%9%' THEN ri.quantity_requested ELSE 0 END) AS \"GRADE 9\"",
+            "SUM(CASE WHEN req.grade_level LIKE '%10%' THEN ri.quantity_requested ELSE 0 END) AS \"GRADE 10\"",
+        ]
+
         query = """
             SELECT
-                i.name AS "Item Name",
-                c.name AS "Category",
-                req.grade_level AS "Grade Level",
-                req.section AS "Section",
-                SUM(ri.quantity_requested) AS "Quantity Used",
-                r.lab_activity_name AS "Lab Activity",
-                r.lab_activity_date AS "Activity Date"
+                i.name AS "ITEMS",
+                c.name AS "CATEGORIES",
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.disposed_qty, 0)
+                END AS "ACTUAL INVENTORY",
+                COALESCE(i.size, '') AS "SIZE",
+                COALESCE(i.brand, '') AS "BRAND",
+                COALESCE(i.other_specifications, '') AS "OTHER SPECIFICATIONS",
+                """
+        query += ",\n                ".join(grade_sum_columns)
+        query += """,
+                SUM(ri.quantity_requested) AS "TOTAL QUANTITY"
             FROM Requisition_Items ri
             JOIN Requisitions r ON r.id = ri.requisition_id
             JOIN Items i ON i.id = ri.item_id
             JOIN Categories c ON c.id = i.category_id
             JOIN Requesters req ON req.id = r.requester_id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    COALESCE(SUM(ib.quantity_received), 0) AS original_stock
+                FROM Item_Batches ib
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+            ) stock ON stock.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END), 0) AS consumed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END), 0) AS disposed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END), 0) AS returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON movements.item_id = i.id
             WHERE r.lab_activity_date BETWEEN ? AND ?
             """
 
@@ -638,13 +674,12 @@ def get_usage_by_grade_level_data(
 
         if show_individual_only:
             query += " AND r.is_individual = 1"
-        else:
-            query += " AND r.is_individual = 0"
 
         query += """
-            GROUP BY i.id, i.name, c.name, req.grade_level, req.section,
-                     r.lab_activity_name, r.lab_activity_date
-            ORDER BY r.lab_activity_date DESC, req.grade_level, req.section, i.name
+            GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications,
+                     i.is_consumable, stock.original_stock,
+                     movements.consumed_qty, movements.disposed_qty, movements.returned_qty
+            ORDER BY c.name, i.name
         """
 
         return db.execute_query(query, tuple(params)) or []

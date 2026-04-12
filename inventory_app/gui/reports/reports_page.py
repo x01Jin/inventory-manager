@@ -249,6 +249,7 @@ class ReportsPage(QWidget):
         monthly_info_text.setPlainText(
             "Monthly Usage Report generates an Excel file with:\n"
             "• Items grouped by category (Apparatus, Equipment, etc.)\n"
+            "• Grade 7-10 tally columns per item\n"
             "• Weekly breakdown within the selected month (PRE, WEEK 1-4, POST)\n"
             "• Total usage per item and category\n"
             "• Matches sample Excel format for lab activity reporting"
@@ -898,22 +899,27 @@ class ReportsPage(QWidget):
                     f"Generating monthly report for {month_name} {year}..."
                 )
 
-            # Import and generate the monthly report
-            from inventory_app.gui.reports.monthly_usage_report import (
-                generate_monthly_usage_report,
-            )
+            # Run on background thread to keep UI responsive on heavy datasets.
+            month_start = date(year, month, 1)
+            if month == 12:
+                month_end = date(year, 12, 31)
+            else:
+                month_end = date(year, month + 1, 1) - timedelta(days=1)
 
-            result = generate_monthly_usage_report(
-                year=year,
-                month=month,
+            self.worker = ReportWorker(
+                "usage",
+                month_start,
+                month_end,
+                usage_report_type="monthly",
+                monthly_year=year,
+                monthly_month=month,
                 category_filter=category_filter,
                 report_style=report_style,
             )
-
-            if result.startswith("Error") or result.startswith("No data"):
-                self.on_report_error(result)
-            else:
-                self.on_report_finished(result)
+            self.worker.progress.connect(self.update_progress)
+            self.worker.finished.connect(self.on_report_finished)
+            self.worker.error.connect(self.on_report_error)
+            self.worker.start()
 
         except Exception as e:
             logger.error(f"Failed to generate monthly usage report: {e}")

@@ -35,9 +35,8 @@ from inventory_app.gui.requisitions.requisition_management import (
     NewRequisitionDialog,
     EditRequisitionDialog,
     ItemReturnDialog,
-    status_watcher,
 )
-from inventory_app.gui.utils.worker import Worker
+from inventory_app.gui.utils.worker import Worker, run_in_background
 from inventory_app.gui.utils.parallel_loader import (
     ParallelDataLoader,
     LoadTask,
@@ -164,7 +163,6 @@ class RequisitionsPage(QWidget):
         left_layout.addWidget(self.filters)
         left_layout.setSpacing(10)
 
-
         # Table section
         table_group = QGroupBox("Laboratory Requisitions")
         table_group.setSizePolicy(
@@ -193,7 +191,9 @@ class RequisitionsPage(QWidget):
         # Status bar
         Theme = get_current_theme()
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
+        self.status_label.setStyleSheet(
+            f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;"
+        )
         layout.addWidget(self.status_label)
 
     def _setup_connections(self):
@@ -229,18 +229,19 @@ class RequisitionsPage(QWidget):
         # Create load tasks for parallel execution
         def load_requisition_data():
             """Load requisition data from database."""
+            updated_count = self._update_all_requisition_statuses()
             success = self.model.load_data()
             if not success:
                 raise Exception("Failed to load requisition data from database")
             return {
                 "success": success,
                 "all_requisitions": self.model.all_requisitions,
+                "updated_count": updated_count,
             }
 
         def load_requester_options():
             """Load requester filter options."""
-            self.filters._load_requester_options()
-            return True
+            return self.model.controller.get_requesters_with_requisitions()
 
         # Use parallel loader for concurrent loading
         self._parallel_loader = parallel_load_manager.load_page_data(
@@ -287,14 +288,15 @@ class RequisitionsPage(QWidget):
                 self._set_loading_state(False)
                 return
 
-            # Update all requisition statuses using the status watcher
-            updated_count = self._update_all_requisition_statuses()
+            updated_count = int(req_result.get("updated_count") or 0)
             if updated_count > 0:
                 logger.info(
                     f"Updated {updated_count} requisition statuses during refresh"
                 )
-                # Reload data to get updated statuses
-                self.model.load_data()
+
+            requester_options = results.get("requesters", [])
+            if isinstance(requester_options, list):
+                self.filters.set_requester_options(requester_options)
 
             # Get filtered rows for display
             rows = self.model.get_filtered_rows()
@@ -344,18 +346,13 @@ class RequisitionsPage(QWidget):
             return
 
         # Disable sorting during population
-        prev_sorting = self.table.isSortingEnabled()
-        self.table.setSortingEnabled(False)
-
-        # Clear table
-        self.table.setRowCount(0)
+        self.table.begin_batch_population()
 
         # Process in batches
         batch_size = 25
         self._pending_rows = rows
         self._batch_index = 0
         self._batch_size = batch_size
-        self._prev_sorting = prev_sorting
 
         # Update progress bar for batched loading
         self.progress_bar.setRange(0, total_rows)
@@ -383,8 +380,8 @@ class RequisitionsPage(QWidget):
             self._finish_requisition_table_population()
             return
 
-        # Add batch rows to table
-        self.table.populate_table(self._pending_rows[:end])
+        # Add only next batch rows to table
+        self.table.append_rows(self._pending_rows[start:end])
 
         # Update progress
         self.progress_bar.setValue(end)
@@ -402,13 +399,7 @@ class RequisitionsPage(QWidget):
     def _finish_requisition_table_population(self):
         """Finish table population and restore state."""
         # Restore sorting
-        self.table.setSortingEnabled(getattr(self, "_prev_sorting", True))
-        if self.table.isSortingEnabled():
-            hdr = self.table.horizontalHeader()
-            if hdr is not None:
-                hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
-                hdr.setSortIndicatorShown(False)
-                self.table.sortItems(0, Qt.SortOrder.AscendingOrder)
+        self.table.finalize_batch_population()
 
         # Clean up
         self._pending_rows = None
@@ -431,18 +422,6 @@ class RequisitionsPage(QWidget):
         self._current_worker = None
         self._parallel_loader = None
         self._set_loading_state(False)
-
-    def _set_loading_state(self, is_loading: bool):
-        """Update UI loading state."""
-        self.progress_bar.setVisible(is_loading)
-        if is_loading:
-            self.progress_bar.setRange(0, 0)  # Indeterminate
-        else:
-            self.progress_bar.setRange(0, 100)
-
-        # Disable buttons during load
-        self.refresh_button.setEnabled(not is_loading)
-        self.add_button.setEnabled(not is_loading)
 
     def new_requisition(self):
         """Open dialog to create a new requisition."""
@@ -669,28 +648,65 @@ class RequisitionsPage(QWidget):
             if not file_path:
                 return  # User cancelled
 
-            # Generate HTML report
-            html_content = self._generate_requisition_html(requisition_summary)
-
-            # Write to file
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Requisition report saved successfully!\n\n"
-                f"File: {file_path}\n\n"
-                "You can open this file in a browser and use Print (Ctrl+P) to print it.",
+            self._set_loading_state(True, f"Exporting requisition {requisition_id}...")
+            run_in_background(
+                self._build_and_save_requisition_html,
+                requisition_summary,
+                file_path,
+                on_result=self._on_requisition_export_complete,
+                on_error=self._on_requisition_export_error,
+                on_finished=lambda: self._set_loading_state(False),
             )
-
-            logger.info(f"Requisition {requisition_id} exported to {file_path}")
 
         except Exception as e:
             logger.error(f"Failed to print requisition {requisition_id}: {e}")
             QMessageBox.critical(
                 self, "Error", f"Failed to export requisition: {str(e)}"
             )
+
+    @staticmethod
+    def _build_and_save_requisition_html(
+        req_summary, file_path: str
+    ) -> tuple[int | None, str]:
+        html_content = RequisitionsPage._generate_requisition_html(req_summary)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        requisition_id = getattr(getattr(req_summary, "requisition", None), "id", None)
+        return requisition_id, file_path
+
+    def _on_requisition_export_complete(self, result: tuple[int | None, str]) -> None:
+        requisition_id, file_path = result
+        QMessageBox.information(
+            self,
+            "Success",
+            f"Requisition report saved successfully!\n\n"
+            f"File: {file_path}\n\n"
+            "You can open this file in a browser and use Print (Ctrl+P) to print it.",
+        )
+        logger.info(f"Requisition {requisition_id} exported to {file_path}")
+
+    def _on_requisition_export_error(self, error: tuple) -> None:
+        message = "Failed to export requisition"
+        if len(error) >= 2:
+            message = str(error[1])
+        QMessageBox.critical(self, "Error", f"Failed to export requisition: {message}")
+
+    def _set_loading_state(self, is_loading: bool, text: str = "Loading...") -> None:
+        self.refresh_button.setEnabled(not is_loading)
+        self.add_button.setEnabled(not is_loading)
+        self.progress_bar.setVisible(is_loading)
+        if is_loading:
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat(text)
+            self.edit_button.setEnabled(False)
+            self.return_button.setEnabled(False)
+            self.delete_button.setEnabled(False)
+            self.print_button.setEnabled(False)
+        else:
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat("Loading requisitions... %p%")
+            self._update_action_button_states(self.table.get_selected_requisition_id())
 
     @staticmethod
     def _generate_requisition_html(req_summary) -> str:
@@ -851,26 +867,26 @@ class RequisitionsPage(QWidget):
             activity_section_html = ""
         else:
             requester = req_summary.requester
-            req_type = getattr(requester, 'requester_type', None) or 'faculty'
+            req_type = getattr(requester, "requester_type", None) or "faculty"
             requester_info_html = f"""
             <span class="info-label">Name:</span>
             <span>{requester.name}</span>
             <span class="info-label">Type:</span>
             <span>{req_type.title()}</span>
             """
-            if req_type == 'student':
+            if req_type == "student":
                 if requester.grade_level and requester.section:
                     requester_info_html += f"""
                     <span class="info-label">Grade/Section:</span>
                     <span>{requester.grade_level} - {requester.section}</span>
                     """
-            elif req_type == 'teacher':
+            elif req_type == "teacher":
                 if requester.department:
                     requester_info_html += f"""
                     <span class="info-label">Department:</span>
                     <span>{requester.department}</span>
                     """
-            elif req_type == 'faculty':
+            elif req_type == "faculty":
                 pass
             activity_section_html = f"""
     <div class="section">
@@ -1244,32 +1260,46 @@ class RequisitionsPage(QWidget):
         try:
             from inventory_app.database.connection import db
 
-            # Get all requisitions that might need status updates
-            query = """
-            SELECT id FROM Requisitions
-            WHERE status IN ('requested', 'active', 'overdue')
-            AND (expected_return IS NOT NULL OR expected_request IS NOT NULL)
-            """
-            rows = db.execute_query(query)
+            rows = db.execute_query(
+                """
+                SELECT
+                    id,
+                    status,
+                    CASE
+                        WHEN status = 'returned' THEN 'returned'
+                        WHEN expected_request IS NOT NULL
+                             AND datetime(expected_request) > datetime('now') THEN 'requested'
+                        WHEN expected_request IS NOT NULL
+                             AND expected_return IS NOT NULL
+                             AND datetime(expected_request) <= datetime('now')
+                             AND datetime(expected_return) > datetime('now') THEN 'active'
+                        WHEN expected_return IS NOT NULL
+                             AND datetime(expected_return) <= datetime('now') THEN 'overdue'
+                        ELSE 'requested'
+                    END AS computed_status
+                FROM Requisitions
+                WHERE status IN ('requested', 'active', 'overdue')
+                """,
+                use_cache=False,
+            )
 
-            if not rows:
+            updates = [
+                (row["computed_status"], row["id"])
+                for row in rows
+                if row.get("computed_status")
+                and row["computed_status"] != row["status"]
+            ]
+
+            if not updates:
                 return 0
 
-            updated_count = 0
+            with db.transaction(immediate=True):
+                db.execute_many(
+                    "UPDATE Requisitions SET status = ? WHERE id = ?",
+                    updates,
+                )
 
-            # Update status for each requisition using the status watcher
-            for row in rows:
-                req_id = row["id"]
-                try:
-                    new_status = status_watcher.update_status_for_requisition(req_id)
-                    if new_status:
-                        updated_count += 1
-                except Exception as e:
-                    logger.error(
-                        f"Failed to update status for requisition {req_id}: {e}"
-                    )
-
-            return updated_count
+            return len(updates)
 
         except Exception as e:
             logger.error(f"Failed to update all requisition statuses: {e}")

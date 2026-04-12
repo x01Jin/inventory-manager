@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 import atexit
+import threading
 
 # Prefer package-relative imports — this will work when the module is executed
 # as a package with `python -m inventory_app.main`. If the module is executed
@@ -113,6 +114,46 @@ def verify_components() -> bool:
     return True
 
 
+def run_summary_backfill_async() -> None:
+    """Run summary backfill on a background thread so startup stays responsive."""
+
+    def _backfill() -> None:
+        try:
+            summary_tables_service.backfill_summaries()
+            logger.info("Summary backfill completed in background")
+        except Exception:
+            logger.exception("Background summary backfill failed")
+
+    thread = threading.Thread(target=_backfill, name="summary-backfill", daemon=True)
+    thread.start()
+
+
+def run_reference_normalization_async() -> None:
+    """Normalize reference values on a background thread to avoid startup stalls."""
+
+    def _normalize() -> None:
+        try:
+            success, message, summary = normalize_reference_values_for_startup(
+                editor_name="System"
+            )
+            if success:
+                logger.info(message)
+                logger.debug(f"Reference normalization summary: {summary}")
+            else:
+                logger.warning(message)
+        except Exception as e:
+            logger.warning(
+                f"Reference normalization skipped due to unexpected error: {e}"
+            )
+
+    thread = threading.Thread(
+        target=_normalize,
+        name="reference-normalization",
+        daemon=True,
+    )
+    thread.start()
+
+
 def main() -> int:
     """Start the application and return a suitable process exit code.
 
@@ -147,19 +188,7 @@ def main() -> int:
             logger.error("Application startup failed: Task 9 audit compatibility error")
             return 1
 
-        try:
-            success, message, summary = normalize_reference_values_for_startup(
-                editor_name="System"
-            )
-            if success:
-                logger.info(message)
-                logger.debug(f"Reference normalization summary: {summary}")
-            else:
-                logger.warning(message)
-        except Exception as e:
-            logger.warning(
-                f"Reference normalization skipped due to unexpected error: {e}"
-            )
+        run_reference_normalization_async()
 
         if not verify_components():
             logger.warning(
@@ -170,8 +199,7 @@ def main() -> int:
         try:
             if summary_tables_service.initialize():
                 logger.info("Summary tables service initialized")
-                # Backfill summaries if this is a new database
-                summary_tables_service.backfill_summaries()
+                run_summary_backfill_async()
                 atexit.register(summary_tables_service.shutdown)
             else:
                 logger.warning(

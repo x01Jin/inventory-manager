@@ -26,6 +26,7 @@ class RequestersActivityManager:
         self,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requester creation activity.
@@ -33,6 +34,7 @@ class RequestersActivityManager:
         Args:
             requester_name: Name of the added requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -48,12 +50,11 @@ class RequestersActivityManager:
                 entity_id=None,  # Will be set by caller if needed
                 entity_type="requester",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
-                logger.info(
-                    f"Logged requester addition activity for: {requester_name}"
-                )
+                logger.info(f"Logged requester addition activity for: {requester_name}")
             else:
                 logger.error(
                     f"Failed to log requester addition activity for: {requester_name}"
@@ -69,6 +70,7 @@ class RequestersActivityManager:
         self,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requester update activity.
@@ -76,6 +78,7 @@ class RequestersActivityManager:
         Args:
             requester_name: Name of the updated requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -91,12 +94,11 @@ class RequestersActivityManager:
                 entity_id=None,  # Will be set by caller if needed
                 entity_type="requester",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
-                logger.info(
-                    f"Logged requester update activity for: {requester_name}"
-                )
+                logger.info(f"Logged requester update activity for: {requester_name}")
             else:
                 logger.error(
                     f"Failed to log requester update activity for: {requester_name}"
@@ -112,6 +114,7 @@ class RequestersActivityManager:
         self,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requester deletion activity.
@@ -119,6 +122,7 @@ class RequestersActivityManager:
         Args:
             requester_name: Name of the deleted requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -134,12 +138,11 @@ class RequestersActivityManager:
                 entity_id=None,  # Will be set by caller if needed
                 entity_type="requester",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
-                logger.info(
-                    f"Logged requester deletion activity for: {requester_name}"
-                )
+                logger.info(f"Logged requester deletion activity for: {requester_name}")
             else:
                 logger.error(
                     f"Failed to log requester deletion activity for: {requester_name}"

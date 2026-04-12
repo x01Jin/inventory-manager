@@ -275,6 +275,7 @@ class BaseRequisitionDialog(QDialog):
 
         # Async loading state
         self._items_worker: Optional[Worker] = None
+        self._items_prepare_worker: Optional[Worker] = None
         self._is_loading_items = False
 
         self._setup_ui()
@@ -501,6 +502,8 @@ class BaseRequisitionDialog(QDialog):
         # Cancel any existing worker
         if self._items_worker:
             self._items_worker.cancel()
+        if self._items_prepare_worker:
+            self._items_prepare_worker.cancel()
 
         self._is_loading_items = True
 
@@ -520,9 +523,9 @@ class BaseRequisitionDialog(QDialog):
         self._items_worker = run_in_background(
             self._load_items_background,
             exclude_requisition_id,
-            on_result=self._on_items_loaded,
+            on_result=self._on_items_raw_loaded,
             on_error=self._on_items_load_error,
-            on_finished=self._on_items_load_finished,
+            on_finished=self._on_items_fetch_finished,
         )
 
     def _load_items_background(self, exclude_requisition_id: Optional[int]) -> list:
@@ -536,37 +539,61 @@ class BaseRequisitionDialog(QDialog):
         )
         return items
 
-    def _on_items_loaded(self, items: list):
-        """Handle items loaded - start batched population on main thread."""
+    def _on_items_raw_loaded(self, items: list):
+        """Start background preprocessing after raw items are fetched."""
+        selected_items_snapshot = [dict(item) for item in self.selected_items]
+
+        self.items_progress_bar.setRange(0, 0)
+        self.items_progress_bar.setFormat("Preparing items...")
+
+        self._items_prepare_worker = run_in_background(
+            self._prepare_items_for_display_background,
+            items,
+            selected_items_snapshot,
+            on_result=self._on_items_loaded,
+            on_error=self._on_items_load_error,
+            on_finished=self._on_items_load_finished,
+        )
+
+    def _prepare_items_for_display_background(
+        self, items: list, selected_items_snapshot: list
+    ) -> list:
+        """Prepare item payload off the GUI thread."""
+        selected_by_batch = {}
+        for selected in selected_items_snapshot:
+            batch_id = selected.get("batch_id")
+            if batch_id is None:
+                continue
+            selected_by_batch[batch_id] = selected_by_batch.get(batch_id, 0) + int(
+                selected.get("quantity", 0) or 0
+            )
+
+        prepared_items = []
+        for item in items:
+            batch_id = item.get("batch_id")
+            db_available = int(item.get("available_stock", 0) or 0)
+            selected_qty = selected_by_batch.get(batch_id, 0)
+            real_time_available = max(0, db_available - selected_qty)
+
+            if real_time_available <= 0:
+                continue
+
+            prepared_item = dict(item)
+            prepared_item["real_time_available_stock"] = real_time_available
+            prepared_items.append(prepared_item)
+
+        return prepared_items
+
+    def _on_items_loaded(self, prepared_items: list):
+        """Handle prepared items and start batched population on main thread."""
         from PyQt6.QtCore import QTimer
 
         try:
-            self._loaded_items = items
+            self._loaded_items = prepared_items
 
             # Clear list and prepare for batched loading
             self.available_items_list.clear()
-
-            # Pre-filter items based on currently selected items
-            # (subtract selected quantities from available stock)
-            self._items_to_display = []
-
-            for item in items:
-                # Calculate real-time available: DB available - currently selected
-                db_available = item.get("available_stock", 0)
-                selected_qty = sum(
-                    sel.get("quantity", 0)
-                    for sel in self.selected_items
-                    if sel.get("batch_id") == item.get("batch_id")
-                )
-                real_time_available = max(0, db_available - selected_qty)
-
-                # Skip items with no available stock
-                if real_time_available <= 0:
-                    continue
-
-                # Store the real-time stock for display
-                item["real_time_available_stock"] = real_time_available
-                self._items_to_display.append(item)
+            self._items_to_display = prepared_items
 
             # Setup batched population
             self._items_batch_index = 0
@@ -657,15 +684,22 @@ class BaseRequisitionDialog(QDialog):
         """Handle items load error (runs on main thread)."""
         exctype, value, tb = error_tuple
         logger.error(f"Failed to load available items: {value}\n{tb}")
+        self._is_loading_items = False
+        self._items_worker = None
+        self._items_prepare_worker = None
         self.items_progress_bar.setVisible(False)
         if hasattr(self, "add_item_btn"):
             self.add_item_btn.setEnabled(True)
         QMessageBox.critical(self, "Error", f"Failed to load items: {str(value)}")
 
+    def _on_items_fetch_finished(self):
+        """Handle raw items fetch completion."""
+        self._items_worker = None
+
     def _on_items_load_finished(self):
         """Handle items load finished (runs on main thread)."""
         self._is_loading_items = False
-        self._items_worker = None
+        self._items_prepare_worker = None
 
     def search_items(self, search_text: str):
         """Filter items based on search text with batched processing to prevent UI freeze."""
@@ -718,6 +752,7 @@ class BaseRequisitionDialog(QDialog):
             return
 
         # Process batch
+        self.available_items_list.setUpdatesEnabled(False)
         for i in range(start, end):
             item = self.available_items_list.item(i)
             if item is not None:
@@ -732,6 +767,11 @@ class BaseRequisitionDialog(QDialog):
                         or not self._search_text.strip()
                     )
                     item.setHidden(not visible)
+
+        self.available_items_list.setUpdatesEnabled(True)
+        viewport = self.available_items_list.viewport()
+        if viewport is not None:
+            viewport.update()
 
         # Process events to keep UI responsive
         QApplication.processEvents()

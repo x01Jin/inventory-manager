@@ -117,8 +117,18 @@ class ReportQueryBuilder:
                     ib.item_id,
                     SUM(ib.quantity_received) as total_stock
                 FROM Item_Batches ib
+                WHERE ib.disposal_date IS NULL
                 GROUP BY ib.item_id
             ) stock ON i.id = stock.item_id
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = "CONSUMPTION" THEN sm.quantity ELSE 0 END), 0) AS consumed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = "DISPOSAL" THEN sm.quantity ELSE 0 END), 0) AS disposed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = "RETURN" THEN sm.quantity ELSE 0 END), 0) AS returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON movements.item_id = i.id
             """
             # If normalized, CROSS JOIN the periods CTE so each item/period row is produced
             if is_normalized:
@@ -132,6 +142,8 @@ class ReportQueryBuilder:
             WHERE r.lab_activity_date >= ? AND r.lab_activity_date < ?
             """
 
+            if category_filter:
+                query += " AND c.name = ?"
             if supplier_filter:
                 query += " AND req.department = ?"
             if not include_consumables:

@@ -257,7 +257,7 @@ class DarkTheme:
 
             QTableWidget::item {{
                 padding: 4px 8px;
-                border_bottom: 1px solid {DarkTheme.BORDER_COLOR};
+                border-bottom: 1px solid {DarkTheme.BORDER_COLOR};
             }}
 
             QTableWidget::item:selected {{
@@ -743,7 +743,7 @@ class DarkTheme:
             QListWidget::item {{
                 padding: 4px 8px;
                 color: {DarkTheme.TEXT_PRIMARY};
-                border_bottom: 1px solid {DarkTheme.BORDER_COLOR};
+                border-bottom: 1px solid {DarkTheme.BORDER_COLOR};
             }}
 
             QListWidget::item:selected {{
@@ -913,7 +913,7 @@ class LightTheme:
 
             QTableWidget::item {{
                 padding: 4px 8px;
-                border_bottom: 1px solid {LightTheme.BORDER_COLOR};
+                border-bottom: 1px solid {LightTheme.BORDER_COLOR};
             }}
 
             QTableWidget::item:selected {{

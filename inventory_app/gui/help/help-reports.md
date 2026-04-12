@@ -28,7 +28,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 
 ## **What each report contains (at-a-glance)**
 
-- **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, WEEK 1-4, and Total Usage. Professional layout matching laboratory standards.
+- **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE, PRE/WEEK 1-4/POST, and Total Usage. ACTUAL INVENTORY follows Task 10 stock policy.
 - **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels). Filtered by category.
 - **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits:
   - Consumables: `Original - Consumption - Disposal + Return`
@@ -39,7 +39,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 - **Calibration Due Report:** Items in calibration-enabled categories (default: Equipment) with calibration due within the selected window.
 - **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, reason, and field-level old/new values when available.
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
-- **Usage by Grade Level:** Usage breakdown by requester grade level and section, showing lab activity name and date. Useful for tracking material usage across different educational groups.
+- **Usage by Grade Level:** Item-level usage breakdown with Grade 7/8/9/10 tally columns plus TOTAL QUANTITY and inventory descriptors (size, brand, specs). Supports date range, category, grade, section, and individual-request filtering.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.
 - **Audit Log Report:** Unified audit history including item/requisition changes, disposals, defective recordings, and activity log events.
 - **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, yearly) depending on granularity.

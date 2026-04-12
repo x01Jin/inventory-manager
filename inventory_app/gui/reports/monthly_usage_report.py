@@ -70,6 +70,22 @@ class WeekPeriod(NamedTuple):
     date_range: str  # e.g., "Oct 3-7"
 
 
+def _normalize_grade_level(raw_grade: str) -> str:
+    """Normalize grade level text to canonical labels: Grade 7..10."""
+    value = (raw_grade or "").strip()
+    if not value:
+        return ""
+
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if digits in {"7", "8", "9", "10"}:
+        return f"Grade {digits}"
+
+    lowered = value.lower()
+    if lowered in {"grade 7", "grade 8", "grade 9", "grade 10"}:
+        return lowered.title()
+    return ""
+
+
 def get_month_weeks(year: int, month: int) -> List[WeekPeriod]:
     """
     Get weekly date ranges for a specific month with PRE/POST excess handling.
@@ -180,23 +196,52 @@ def get_monthly_usage_data(
     """
     try:
         weeks = get_month_weeks(year, month)
+        first_day = date(year, month, 1)
+        _, last_day_num = monthrange(year, month)
+        last_day = date(year, month, last_day_num)
 
         if not weeks:
             return [], []
 
-        # Build query to get base item data with stock
+        # Build query to get base item data with stock.
+        # ACTUAL INVENTORY follows Task 10 stock semantics.
         query = """
             SELECT
                 i.id AS item_id,
                 i.name AS item_name,
                 c.name AS category,
-                COALESCE(SUM(ib.quantity_received), 0) AS actual_inventory,
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.disposed_qty, 0)
+                END AS actual_inventory,
                 i.size,
                 i.brand,
                 i.other_specifications
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
-            LEFT JOIN Item_Batches ib ON ib.item_id = i.id AND ib.disposal_date IS NULL
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    COALESCE(SUM(ib.quantity_received), 0) AS original_stock
+                FROM Item_Batches ib
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+            ) stock ON stock.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'CONSUMPTION' THEN sm.quantity ELSE 0 END), 0) AS consumed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'DISPOSAL' THEN sm.quantity ELSE 0 END), 0) AS disposed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' THEN sm.quantity ELSE 0 END), 0) AS returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON movements.item_id = i.id
         """
 
         params: List = []
@@ -204,12 +249,51 @@ def get_monthly_usage_data(
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications ORDER BY c.name, i.name"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty ORDER BY c.name, i.name"
 
         base_items = db.execute_query(query, tuple(params)) or []
 
         if not base_items:
             return [], weeks
+
+        grade_usage_rows = (
+            db.execute_query(
+                """
+                SELECT
+                    ri.item_id,
+                    req.grade_level,
+                    SUM(ri.quantity_requested) AS quantity
+                FROM Requisition_Items ri
+                JOIN Requisitions r ON r.id = ri.requisition_id
+                JOIN Requesters req ON req.id = r.requester_id
+                WHERE r.lab_activity_date >= ? AND r.lab_activity_date <= ?
+                GROUP BY ri.item_id, req.grade_level
+                """,
+                (first_day.isoformat(), last_day.isoformat()),
+            )
+            or []
+        )
+
+        grade_usage_map: Dict[int, Dict[str, int]] = {}
+        for grade_row in grade_usage_rows:
+            item_id = grade_row.get("item_id")
+            if item_id is None:
+                continue
+            normalized_grade = _normalize_grade_level(
+                grade_row.get("grade_level") or ""
+            )
+            if not normalized_grade:
+                continue
+            if item_id not in grade_usage_map:
+                grade_usage_map[item_id] = {
+                    "Grade 7": 0,
+                    "Grade 8": 0,
+                    "Grade 9": 0,
+                    "Grade 10": 0,
+                }
+            grade_usage_map[item_id][normalized_grade] += int(
+                grade_row.get("quantity") or 0
+            )
 
         # Get usage per week for each item
         # NOTE: Usage based on lab_activity_date per beta test requirements
@@ -234,6 +318,15 @@ def get_monthly_usage_data(
                 "BRAND": item["brand"] or "",
                 "OTHER SPECIFICATIONS": item["other_specifications"] or "",
             }
+
+            item_grades = grade_usage_map.get(item["item_id"], {})
+            row["GRADE 7"] = item_grades.get("Grade 7", 0)
+            row["GRADE 8"] = item_grades.get("Grade 8", 0)
+            row["GRADE 9"] = item_grades.get("Grade 9", 0)
+            row["GRADE 10"] = item_grades.get("Grade 10", 0)
+            row["TOTAL GRADE USAGE"] = (
+                row["GRADE 7"] + row["GRADE 8"] + row["GRADE 9"] + row["GRADE 10"]
+            )
 
             total_usage = 0
             for week in weeks:
@@ -352,6 +445,11 @@ def create_monthly_usage_excel(
             "SIZE",
             "BRAND",
             "OTHER SPECIFICATIONS",
+            "GRADE 7",
+            "GRADE 8",
+            "GRADE 9",
+            "GRADE 10",
+            "TOTAL GRADE USAGE",
         ]
 
         # Week headers from week definitions
@@ -379,7 +477,7 @@ def create_monthly_usage_excel(
         # (No content needed)
 
         # === ROW 4-6: Base headers merged vertically + Month/Week headers ===
-        week_start_col = len(base_headers) + 1  # Column G = 7
+        week_start_col = len(base_headers) + 1
         week_end_col = week_start_col + len(weeks) - 1
         total_col = week_end_col + 1
 
@@ -464,6 +562,11 @@ def create_monthly_usage_excel(
             4: 12,  # SIZE
             5: 15,  # BRAND
             6: 20,  # OTHER SPECIFICATIONS
+            7: 10,  # GRADE 7
+            8: 10,  # GRADE 8
+            9: 10,  # GRADE 9
+            10: 10,  # GRADE 10
+            11: 16,  # TOTAL GRADE USAGE
         }
         for col, width in col_widths.items():
             ws.column_dimensions[get_column_letter(col)].width = width

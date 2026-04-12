@@ -125,7 +125,30 @@ class RequisitionsFilters(QWidget):
     def set_model(self, model: "RequisitionsModel"):
         """Set the model reference for accessing data."""
         self.model = model
-        self._load_requester_options()
+
+    @staticmethod
+    def _format_requester_display(requester) -> str:
+        """Build requester display text for dropdown."""
+        display_text = requester.name
+        if requester.requester_type == "student":
+            display_text = (
+                f"{requester.name} ({requester.grade_level} - {requester.section})"
+            )
+        elif requester.requester_type == "teacher":
+            display_text = f"{requester.name} ({requester.department})"
+        return display_text
+
+    def set_requester_options(self, requesters: list):
+        """Populate requester dropdown using already-loaded requester objects."""
+        try:
+            while self.requester_combo.count() > 1:
+                self.requester_combo.removeItem(1)
+
+            for requester in requesters:
+                display_text = self._format_requester_display(requester)
+                self.requester_combo.addItem(display_text, requester.name.lower())
+        except Exception as e:
+            logger.error(f"Failed to set requester options: {e}")
 
     def _load_requester_options(self):
         """Load requester names for the filter dropdown."""
@@ -133,19 +156,8 @@ class RequisitionsFilters(QWidget):
             return
 
         try:
-            # Clear existing items except "All Requesters"
-            while self.requester_combo.count() > 1:
-                self.requester_combo.removeItem(1)
-
-            # Add requester names (only those with requisitions)
             requesters = self.model.controller.get_requesters_with_requisitions()
-            for requester in requesters:
-                display_text = requester.name
-                if requester.requester_type == "student":
-                    display_text = f"{requester.name} ({requester.grade_level} - {requester.section})"
-                elif requester.requester_type == "teacher":
-                    display_text = f"{requester.name} ({requester.department})"
-                self.requester_combo.addItem(display_text, requester.name.lower())
+            self.set_requester_options(requesters)
 
         except Exception as e:
             logger.error(f"Failed to load requester options: {e}")

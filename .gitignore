@@ -24,3 +24,5 @@ GEMINI.md
 .cache
 htmlcov/
 coverage.xml
+inventory.db-shm
+inventory.db-wal

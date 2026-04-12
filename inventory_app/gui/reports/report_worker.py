@@ -28,6 +28,9 @@ class ReportWorker(QThread):
         self.show_individual_only = kwargs.get("show_individual_only", False)
         # Usage report specific parameters
         self.usage_report_type = kwargs.get("usage_report_type", "date_range")
+        self.monthly_year = kwargs.get("monthly_year")
+        self.monthly_month = kwargs.get("monthly_month")
+        self.report_style = kwargs.get("report_style", "detailed")
         # Inventory report specific parameters
         self.inventory_report_type = kwargs.get(
             "inventory_report_type", "Stock Levels Report"
@@ -95,6 +98,21 @@ class ReportWorker(QThread):
 
     def _generate_usage_report(self):
         """Generate usage report using existing functionality."""
+        if self.usage_report_type == "monthly":
+            from inventory_app.gui.reports.monthly_usage_report import (
+                generate_monthly_usage_report,
+            )
+
+            if self.monthly_year is None or self.monthly_month is None:
+                return "Failed to generate report: missing monthly period"
+
+            return generate_monthly_usage_report(
+                year=int(self.monthly_year),
+                month=int(self.monthly_month),
+                category_filter=self.category_filter,
+                report_style=self.report_style,
+            )
+
         if self.usage_report_type == "grade_level":
             return report_generator.generate_usage_by_grade_level_report(
                 self.start_date,

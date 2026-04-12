@@ -36,8 +36,10 @@ When you run `python -m inventory_app.main`:
 1. The app checks whether `inventory.db` exists.
 2. If missing, it creates the database from `schema.sql`.
 3. Migration manager checks for pending migrations.
-4. Summary table service starts and backfills aggregate tables.
-5. Main window opens.
+4. Audit schema compatibility checks run.
+5. Reference normalization starts on a background thread.
+6. Summary table service starts and backfills aggregate tables in the background.
+7. Main window opens with dashboard first.
 
 ## Core Data Model (Simplified)
 
@@ -55,6 +57,10 @@ When you run `python -m inventory_app.main`:
 - The worker pool is capped for weaker hardware (up to 4 threads).
 - Query caching and summary tables are used to speed up repeated reads.
 - Summary aggregates are refreshed in the background on an interval.
+- Main window uses lazy page creation: dashboard is eager, other pages are created when first opened.
+- Requisition page requester options are fetched in background loaders and only applied to UI on the main thread.
+- Requisition dialog item preparation is split into background fetch + background preprocessing + batched UI list rendering.
+- Dashboard schedule chart data retrieval is background-loaded, while UI thread only paints rows.
 
 ## Design Boundaries
 

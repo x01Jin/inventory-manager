@@ -37,6 +37,7 @@ Tests include backend and GUI flows (`pytest-qt`).
 - Keep data writes wrapped in transactions when a flow has multiple steps.
 - Update docs when behavior changes.
 - Add or update tests for changed logic.
+- Run heavy GUI-triggered work (report generation, export, large refreshes) in background workers to keep the main window responsive.
 
 ## Database Changes
 
@@ -51,7 +52,18 @@ If you add or change fields:
 ## Debugging
 
 - Use `inventory_app/utils/logger.py` output first.
-- Reproduce with small datasets, then test with `scripts/sample_data.py`.
+- Reproduce with small datasets, then run deterministic procedural dataset generation with `python scripts/sample_data.py --start 4/12/2023 --end 4/12/2026`.
+- Startup summary backfill runs asynchronously after summary service initialization; check logs for `Background summary backfill` if startup feels slow.
+- Reference normalization runs asynchronously at startup; check logs for `reference-normalization` if startup verification is needed.
+
+## GUI Performance Rules
+
+- Keep startup interactive: only dashboard is created eagerly in `MainWindow`; other pages are lazily instantiated on first navigation.
+- Do not query database from filter widgets directly. Load data in page-level background tasks, then apply UI updates in callbacks.
+- Requisition dialog item loading is two-stage: fetch in background, preprocess availability in background, then batch-render on UI thread.
+- Requisitions table refresh uses incremental append batches; avoid full-table rebuild in each progress step.
+- Dashboard schedule data is fetched in a worker thread; UI thread should only render already-loaded rows.
+- For large list filtering in dialogs, batch updates and minimize repaint frequency (`setUpdatesEnabled(False/True)` around batch updates).
 
 ## Packaging
 

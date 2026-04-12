@@ -91,43 +91,13 @@ class ScheduleChartManager:
     def update_schedule_chart(self, schedule_table: QTableWidget):
         """Update schedule chart with upcoming requisitions."""
         try:
-            # Get upcoming requisitions
-            requisitions = self._get_upcoming_requisitions()
-
-            # Set table row count
-            schedule_table.setRowCount(
-                min(len(requisitions), 5)
-            )  # Limit to 5 rows for compactness
-
-            for row, req in enumerate(requisitions[:5]):
-                # Status column with color coding
-                status_item = QTableWidgetItem(req["status"])
-                if req["status"] == "active":
-                    status_item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
-                elif req["status"] == "requested":
-                    status_item.setForeground(QColor(DarkTheme.WARNING_COLOR))
-                elif req["status"] == "returned":
-                    # In case returned items are ever displayed here, use returned blue
-                    status_item.setForeground(QColor(DarkTheme.RETURNED_COLOR))
-                elif req["status"] == "overdue":
-                    status_item.setForeground(QColor(DarkTheme.ERROR_COLOR))
-                schedule_table.setItem(row, 0, status_item)
-
-                # Requester name
-                schedule_table.setItem(row, 1, QTableWidgetItem(req["requester_name"]))
-
-                # Expected request date/time
-                expected_request = self._format_datetime(req["expected_request"])
-                schedule_table.setItem(row, 2, QTableWidgetItem(expected_request))
-
-                # Expected return date/time
-                expected_return = self._format_datetime(req["expected_return"])
-                schedule_table.setItem(row, 3, QTableWidgetItem(expected_return))
+            requisitions = self.get_upcoming_requisitions()
+            self.populate_schedule_chart(schedule_table, requisitions)
 
         except Exception as e:
             logger.error(f"Failed to update schedule chart: {e}")
 
-    def _get_upcoming_requisitions(self):
+    def get_upcoming_requisitions(self):
         """Get upcoming requisitions from database."""
         try:
             query = """
@@ -150,6 +120,29 @@ class ScheduleChartManager:
         except Exception as e:
             logger.error(f"Failed to get upcoming requisitions: {e}")
             return []
+
+    def populate_schedule_chart(self, schedule_table: QTableWidget, requisitions):
+        """Populate table from already-loaded requisitions."""
+        schedule_table.setRowCount(min(len(requisitions), 5))
+
+        for row, req in enumerate(requisitions[:5]):
+            status = req["status"]
+            status_item = QTableWidgetItem(status)
+            if status == "active":
+                status_item.setForeground(QColor(DarkTheme.SUCCESS_COLOR))
+            elif status == "requested":
+                status_item.setForeground(QColor(DarkTheme.WARNING_COLOR))
+            elif status == "returned":
+                status_item.setForeground(QColor(DarkTheme.RETURNED_COLOR))
+            elif status == "overdue":
+                status_item.setForeground(QColor(DarkTheme.ERROR_COLOR))
+            schedule_table.setItem(row, 0, status_item)
+
+            schedule_table.setItem(row, 1, QTableWidgetItem(req["requester_name"]))
+            expected_request = self._format_datetime(req["expected_request"])
+            schedule_table.setItem(row, 2, QTableWidgetItem(expected_request))
+            expected_return = self._format_datetime(req["expected_return"])
+            schedule_table.setItem(row, 3, QTableWidgetItem(expected_return))
 
     def _format_datetime(self, datetime_str):
         """Format datetime string for display using date_utils."""

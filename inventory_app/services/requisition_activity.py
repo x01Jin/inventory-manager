@@ -27,6 +27,7 @@ class RequisitionActivityManager:
         requisition_id: int,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requisition creation activity.
@@ -35,6 +36,7 @@ class RequisitionActivityManager:
             requisition_id: ID of the created requisition
             requester_name: Name of the requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -52,6 +54,7 @@ class RequisitionActivityManager:
                 entity_id=requisition_id,
                 entity_type="requisition",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
@@ -74,6 +77,7 @@ class RequisitionActivityManager:
         requisition_id: int,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requisition update activity.
@@ -82,6 +86,7 @@ class RequisitionActivityManager:
             requisition_id: ID of the updated requisition
             requester_name: Name of the requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -99,6 +104,7 @@ class RequisitionActivityManager:
                 entity_id=requisition_id,
                 entity_type="requisition",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
@@ -120,6 +126,7 @@ class RequisitionActivityManager:
         self,
         requisition_id: int,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requisition return activity.
@@ -127,6 +134,7 @@ class RequisitionActivityManager:
         Args:
             requisition_id: ID of the returned requisition
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -143,6 +151,7 @@ class RequisitionActivityManager:
                 entity_id=requisition_id,
                 entity_type="requisition",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
@@ -161,6 +170,7 @@ class RequisitionActivityManager:
         requisition_id: int,
         requester_name: str,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """
         Log a requisition deletion activity.
@@ -169,6 +179,7 @@ class RequisitionActivityManager:
             requisition_id: ID of the deleted requisition
             requester_name: Name of the requester
             user_name: Name of the user performing the action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -186,6 +197,7 @@ class RequisitionActivityManager:
                 entity_id=requisition_id,
                 entity_type="requisition",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:
@@ -209,6 +221,7 @@ class RequisitionActivityManager:
         item_id: int,
         quantity: int,
         user_name: str = "System",
+        timestamp: str | None = None,
     ) -> bool:
         """Log a defective item recording activity from return processing."""
         try:
@@ -224,6 +237,7 @@ class RequisitionActivityManager:
                 entity_id=item_id,
                 entity_type="item",
                 user_name=user_name,
+                timestamp=timestamp,
             )
 
             if success:

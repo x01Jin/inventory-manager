@@ -132,88 +132,80 @@ class RequisitionsTable(QTableWidget):
             requisitions: List of RequisitionRow objects to display
         """
         try:
-            # Disable sorting while we repopulate to avoid mixed-state sorting/visual glitches
-            prev_sorting = self.isSortingEnabled()
-            self.setSortingEnabled(False)
-
-            # Clear existing data
-            self.setRowCount(0)
-
-            # Add rows
-            for row_data in requisitions:
-                row_position = self.rowCount()
-                self.insertRow(row_position)
-
-                # Status (Column 0)
-                display_status = (
-                    row_data.status.capitalize() if row_data.status else "Unknown"
-                )
-                status_item = self.SortableTableItem(display_status)
-                # Set sort priority for status: requested < active < overdue < returned (lower sorts first)
-                status_rank = 99
-                s = (row_data.status or "").lower()
-                if s == "requested":
-                    status_rank = 0
-                elif s == "active":
-                    status_rank = 1
-                elif s == "overdue":
-                    status_rank = 2
-                elif s == "returned":
-                    status_rank = 3
-                status_item.setData(SORT_ROLE, status_rank)
-                self.setItem(row_position, 0, status_item)
-                self._color_status_item(status_item, row_data.status)
-
-                # Requester (Column 1) - Word wrapping will be enabled globally
-                requester_item = self.SortableTableItem(row_data.requester_name)
-                requester_item.setData(
-                    Qt.ItemDataRole.UserRole, row_data.id
-                )  # Store ID for selection
-                # Case-insensitive alphabetical sort for requester
-                requester_item.setData(
-                    SORT_ROLE, (row_data.requester_name or "").lower()
-                )
-                self.setItem(row_position, 1, requester_item)
-
-                # Expected Request (Column 2) - Show expected request datetime and set SortRole
-                if row_data.expected_request:
-                    date_str = format_date_short(row_data.expected_request)
-                    time_str = format_time_12h(row_data.expected_request.time())
-                    expected_date_str = f"{date_str}   -   {time_str}"
-                    expected_item = self.SortableTableItem(expected_date_str)
-                    # Sort by timestamp (recent first). Use negative timestamp so ascending order shows newest first
-                    try:
-                        ts = row_data.expected_request.timestamp()
-                        expected_item.setData(SORT_ROLE, -float(ts))
-                    except Exception:
-                        expected_item.setData(SORT_ROLE, float("inf"))
-                else:
-                    # No expected request - use placeholder and set SortRole to +inf so it sorts to bottom
-                    expected_item = self.SortableTableItem("")
-                    expected_item.setData(SORT_ROLE, float("inf"))
-
-                self.setItem(row_position, 2, expected_item)
-
-            # After populating all data, resize columns to fit content with constraints
-            self.resize_columns_to_contents()
-
-            # Restore sorting state and set sensible default sort: Request Date recent-first
-            self.setSortingEnabled(prev_sorting)
-            if prev_sorting:
-                header = self.horizontalHeader()
-                # Default sort by status priority (active, overdue, returned)
-                # Now includes requested as the highest priority
-                if header is not None:
-                    header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
-                    header.setSortIndicatorShown(False)
-                    # Ensure the rows are actually sorted according to this indicator
-                    self.sortItems(0, Qt.SortOrder.AscendingOrder)
+            self.begin_batch_population()
+            self.append_rows(requisitions)
+            self.finalize_batch_population()
 
         except Exception as e:
             logger.error(f"Failed to populate requisitions table: {e}")
             QMessageBox.critical(
                 self, "Error", f"Failed to load requisition data: {str(e)}"
             )
+
+    def begin_batch_population(self) -> None:
+        """Prepare table for incremental population."""
+        self._batch_prev_sorting = self.isSortingEnabled()
+        self.setSortingEnabled(False)
+        self.setRowCount(0)
+
+    def append_rows(self, requisitions: List[RequisitionRow]) -> None:
+        """Append rows to table without clearing existing rows."""
+        for row_data in requisitions:
+            self._insert_requisition_row(row_data)
+
+    def finalize_batch_population(self) -> None:
+        """Restore state after incremental population."""
+        self.resize_columns_to_contents()
+        prev_sorting = getattr(self, "_batch_prev_sorting", True)
+        self.setSortingEnabled(prev_sorting)
+        if prev_sorting:
+            header = self.horizontalHeader()
+            if header is not None:
+                header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+                header.setSortIndicatorShown(False)
+                self.sortItems(0, Qt.SortOrder.AscendingOrder)
+
+    def _insert_requisition_row(self, row_data: RequisitionRow) -> None:
+        """Insert a single requisition row into table."""
+        row_position = self.rowCount()
+        self.insertRow(row_position)
+
+        display_status = row_data.status.capitalize() if row_data.status else "Unknown"
+        status_item = self.SortableTableItem(display_status)
+        status_rank = 99
+        s = (row_data.status or "").lower()
+        if s == "requested":
+            status_rank = 0
+        elif s == "active":
+            status_rank = 1
+        elif s == "overdue":
+            status_rank = 2
+        elif s == "returned":
+            status_rank = 3
+        status_item.setData(SORT_ROLE, status_rank)
+        self.setItem(row_position, 0, status_item)
+        self._color_status_item(status_item, row_data.status)
+
+        requester_item = self.SortableTableItem(row_data.requester_name)
+        requester_item.setData(Qt.ItemDataRole.UserRole, row_data.id)
+        requester_item.setData(SORT_ROLE, (row_data.requester_name or "").lower())
+        self.setItem(row_position, 1, requester_item)
+
+        if row_data.expected_request:
+            date_str = format_date_short(row_data.expected_request)
+            time_str = format_time_12h(row_data.expected_request.time())
+            expected_date_str = f"{date_str}   -   {time_str}"
+            expected_item = self.SortableTableItem(expected_date_str)
+            try:
+                ts = row_data.expected_request.timestamp()
+                expected_item.setData(SORT_ROLE, -float(ts))
+            except Exception:
+                expected_item.setData(SORT_ROLE, float("inf"))
+        else:
+            expected_item = self.SortableTableItem("")
+            expected_item.setData(SORT_ROLE, float("inf"))
+
+        self.setItem(row_position, 2, expected_item)
 
     def get_selected_requisition_id(self) -> Optional[int]:
         """

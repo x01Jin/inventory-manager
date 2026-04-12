@@ -35,6 +35,7 @@ class ActivityLogger:
         entity_id: Optional[int] = None,
         entity_type: Optional[str] = None,
         user_name: str = "System",
+        timestamp: Optional[str] = None,
     ) -> bool:
         """
         Log an activity to the database.
@@ -45,6 +46,7 @@ class ActivityLogger:
             entity_id: ID of related entity (optional)
             entity_type: Type of entity (optional)
             user_name: Name of user performing action
+            timestamp: Optional ISO timestamp override
 
         Returns:
             bool: True if logged successfully
@@ -55,7 +57,7 @@ class ActivityLogger:
             VALUES (?, ?, ?, ?, ?, ?)
             """
 
-            timestamp = datetime.now(timezone.utc).isoformat()
+            event_ts = timestamp or datetime.now(timezone.utc).isoformat()
             db.execute_update(
                 query,
                 (
@@ -64,7 +66,7 @@ class ActivityLogger:
                     entity_id,
                     entity_type,
                     user_name,
-                    timestamp,
+                    event_ts,
                 ),
             )
 

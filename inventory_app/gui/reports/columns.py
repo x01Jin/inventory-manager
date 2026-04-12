@@ -10,7 +10,13 @@ from typing import List
 REPORT_BASE_COLUMNS: List[str] = [
     "i.name AS ITEMS",
     "c.name AS CATEGORIES",
-    "(SELECT COALESCE(SUM(quantity_received), 0) FROM Item_Batches b WHERE b.item_id = i.id) AS ACTUAL_INVENTORY",
+    "CASE WHEN i.is_consumable = 1 "
+    "THEN COALESCE(stock.total_stock, 0) "
+    "- COALESCE(movements.consumed_qty, 0) "
+    "- COALESCE(movements.disposed_qty, 0) "
+    "+ COALESCE(movements.returned_qty, 0) "
+    "ELSE COALESCE(stock.total_stock, 0) "
+    '- COALESCE(movements.disposed_qty, 0) END AS "ACTUAL INVENTORY"',
     "i.size AS SIZE",
     "i.brand AS BRAND",
     'i.other_specifications AS "OTHER SPECIFICATIONS"',

@@ -4,6 +4,7 @@ Handles SQLite database creation, connection, and basic operations.
 """
 
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional, Any, List, Dict, Union, overload, Tuple, Literal
 
@@ -26,9 +27,15 @@ class DatabaseConnection:
         """
         self.db_path = Path(db_path)
         self._connection: Optional[sqlite3.Connection] = None
-        self._transaction_conn: Optional[sqlite3.Connection] = None
+        self._thread_local = threading.local()
         self._query_cache = QueryCache(default_ttl=30.0)
         self._query_classifier = QueryClassifier()
+
+    def _get_transaction_conn(self) -> Optional[sqlite3.Connection]:
+        return getattr(self._thread_local, "transaction_conn", None)
+
+    def _set_transaction_conn(self, conn: Optional[sqlite3.Connection]) -> None:
+        self._thread_local.transaction_conn = conn
 
     def _apply_pragmas(self, conn: sqlite3.Connection) -> None:
         """
@@ -93,7 +100,7 @@ class DatabaseConnection:
             self.immediate = immediate
 
         def __enter__(self) -> sqlite3.Connection:
-            if self.parent._transaction_conn is not None:
+            if self.parent._get_transaction_conn() is not None:
                 raise RuntimeError("Nested transactions are not supported")
             self.conn = sqlite3.connect(self.parent.db_path)
             # Apply PRAGMAs and enable FK enforcement
@@ -109,7 +116,7 @@ class DatabaseConnection:
             # concurrent writers from making conflicting changes.
             if self.immediate:
                 self.conn.execute("BEGIN IMMEDIATE")
-            self.parent._transaction_conn = self.conn
+            self.parent._set_transaction_conn(self.conn)
             return self.conn
 
         def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -120,7 +127,7 @@ class DatabaseConnection:
                 else:
                     self.conn.commit()
                 self.conn.close()
-                self.parent._transaction_conn = None
+                self.parent._set_transaction_conn(None)
 
     def create_database(self) -> bool:
         """
@@ -175,7 +182,7 @@ class DatabaseConnection:
         Return True if a transaction context is currently active on this
         DatabaseConnection instance.
         """
-        return self._transaction_conn is not None
+        return self._get_transaction_conn() is not None
 
     def execute_query(
         self, query: str, params: tuple = (), use_cache: bool = True
@@ -199,8 +206,9 @@ class DatabaseConnection:
                 return cached_result
 
         try:
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
             else:
@@ -258,8 +266,9 @@ class DatabaseConnection:
             # Use the active transaction connection if available; do not commit
             # while inside a transaction because the transaction manager will
             # handle commit/rollback at the end of the context.
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 cursor = conn.execute(query, params)
                 affected_rows = cursor.rowcount
                 if return_last_id:
@@ -308,8 +317,9 @@ class DatabaseConnection:
         try:
             affected_tables = self._query_classifier.extract_tables(query)
 
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 cursor = conn.executemany(query, params_list)
                 total_affected = (
                     sum(1 for _ in cursor.fetchall()) if cursor.description else 0
@@ -352,8 +362,9 @@ class DatabaseConnection:
         try:
             affected_tables = self._query_classifier.extract_tables(query)
 
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 cursor = None
                 for params in params_list:
                     cursor = conn.execute(query, params)
@@ -385,8 +396,9 @@ class DatabaseConnection:
             script: Multi-statement SQL script
         """
         try:
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 conn.executescript(script)
             else:
                 with self.get_connection() as conn:
@@ -403,8 +415,9 @@ class DatabaseConnection:
             script: Multi-statement SQL script
         """
         try:
-            if self._transaction_conn is not None:
-                conn = self._transaction_conn
+            transaction_conn = self._get_transaction_conn()
+            if transaction_conn is not None:
+                conn = transaction_conn
                 conn.executescript(script)
             else:
                 with self.get_connection() as conn:

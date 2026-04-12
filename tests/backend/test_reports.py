@@ -10,7 +10,9 @@ from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
     get_stock_levels_data,
     get_audit_log_data,
+    get_usage_by_grade_level_data,
 )
+from inventory_app.gui.reports.monthly_usage_report import generate_monthly_usage_report
 
 
 @pytest.fixture
@@ -243,3 +245,152 @@ def test_task10_stock_levels_data_policy(temp_db):
 
     assert by_name["Report Consumable"]["Current Stock"] == 37
     assert by_name["Report NonConsumable"]["Current Stock"] == 15
+
+
+def test_usage_by_grade_level_data_task14_aggregation(temp_db):
+    """Task 14: Grade-level report includes Grade 7-10 tallies and Task 10 stock semantics."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Grade Tally Item", 1, 1),
+        return_last_id=True,
+    )[1]
+    batch_id = db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 100, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+
+    # Consumable stock: 100 - 10 - 2 + 1 = 89
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (item_id, batch_id, "CONSUMPTION", 10, "2025-01-05"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (item_id, batch_id, "DISPOSAL", 2, "2025-01-06"),
+    )
+    db.execute_update(
+        "INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date) VALUES (?, ?, ?, ?, ?)",
+        (item_id, batch_id, "RETURN", 1, "2025-01-07"),
+    )
+
+    reqr_g7 = db.execute_update(
+        "INSERT INTO Requesters (name, grade_level, section) VALUES (?, ?, ?)",
+        ("Grade7 User", "Grade 7", "A"),
+        return_last_id=True,
+    )[1]
+    reqr_g8 = db.execute_update(
+        "INSERT INTO Requesters (name, grade_level, section) VALUES (?, ?, ?)",
+        ("Grade8 User", "Grade 8", "B"),
+        return_last_id=True,
+    )[1]
+
+    req_non_individual = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return, is_individual) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            reqr_g7,
+            "requested",
+            "2025-01-08",
+            "Class Activity",
+            "2025-01-08 09:00:00",
+            "2025-01-08 12:00:00",
+            0,
+        ),
+        return_last_id=True,
+    )[1]
+    req_individual = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return, is_individual) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            reqr_g8,
+            "requested",
+            "2025-01-09",
+            "Individual Activity",
+            "2025-01-09 09:00:00",
+            "2025-01-09 12:00:00",
+            1,
+        ),
+        return_last_id=True,
+    )[1]
+
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_non_individual, item_id, 4),
+    )
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_individual, item_id, 3),
+    )
+
+    rows_all = get_usage_by_grade_level_data(
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        show_individual_only=False,
+    )
+    assert rows_all
+    row = rows_all[0]
+    assert row["ACTUAL INVENTORY"] == 89
+    assert row["GRADE 7"] == 4
+    assert row["GRADE 8"] == 3
+    assert row["GRADE 9"] == 0
+    assert row["GRADE 10"] == 0
+    assert row["TOTAL QUANTITY"] == 7
+
+    rows_individual = get_usage_by_grade_level_data(
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        show_individual_only=True,
+    )
+    assert rows_individual
+    individual_row = rows_individual[0]
+    assert individual_row["GRADE 7"] == 0
+    assert individual_row["GRADE 8"] == 3
+    assert individual_row["TOTAL QUANTITY"] == 3
+
+
+def test_monthly_usage_report_includes_grade_tally_columns(temp_db, tmp_path):
+    """Task 14: Monthly export includes Grade 7-10 tally columns with exact headers."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Monthly Grade Item", 1, 1),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received) VALUES (?, ?, ?, ?)",
+        (item_id, 1, 20, "2025-01-01"),
+    )
+    reqr_id = db.execute_update(
+        "INSERT INTO Requesters (name, grade_level, section) VALUES (?, ?, ?)",
+        ("Monthly Grade7", "Grade 7", "A"),
+        return_last_id=True,
+    )[1]
+    req_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            reqr_id,
+            "requested",
+            "2025-01-10",
+            "Monthly Activity",
+            "2025-01-10 09:00:00",
+            "2025-01-10 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_id, item_id, 2),
+    )
+
+    out_file = tmp_path / "monthly_usage.xlsx"
+    result = generate_monthly_usage_report(2025, 1, output_path=str(out_file))
+    assert isinstance(result, str)
+    assert Path(result).exists()
+
+    wb = load_workbook(result)
+    ws = wb.active
+    assert ws is not None
+
+    assert ws.cell(row=4, column=7).value == "GRADE 7"
+    assert ws.cell(row=4, column=8).value == "GRADE 8"
+    assert ws.cell(row=4, column=9).value == "GRADE 9"
+    assert ws.cell(row=4, column=10).value == "GRADE 10"
+    assert ws.cell(row=4, column=11).value == "TOTAL GRADE USAGE"

@@ -5,6 +5,7 @@ Simple and clean composition using navigation and dashboard.
 
 import sys
 import time
+from typing import Any
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -19,12 +20,6 @@ from PyQt6.QtCore import QTimer
 from inventory_app.gui.styles import DarkTheme, ThemeManager
 from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard.dashboard_page import DashboardPage
-from inventory_app.gui.inventory.inventory_page import InventoryPage
-from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
-from inventory_app.gui.requesters.requesters_page import RequestersPage
-from inventory_app.gui.reports.reports_page import ReportsPage
-from inventory_app.gui.settings.settings_page import SettingsPage
-from inventory_app.gui.help.help_page import HelpPage
 from inventory_app.utils.logger import logger
 
 
@@ -71,10 +66,15 @@ class MainWindow(QMainWindow):
         self.content_stack = QStackedWidget()
         main_layout.addWidget(self.content_stack, 1)
 
-        # Create pages
+        # Keep dashboard eager, create other pages only when first opened.
         self.dashboard_page = DashboardPage()
-        self.inventory_page = InventoryPage()
-        self.requisitions_page = RequisitionsPage()
+        self.inventory_page = None
+        self.requisitions_page = None
+        from inventory_app.gui.requesters.requesters_page import RequestersPage
+        from inventory_app.gui.reports.reports_page import ReportsPage
+        from inventory_app.gui.settings.settings_page import SettingsPage
+        from inventory_app.gui.help.help_page import HelpPage
+
         self.requesters_page = RequestersPage()
         self.reports_page = ReportsPage()
         self.settings_page = SettingsPage()
@@ -82,15 +82,82 @@ class MainWindow(QMainWindow):
 
         # Add pages to stack
         self.content_stack.addWidget(self.dashboard_page)  # Index 0
-        self.content_stack.addWidget(self.inventory_page)  # Index 1
-        self.content_stack.addWidget(self.requisitions_page)  # Index 2
+        self.content_stack.addWidget(
+            self.create_placeholder("Inventory", "Loading inventory page...")
+        )  # Index 1
+        self.content_stack.addWidget(
+            self.create_placeholder("Requisitions", "Loading requisitions page...")
+        )  # Index 2
         self.content_stack.addWidget(self.requesters_page)  # Index 3
         self.content_stack.addWidget(self.reports_page)  # Index 4
         self.content_stack.addWidget(self.settings_page)  # Index 5
         self.content_stack.addWidget(self.help_page)  # Index 6
 
+        self._page_instances: dict[int, Any] = {
+            0: self.dashboard_page,
+            3: self.requesters_page,
+            4: self.reports_page,
+            5: self.settings_page,
+            6: self.help_page,
+        }
+
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
+
+    def _create_page_for_index(self, page_index: int):
+        """Create page object for stack index on first use."""
+        if page_index == 1:
+            from inventory_app.gui.inventory.inventory_page import InventoryPage
+
+            self.inventory_page = InventoryPage()
+            return self.inventory_page
+        if page_index == 2:
+            from inventory_app.gui.requisitions.requisitions_page import (
+                RequisitionsPage,
+            )
+
+            self.requisitions_page = RequisitionsPage()
+            return self.requisitions_page
+        if page_index == 3:
+            from inventory_app.gui.requesters.requesters_page import RequestersPage
+
+            self.requesters_page = RequestersPage()
+            return self.requesters_page
+        if page_index == 4:
+            from inventory_app.gui.reports.reports_page import ReportsPage
+
+            self.reports_page = ReportsPage()
+            return self.reports_page
+        if page_index == 5:
+            from inventory_app.gui.settings.settings_page import SettingsPage
+
+            self.settings_page = SettingsPage()
+            return self.settings_page
+        if page_index == 6:
+            from inventory_app.gui.help.help_page import HelpPage
+
+            self.help_page = HelpPage()
+            return self.help_page
+        return self.dashboard_page
+
+    def _ensure_page_loaded(self, page_index: int) -> None:
+        """Replace placeholder with real page on first navigation."""
+        if page_index in self._page_instances:
+            return
+
+        page = self._create_page_for_index(page_index)
+        placeholder = self.content_stack.widget(page_index)
+        self.content_stack.removeWidget(placeholder)
+        if placeholder is not None:
+            placeholder.deleteLater()
+        self.content_stack.insertWidget(page_index, page)
+        self._page_instances[page_index] = page
+        logger.info(f"Lazily initialized page at index {page_index}")
+
+    def _get_page_instance(self, page_index: int):
+        """Get or create page instance for requested index."""
+        self._ensure_page_loaded(page_index)
+        return self._page_instances.get(page_index)
 
     def center_window(self):
         """Center the window on the screen."""
@@ -126,39 +193,45 @@ class MainWindow(QMainWindow):
 
     def _refresh_page_data(self, page_index: int) -> None:
         """Refresh page data if needed."""
-        if page_index == 0 and hasattr(self.dashboard_page, "refresh_data"):
-            self.dashboard_page.refresh_data()
+        page = self._get_page_instance(page_index)
+        if page is None:
+            return
+
+        if page_index == 0 and hasattr(page, "refresh_data"):
+            page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed dashboard data")
-        elif page_index == 1 and hasattr(self.inventory_page, "refresh_data"):
-            self.inventory_page.refresh_data()
+        elif page_index == 1 and hasattr(page, "refresh_data"):
+            page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed inventory data")
-        elif page_index == 2 and hasattr(self.requisitions_page, "refresh_data"):
-            self.requisitions_page.refresh_data()
+        elif page_index == 2 and hasattr(page, "refresh_data"):
+            page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed requisitions data")
-        elif page_index == 3 and hasattr(self.requesters_page, "refresh_data"):
-            self.requesters_page.refresh_data()
+        elif page_index == 3 and hasattr(page, "refresh_data"):
+            page.refresh_data()
             self._mark_page_refreshed(page_index)
             logger.info("Refreshed requesters data")
-        elif page_index == 4 and hasattr(self.reports_page, "refresh_data"):
+        elif page_index == 4 and hasattr(page, "refresh_data"):
             try:
-                self.reports_page.refresh_data()
+                page.refresh_data()
                 self._mark_page_refreshed(page_index)
                 logger.info("Refreshed reports data")
             except Exception:
                 logger.exception("Failed to refresh reports data")
-        elif page_index == 5 and hasattr(self.settings_page, "refresh_data"):
+        elif page_index == 5 and hasattr(page, "refresh_data"):
             try:
-                self.settings_page.refresh_data()
+                page.refresh_data()
                 self._mark_page_refreshed(page_index)
                 logger.info("Refreshed settings reference data")
             except Exception:
                 logger.exception("Failed to refresh settings reference data")
-        elif page_index == 6 and hasattr(self.help_page, "load_current_tab"):
+        elif page_index == 6 and hasattr(page, "load_current_tab"):
             try:
-                self.help_page.load_current_tab()
+                load_current_tab = getattr(page, "load_current_tab", None)
+                if callable(load_current_tab):
+                    load_current_tab()
                 self._mark_page_refreshed(page_index)
                 logger.info("Refreshed help tab content")
             except Exception:
@@ -167,6 +240,7 @@ class MainWindow(QMainWindow):
     def on_page_changed(self, page_index: int):
         """Handle page changes and refresh page data with caching and throttling."""
         try:
+            self._ensure_page_loaded(page_index)
             self.content_stack.setCurrentIndex(page_index)
 
             if self._refresh_debounce_timer.isActive():

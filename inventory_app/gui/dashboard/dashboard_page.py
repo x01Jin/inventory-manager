@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QTabWidget,
 )
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from inventory_app.gui.styles import get_current_theme
 from inventory_app.utils.logger import logger
@@ -98,19 +98,33 @@ class DashboardPage(QWidget):
         self._metrics_worker = None
         self._activity_worker = None
         self._alerts_worker = None
+        self._schedule_worker = None
+        self._refresh_scheduled = False
 
         self.refresh_data()
 
     def refresh_data(self):
         """Refresh dashboard data asynchronously."""
         try:
+            if self._refresh_scheduled:
+                return
+            self._refresh_scheduled = True
+
             self._load_metrics_async()
             self._load_activity_async()
             self._load_alerts_async()
-            self.schedule_manager.update_schedule_chart(self.schedule_placeholder)
+            self._load_schedule_async()
+
+            # Allow a quick follow-up refresh after current work is queued.
+            QTimer.singleShot(250, self._reset_refresh_scheduled)
 
         except Exception as e:
+            self._refresh_scheduled = False
             logger.error(f"Failed to refresh dashboard: {e}")
+
+    def _reset_refresh_scheduled(self):
+        """Reset refresh guard for subsequent requests."""
+        self._refresh_scheduled = False
 
     def _load_metrics_async(self):
         """Load metrics in background thread."""
@@ -176,4 +190,23 @@ class DashboardPage(QWidget):
         self.alerts_manager.populate_full_alerts_table(
             self.all_alerts_table,
             payload.get("full", []),
+        )
+
+    def _load_schedule_async(self):
+        """Load schedule data in background thread."""
+        if self._schedule_worker:
+            self._schedule_worker.cancel()
+
+        self._schedule_worker = Worker(self.schedule_manager.get_upcoming_requisitions)
+        self._schedule_worker.signals.result.connect(self._on_schedule_loaded)
+        self._schedule_worker.signals.error.connect(
+            lambda e: logger.error(f"Schedule loading failed: {e}")
+        )
+        worker_pool.start(self._schedule_worker)
+
+    def _on_schedule_loaded(self, requisitions):
+        """Handle loaded schedule data."""
+        self.schedule_manager.populate_schedule_chart(
+            self.schedule_placeholder,
+            requisitions or [],
         )
