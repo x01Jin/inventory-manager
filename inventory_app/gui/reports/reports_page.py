@@ -22,17 +22,26 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QSizePolicy,
     QLineEdit,
+    QInputDialog,
+    QApplication,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer, QMimeData, QUrl
 
 from inventory_app.gui.reports.ui_components import ReportUIUpdater
 from inventory_app.gui.reports.report_worker import ReportWorker
+from inventory_app.gui.utils.worker import Worker, worker_pool
+from inventory_app.gui.reports.report_paths import (
+    get_reports_directory,
+    list_report_files,
+)
 from inventory_app.services.category_config import get_all_category_names
+from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.utils.logger import logger
 from inventory_app.gui.widgets.date_selector import DateRangeSelector
 from inventory_app.gui.styles import ThemeManager
 
 import os
+from pathlib import Path
 from datetime import datetime, date, timedelta
 
 
@@ -42,9 +51,18 @@ class ReportsPage(QWidget):
     def __init__(self):
         super().__init__()
         self.worker = None
+        self._selector_refresh_worker = None
+        self._category_refresh_worker = None
+        self._report_files_worker = None
+        self._pending_report_selection = ""
+        self._is_disposing = False
         self.ui_updater = None
         self.current_report_type = "usage"
         self._generated_report_paths: list[str] = []
+        self._reports_poll_timer = QTimer(self)
+        self._reports_poll_timer.setInterval(3000)
+        self._reports_poll_timer.timeout.connect(self.schedule_report_files_refresh)
+        self.destroyed.connect(self._on_destroyed)
         self.apply_theme()
         self.setup_ui()
 
@@ -95,6 +113,7 @@ class ReportsPage(QWidget):
         self.ui_updater = ReportUIUpdater(
             self.status_text, self.results_list, self.recent_reports_text
         )
+        self.refresh_data()
 
     def create_header(self) -> QWidget:
         """Create the page header."""
@@ -236,7 +255,6 @@ class ReportsPage(QWidget):
         category_layout.addWidget(QLabel("Category:"))
         self.monthly_category_combo = QComboBox()
         self.monthly_category_combo.addItem("All Categories")
-        self.load_categories(self.monthly_category_combo)
         category_layout.addWidget(self.monthly_category_combo)
         filters_layout.addLayout(category_layout)
 
@@ -315,7 +333,6 @@ class ReportsPage(QWidget):
         category_layout.addWidget(QLabel("Category:"))
         self.category_combo = QComboBox()
         self.category_combo.addItem("All Categories")
-        self.load_categories()
         category_layout.addWidget(self.category_combo)
         filters_layout.addLayout(category_layout)
 
@@ -436,7 +453,6 @@ class ReportsPage(QWidget):
         category_layout.addWidget(QLabel("Category:"))
         self.inv_category_combo = QComboBox()
         self.inv_category_combo.addItem("All Categories")
-        self.load_categories(self.inv_category_combo)
         category_layout.addWidget(self.inv_category_combo)
         filters_layout.addLayout(category_layout)
 
@@ -520,7 +536,6 @@ class ReportsPage(QWidget):
         category_layout.addWidget(QLabel("Category:"))
         self.trends_category_combo = QComboBox()
         self.trends_category_combo.addItem("All Categories")
-        self.load_categories(self.trends_category_combo)
         category_layout.addWidget(self.trends_category_combo)
         options_layout.addLayout(category_layout)
 
@@ -581,6 +596,8 @@ class ReportsPage(QWidget):
                 "REQUISITION_UPDATE",
                 "ITEM_DISPOSAL",
                 "DEFECTIVE_RECORDED",
+                "DEFECTIVE_DISPOSED",
+                "DEFECTIVE_NOT_DEFECTIVE",
                 "ITEM_ADDED",
                 "ITEM_EDITED",
                 "ITEM_DELETED",
@@ -594,6 +611,7 @@ class ReportsPage(QWidget):
                 "REQUESTER_EDITED",
                 "REQUESTER_DELETED",
                 "REPORT_GENERATED",
+                "REPORT_DELETED",
                 "STOCK_RECEIVED",
                 "STOCK_ADJUSTED",
             ]
@@ -606,7 +624,7 @@ class ReportsPage(QWidget):
         entity_layout.addWidget(QLabel("Entity Type:"))
         self.audit_entity_filter = QComboBox()
         self.audit_entity_filter.addItems(
-            ["All Entities", "item", "requisition", "requester", "stock"]
+            ["All Entities", "item", "requisition", "requester", "stock", "report"]
         )
         entity_layout.addWidget(self.audit_entity_filter)
         filters_layout.addLayout(entity_layout)
@@ -657,15 +675,32 @@ class ReportsPage(QWidget):
         results_layout.addWidget(self.results_list)
 
         actions_layout = QHBoxLayout()
+        self.refresh_reports_btn = QPushButton("🔄 Refresh")
+        self.refresh_reports_btn.clicked.connect(
+            lambda: self.schedule_report_files_refresh(force=True)
+        )
+        actions_layout.addWidget(self.refresh_reports_btn)
+
         self.open_report_btn = QPushButton("📂 Open Report")
         self.open_report_btn.setEnabled(False)
         self.open_report_btn.clicked.connect(self.open_selected_report)
         actions_layout.addWidget(self.open_report_btn)
 
         self.open_report_folder_btn = QPushButton("🗂️ Open Folder")
-        self.open_report_folder_btn.setEnabled(False)
+        self.open_report_folder_btn.setEnabled(True)
         self.open_report_folder_btn.clicked.connect(self.open_selected_report_folder)
         actions_layout.addWidget(self.open_report_folder_btn)
+
+        self.copy_report_btn = QPushButton("📋 Copy File")
+        self.copy_report_btn.setEnabled(False)
+        self.copy_report_btn.clicked.connect(self.copy_selected_report)
+        actions_layout.addWidget(self.copy_report_btn)
+
+        self.delete_report_btn = QPushButton("🗑️ Delete")
+        self.delete_report_btn.setEnabled(False)
+        self.delete_report_btn.clicked.connect(self.delete_selected_report)
+        actions_layout.addWidget(self.delete_report_btn)
+
         actions_layout.addStretch()
         results_layout.addLayout(actions_layout)
 
@@ -707,6 +742,124 @@ class ReportsPage(QWidget):
                 combo_box.addItem(category)
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
+
+    def _get_category_combos(self) -> list[QComboBox]:
+        """Return all category filter combo boxes managed by this page."""
+        return [
+            self.monthly_category_combo,
+            self.category_combo,
+            self.inv_category_combo,
+            self.trends_category_combo,
+        ]
+
+    @staticmethod
+    def _load_category_names() -> list[str]:
+        """Load category names in a worker thread."""
+        return list(get_all_category_names())
+
+    @staticmethod
+    def _scan_report_files() -> list[str]:
+        """Scan report directory and return absolute Excel file paths."""
+        return [str(path.resolve()) for path in list_report_files()]
+
+    def _refresh_categories_async(self):
+        """Refresh category dropdown values without blocking GUI."""
+        if self._is_disposing:
+            return
+
+        if self._category_refresh_worker is not None:
+            self._category_refresh_worker.cancel()
+            self._category_refresh_worker = None
+
+        worker = Worker(self._load_category_names)
+        self._category_refresh_worker = worker
+        worker.signals.result.connect(self._on_categories_loaded)
+        worker.signals.error.connect(self._on_categories_error)
+        worker.signals.finished.connect(self._clear_category_refresh_worker)
+        worker_pool.start(worker)
+
+    def _on_categories_loaded(self, categories: list[str]):
+        """Populate all category combos with latest category values."""
+        if self._is_disposing:
+            return
+
+        for combo in self._get_category_combos():
+            selected_text = combo.currentText().strip()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("All Categories")
+            for category in categories:
+                combo.addItem(category)
+
+            if selected_text and combo.findText(selected_text) >= 0:
+                combo.setCurrentText(selected_text)
+            else:
+                combo.setCurrentText("All Categories")
+            combo.blockSignals(False)
+
+    def _on_categories_error(self, error_info):
+        """Handle category worker failure."""
+        logger.error(f"Failed to refresh report categories: {error_info}")
+
+    def _clear_category_refresh_worker(self):
+        """Release category worker reference after completion."""
+        self._category_refresh_worker = None
+
+    def schedule_report_files_refresh(self, force: bool = False):
+        """Schedule asynchronous refresh of generated report files list."""
+        if self._is_disposing:
+            return
+
+        if self._report_files_worker is not None and not force:
+            return
+
+        if self._report_files_worker is not None:
+            self._report_files_worker.cancel()
+            self._report_files_worker = None
+
+        worker = Worker(self._scan_report_files)
+        self._report_files_worker = worker
+        worker.signals.result.connect(self._on_report_files_loaded)
+        worker.signals.error.connect(self._on_report_files_error)
+        worker.signals.finished.connect(self._clear_report_files_worker)
+        worker_pool.start(worker)
+
+    def _on_report_files_loaded(self, file_paths: list[str]):
+        """Render generated report list from actual files in reports directory."""
+        if self._is_disposing:
+            return
+
+        selected_path = (
+            self._pending_report_selection or self._get_selected_report_path()
+        )
+        self._pending_report_selection = ""
+
+        self._generated_report_paths = file_paths
+
+        self.results_list.blockSignals(True)
+        self.results_list.clear()
+        for file_path in file_paths:
+            self.results_list.addItem(QListWidgetItem(f"✅ {Path(file_path).name}"))
+        self.results_list.blockSignals(False)
+
+        new_row = -1
+        if selected_path and selected_path in self._generated_report_paths:
+            new_row = self._generated_report_paths.index(selected_path)
+
+        if new_row >= 0:
+            self.results_list.setCurrentRow(new_row)
+        else:
+            self.results_list.setCurrentRow(-1)
+
+        self._on_results_selection_changed(self.results_list.currentRow())
+
+    def _on_report_files_error(self, error_info):
+        """Handle file list refresh failures."""
+        logger.error(f"Failed to refresh report files: {error_info}")
+
+    def _clear_report_files_worker(self):
+        """Release report files worker reference after completion."""
+        self._report_files_worker = None
 
     @staticmethod
     def _normalized_combo_value(combo_box: QComboBox, all_label: str) -> str:
@@ -779,8 +932,12 @@ class ReportsPage(QWidget):
     def refresh_data(self):
         """Refresh report page dynamic selector data."""
         try:
+            self._refresh_categories_async()
             self.on_usage_report_type_changed()
             self.on_usage_filter_type_changed()
+            self.schedule_report_files_refresh(force=True)
+            if not self._reports_poll_timer.isActive():
+                self._reports_poll_timer.start()
         except Exception as e:
             logger.error(f"Failed to refresh reports page data: {e}")
 
@@ -806,18 +963,138 @@ class ReportsPage(QWidget):
         self.usage_filter_value_combo.clear()
         if filter_type == "Grade Level":
             self.usage_filter_value_combo.addItem("All Grades")
-            self.load_grade_levels_combo(self.usage_filter_value_combo)
             self.usage_filter_value_combo.setVisible(True)
-            self.usage_filter_value_combo.setEnabled(True)
+            self.usage_filter_value_combo.setEnabled(False)
+            self._refresh_usage_filter_values_async()
         elif filter_type == "Section":
             self.usage_filter_value_combo.addItem("All Sections")
-            self.load_sections_combo(self.usage_filter_value_combo)
             self.usage_filter_value_combo.setVisible(True)
-            self.usage_filter_value_combo.setEnabled(True)
+            self.usage_filter_value_combo.setEnabled(False)
+            self._refresh_usage_filter_values_async()
         else:
             # 'All Grades & Sections' selected - hide the detail selector
             self.usage_filter_value_combo.setVisible(False)
             self.usage_filter_value_combo.setEnabled(False)
+
+    @staticmethod
+    def _load_usage_filter_values(filter_type: str) -> list[str]:
+        """Load usage filter options from DB in a worker thread."""
+        from inventory_app.database.connection import db
+
+        if filter_type == "Grade Level":
+            rows = db.execute_query(
+                "SELECT DISTINCT grade_level FROM Requesters WHERE grade_level IS NOT NULL AND grade_level != '' ORDER BY grade_level",
+                use_cache=False,
+            )
+            return [row["grade_level"] for row in rows if row.get("grade_level")]
+
+        if filter_type == "Section":
+            rows = db.execute_query(
+                "SELECT DISTINCT section FROM Requesters WHERE section IS NOT NULL AND section != '' ORDER BY section",
+                use_cache=False,
+            )
+            return [row["section"] for row in rows if row.get("section")]
+
+        return []
+
+    def _refresh_usage_filter_values_async(self):
+        """Refresh usage filter values without blocking the GUI thread."""
+        if self._is_disposing:
+            return
+
+        filter_type = self.usage_filter_type_combo.currentText()
+        if filter_type not in {"Grade Level", "Section"}:
+            return
+
+        if self._selector_refresh_worker is not None:
+            self._selector_refresh_worker.cancel()
+            self._selector_refresh_worker = None
+
+        worker = Worker(self._load_usage_filter_values, filter_type)
+        self._selector_refresh_worker = worker
+        worker.signals.result.connect(
+            lambda values, expected=filter_type: self._on_usage_filter_values_loaded(
+                expected, values
+            )
+        )
+        worker.signals.error.connect(
+            lambda error_info, expected=filter_type: self._on_usage_filter_values_error(
+                expected, error_info
+            )
+        )
+        worker.signals.finished.connect(self._clear_selector_refresh_worker)
+        worker_pool.start(worker)
+
+    def _on_usage_filter_values_loaded(
+        self, expected_filter_type: str, values: list[str]
+    ):
+        """Apply asynchronously loaded usage filter values to the UI."""
+        if self._is_disposing:
+            return
+
+        if self.usage_filter_type_combo.currentText() != expected_filter_type:
+            return
+
+        all_label = (
+            "All Grades" if expected_filter_type == "Grade Level" else "All Sections"
+        )
+        self.usage_filter_value_combo.clear()
+        self.usage_filter_value_combo.addItem(all_label)
+        for value in values:
+            self.usage_filter_value_combo.addItem(value)
+        self.usage_filter_value_combo.setVisible(True)
+        self.usage_filter_value_combo.setEnabled(True)
+
+    def _on_usage_filter_values_error(self, expected_filter_type: str, error_info):
+        """Handle usage filter loading errors without freezing the UI."""
+        if self._is_disposing:
+            return
+
+        if self.usage_filter_type_combo.currentText() != expected_filter_type:
+            return
+
+        all_label = (
+            "All Grades" if expected_filter_type == "Grade Level" else "All Sections"
+        )
+        self.usage_filter_value_combo.clear()
+        self.usage_filter_value_combo.addItem(all_label)
+        self.usage_filter_value_combo.setVisible(True)
+        self.usage_filter_value_combo.setEnabled(True)
+
+        logger.error(
+            f"Failed to load {expected_filter_type} filter values: {error_info}"
+        )
+
+    def _clear_selector_refresh_worker(self):
+        """Drop stale worker reference when refresh completes."""
+        self._selector_refresh_worker = None
+
+    def showEvent(self, a0):
+        """Resume live report-list polling when page becomes visible."""
+        super().showEvent(a0)
+        if not self._is_disposing:
+            self.schedule_report_files_refresh(force=True)
+            if not self._reports_poll_timer.isActive():
+                self._reports_poll_timer.start()
+
+    def hideEvent(self, a0):
+        """Pause polling when page is hidden to reduce background work."""
+        super().hideEvent(a0)
+        self._reports_poll_timer.stop()
+
+    def _on_destroyed(self, *_args):
+        """Cancel pending selector refresh worker during widget teardown."""
+        self._is_disposing = True
+        self._reports_poll_timer.stop()
+        if self._selector_refresh_worker is not None:
+            self._selector_refresh_worker.cancel()
+            self._selector_refresh_worker = None
+        if self._category_refresh_worker is not None:
+            self._category_refresh_worker.cancel()
+            self._category_refresh_worker = None
+        if self._report_files_worker is not None:
+            self._report_files_worker.cancel()
+            self._report_files_worker = None
 
     def on_preset_changed(self, preset):
         """Handle preset date range selection."""
@@ -1187,11 +1464,8 @@ class ReportsPage(QWidget):
         self.ui_updater.update_status("✅ Report generated successfully!")
         self.ui_updater.update_status(f"📁 File saved to: {file_path}")
 
-        # Add to results list and retain absolute path for open actions
-        result_item = QListWidgetItem(f"✅ {os.path.basename(file_path)}")
-        self.results_list.addItem(result_item)
-        self._generated_report_paths.append(file_path)
-        self.results_list.setCurrentRow(self.results_list.count() - 1)
+        self._pending_report_selection = os.path.abspath(file_path)
+        self.schedule_report_files_refresh(force=True)
 
         # Update recent reports
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1207,7 +1481,8 @@ class ReportsPage(QWidget):
         """Enable/disable report action buttons based on current selection."""
         has_valid_selection = 0 <= row < len(self._generated_report_paths)
         self.open_report_btn.setEnabled(has_valid_selection)
-        self.open_report_folder_btn.setEnabled(has_valid_selection)
+        self.copy_report_btn.setEnabled(has_valid_selection)
+        self.delete_report_btn.setEnabled(has_valid_selection)
 
     def _get_selected_report_path(self) -> str:
         """Return selected generated report path, or empty string if invalid."""
@@ -1220,6 +1495,15 @@ class ReportsPage(QWidget):
         """Open selected report file with the operating system default handler."""
         file_path = self._get_selected_report_path()
         if not file_path:
+            return
+
+        if not os.path.exists(file_path):
+            QMessageBox.warning(
+                self,
+                "Report Missing",
+                "The selected report file no longer exists. The list will now refresh.",
+            )
+            self.schedule_report_files_refresh(force=True)
             return
 
         try:
@@ -1236,10 +1520,11 @@ class ReportsPage(QWidget):
     def open_selected_report_folder(self):
         """Open folder containing the selected generated report."""
         file_path = self._get_selected_report_path()
-        if not file_path:
-            return
-
-        folder_path = os.path.dirname(file_path)
+        folder_path = (
+            os.path.dirname(file_path)
+            if file_path
+            else str(get_reports_directory(create=True))
+        )
         try:
             os.startfile(folder_path)
             if self.ui_updater:
@@ -1247,6 +1532,102 @@ class ReportsPage(QWidget):
         except Exception as e:
             QMessageBox.warning(
                 self, "Open Folder Failed", f"Could not open folder: {str(e)}"
+            )
+
+    def copy_selected_report(self):
+        """Copy selected report file to clipboard as an Explorer-compatible file object."""
+        file_path = self._get_selected_report_path()
+        if not file_path:
+            return
+
+        if not os.path.exists(file_path):
+            QMessageBox.warning(
+                self,
+                "Report Missing",
+                "The selected report file no longer exists. The list will now refresh.",
+            )
+            self.schedule_report_files_refresh(force=True)
+            return
+
+        mime_data = QMimeData()
+        mime_data.setUrls([QUrl.fromLocalFile(file_path)])
+        mime_data.setText(file_path)
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            QMessageBox.warning(
+                self,
+                "Clipboard Unavailable",
+                "Could not access clipboard to copy the selected report.",
+            )
+            return
+        clipboard.setMimeData(mime_data)
+
+        if self.ui_updater:
+            self.ui_updater.update_status(
+                f"📋 Copied report file: {os.path.basename(file_path)}"
+            )
+
+    def delete_selected_report(self):
+        """Delete selected report file after confirmation and audit logging."""
+        file_path = self._get_selected_report_path()
+        if not file_path:
+            return
+
+        if not os.path.exists(file_path):
+            QMessageBox.warning(
+                self,
+                "Report Missing",
+                "The selected report file no longer exists. The list will now refresh.",
+            )
+            self.schedule_report_files_refresh(force=True)
+            return
+
+        file_name = os.path.basename(file_path)
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Are you sure you want to delete report '{file_name}'?\n\nThis action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        editor_name, ok = QInputDialog.getText(
+            self,
+            "Editor Information",
+            "Please enter your name/initials for audit logging:",
+        )
+        editor_name = editor_name.strip() if ok else ""
+        if not editor_name:
+            QMessageBox.warning(
+                self,
+                "Delete Cancelled",
+                "Name/initials are required to delete a report file.",
+            )
+            return
+
+        try:
+            Path(file_path).unlink()
+            activity_logger.log_activity(
+                activity_logger.REPORT_DELETED,
+                f"Deleted report file: {file_name} || Deleted file path: {file_path}",
+                entity_type="report",
+                user_name=editor_name,
+            )
+            if self.ui_updater:
+                self.ui_updater.update_status(f"🗑️ Deleted report: {file_name}")
+            self.schedule_report_files_refresh(force=True)
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "Report Missing",
+                "The selected report file was already removed.",
+            )
+            self.schedule_report_files_refresh(force=True)
+        except Exception as e:
+            logger.error(f"Failed to delete report file {file_path}: {e}")
+            QMessageBox.warning(
+                self, "Delete Failed", f"Could not delete report file: {str(e)}"
             )
 
     def on_report_error(self, error_message):

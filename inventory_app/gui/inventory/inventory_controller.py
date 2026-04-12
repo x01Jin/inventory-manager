@@ -11,6 +11,7 @@ from inventory_app.services.item_status_service import item_status_service
 from inventory_app.services.stock_calculation_service import stock_calculation_service
 from inventory_app.services.stock_movement_service import StockMovementService
 from inventory_app.utils.logger import logger
+from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.services.movement_types import MovementType
 from inventory_app.gui.reports.columns import inventory_common_joins_sql
 
@@ -657,6 +658,8 @@ class InventoryController:
                     di.item_id,
                     di.requisition_id,
                     di.quantity,
+                    COALESCE(i.name, 'item') AS item_name,
+                    COALESCE(req.name, 'requester') AS requester_name,
                     MAX(0,
                         di.quantity - COALESCE(SUM(
                             CASE
@@ -668,8 +671,11 @@ class InventoryController:
                     ) AS pending_qty
                 FROM Defective_Items di
                 LEFT JOIN Defective_Item_Actions dia ON dia.defective_item_id = di.id
+                LEFT JOIN Items i ON i.id = di.item_id
+                LEFT JOIN Requisitions r ON r.id = di.requisition_id
+                LEFT JOIN Requesters req ON req.id = r.requester_id
                 WHERE di.id = ?
-                GROUP BY di.id, di.item_id, di.requisition_id, di.quantity
+                GROUP BY di.id, di.item_id, di.requisition_id, di.quantity, i.name, req.name
             """
             rows = db.execute_query(row_query, (defective_item_id,))
             if not rows:
@@ -682,6 +688,11 @@ class InventoryController:
 
             item_id = int(defective_row["item_id"])
             requisition_id = int(defective_row["requisition_id"])
+            item_name = str(defective_row.get("item_name") or "item").strip() or "item"
+            requester_name = (
+                str(defective_row.get("requester_name") or "requester").strip()
+                or "requester"
+            )
             with db.transaction(immediate=True):
                 db.execute_update(
                     """
@@ -711,6 +722,27 @@ class InventoryController:
                         note=movement_note,
                         batch_id=None,
                     )
+
+                action_label = (
+                    "confirmed as disposed"
+                    if action_type == "DISPOSED"
+                    else "confirmed as not defective"
+                )
+                details = (notes or "No details").strip()
+                activity_logger.log_activity(
+                    activity_type=(
+                        activity_logger.DEFECTIVE_DISPOSED
+                        if action_type == "DISPOSED"
+                        else activity_logger.DEFECTIVE_NOT_DEFECTIVE
+                    ),
+                    description=(
+                        f"{action_label} {quantity} unit(s) of {item_name} "
+                        f"for {requester_name} - {details}"
+                    ),
+                    entity_id=item_id,
+                    entity_type="item",
+                    user_name=acted_by.strip(),
+                )
 
             return True
         except Exception as e:

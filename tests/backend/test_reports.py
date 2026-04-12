@@ -5,6 +5,7 @@ from openpyxl import load_workbook
 from inventory_app.database.connection import db
 from inventory_app.database.models import Item
 from inventory_app.gui.reports.report_generator import ReportGenerator, report_generator
+from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.gui.reports.query_builder import ReportQueryBuilder
 from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
@@ -101,6 +102,44 @@ def test_usage_report_generation(temp_db, tmp_path):
             found = True
             break
     assert found
+
+
+def test_usage_report_default_output_directory(temp_db, tmp_path, monkeypatch):
+    """Default report output path should be created inside the dedicated reports folder."""
+    monkeypatch.chdir(tmp_path)
+
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Marker", 1),
+        return_last_id=True,
+    )[1]
+    reqr_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)", ("User",), return_last_id=True
+    )[1]
+    req_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            reqr_id,
+            "requested",
+            "2025-01-01",
+            "Activity",
+            "2025-01-01 09:00:00",
+            "2025-01-01 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_id, item_id, 2),
+    )
+
+    gen = ReportGenerator()
+    result = gen.generate_report(date(2025, 1, 1), date(2025, 1, 1))
+
+    assert isinstance(result, str)
+    output_path = Path(result)
+    assert output_path.exists()
+    assert output_path.parent == tmp_path / "reports"
 
 
 def test_report_date_range_description_uses_explicit_dates():
@@ -212,6 +251,82 @@ def test_audit_log_data_source(temp_db):
     assert rows
     assert any(r.get("Action") == "ITEM_UPDATE" for r in rows)
     assert any(r.get("Editor") == "AuditTester" for r in rows)
+    assert any(" at " in (r.get("Timestamp") or "") for r in rows)
+
+
+def test_audit_log_groups_field_level_item_updates(temp_db):
+    """Audit report should merge same-event item field updates into one readable row."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Grouped Audit Item", 1),
+        return_last_id=True,
+    )[1]
+    timestamp = "2026-04-13 10:15:00"
+
+    db.execute_update(
+        "INSERT INTO Update_History (item_id, editor_name, reason, edit_timestamp, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (item_id, "Editor", "Item field updated", timestamp, "brand", "NA", "LabCorp"),
+    )
+    db.execute_update(
+        "INSERT INTO Update_History (item_id, editor_name, reason, edit_timestamp, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (item_id, "Editor", "Item field updated", timestamp, "supplier_id", "", "8"),
+    )
+
+    rows = get_audit_log_data(
+        start_date=date(2026, 4, 13),
+        end_date=date(2026, 4, 13),
+        editor_filter="Editor",
+        action_filter="ITEM_UPDATE",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Action"] == "ITEM_UPDATE"
+    assert row["Editor"] == "Editor"
+    assert "Updated Grouped Audit Item" in row["Summary"]
+    assert "Brand: NA -> LabCorp" in row["Change Details"]
+    assert "Supplier ID: (empty) -> 8" in row["Change Details"]
+
+
+def test_recent_activity_order_handles_mixed_timestamp_formats(temp_db):
+    """Recent activity should sort by actual datetime even with mixed timestamp string formats."""
+    activity_logger.log_activity(
+        "TEST_ACTION",
+        "older event",
+        timestamp="2026-04-13 08:00:00",
+    )
+    activity_logger.log_activity(
+        "TEST_ACTION",
+        "newer event",
+        timestamp="2026-04-13T09:00:00+00:00",
+    )
+
+    activities = activity_logger.get_recent_activities(2)
+    assert len(activities) == 2
+    assert activities[0]["description"] == "newer event"
+    assert activities[1]["description"] == "older event"
+
+
+def test_audit_log_includes_defective_confirmation_activity(temp_db):
+    """Unified audit data should include defective confirmation actions from Activity_Log."""
+    activity_logger.log_activity(
+        activity_logger.DEFECTIVE_NOT_DEFECTIVE,
+        "marked quantity as not defective 1 for item_id=9",
+        entity_id=9,
+        entity_type="item",
+        user_name="auditor",
+        timestamp="2026-04-13T11:00:00+00:00",
+    )
+
+    rows = get_audit_log_data(
+        start_date=date(2026, 4, 13),
+        end_date=date(2026, 4, 13),
+        action_filter="DEFECTIVE_NOT_DEFECTIVE",
+    )
+
+    assert rows
+    assert rows[0]["Action"] == "DEFECTIVE_NOT_DEFECTIVE"
+    assert rows[0]["Editor"] == "auditor"
 
 
 def test_task10_stock_levels_data_policy(temp_db):

@@ -3,6 +3,7 @@ Activity logging utility for tracking user actions in the laboratory inventory s
 Provides centralized logging for dashboard recent activity display.
 """
 
+import re
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from inventory_app.database.connection import db
@@ -22,6 +23,8 @@ class ActivityLogger:
     REQUISITION_EDITED = "REQUISITION_EDITED"
     REQUISITION_RETURNED = "REQUISITION_RETURNED"
     ITEM_MARKED_DEFECTIVE = "ITEM_MARKED_DEFECTIVE"
+    DEFECTIVE_DISPOSED = "DEFECTIVE_DISPOSED"
+    DEFECTIVE_NOT_DEFECTIVE = "DEFECTIVE_NOT_DEFECTIVE"
     REQUISITION_DELETED = "REQUISITION_DELETED"
     REQUESTER_ADDED = "REQUESTER_ADDED"
     REQUESTER_EDITED = "REQUESTER_EDITED"
@@ -29,6 +32,85 @@ class ActivityLogger:
     SDS_UPLOADED = "SDS_UPLOADED"
     SDS_REMOVED = "SDS_REMOVED"
     REPORT_GENERATED = "REPORT_GENERATED"
+    REPORT_DELETED = "REPORT_DELETED"
+
+    @staticmethod
+    def _get_item_name(item_id: int) -> str:
+        """Resolve item name for user-facing activity descriptions."""
+        try:
+            rows = db.execute_query("SELECT name FROM Items WHERE id = ?", (item_id,))
+            return (
+                str(rows[0]["name"]).strip() if rows and rows[0].get("name") else "item"
+            )
+        except Exception:
+            return "item"
+
+    @staticmethod
+    def _get_requisition_label(requisition_id: int) -> str:
+        """Resolve requisition label for user-facing activity descriptions."""
+        try:
+            rows = db.execute_query(
+                """
+                SELECT COALESCE(req.name, '') AS requester_name
+                FROM Requisitions r
+                LEFT JOIN Requesters req ON req.id = r.requester_id
+                WHERE r.id = ?
+                """,
+                (requisition_id,),
+            )
+            if rows and (rows[0].get("requester_name") or "").strip():
+                return f"requisition for {rows[0]['requester_name'].strip()}"
+            return "requisition"
+        except Exception:
+            return "requisition"
+
+    @staticmethod
+    def _sanitize_description(
+        activity_type: str,
+        description: str,
+    ) -> str:
+        """Hide technical ids from user-facing activity descriptions."""
+        text = (description or "").strip()
+        if not text:
+            return activity_type.replace("_", " ").title()
+
+        def _replace_item_id(match: re.Match[str]) -> str:
+            item_id = int(match.group(1))
+            return ActivityLogger._get_item_name(item_id)
+
+        def _replace_req_id(match: re.Match[str]) -> str:
+            requisition_id = int(match.group(1))
+            return ActivityLogger._get_requisition_label(requisition_id)
+
+        text = re.sub(
+            r"\bitem_id\s*=\s*(\d+)\b", _replace_item_id, text, flags=re.IGNORECASE
+        )
+        text = re.sub(
+            r"\bitem\s+id\s+(\d+)\b", _replace_item_id, text, flags=re.IGNORECASE
+        )
+        text = re.sub(
+            r"\brequisition_id\s*=\s*(\d+)\b",
+            _replace_req_id,
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"\brequisition\s+id\s+(\d+)\b",
+            _replace_req_id,
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        # Remove internal tracking ids that are not useful to office users.
+        text = re.sub(
+            r"\(?\s*defective_item_id\s*=\s*\d+\s*\)?", "", text, flags=re.IGNORECASE
+        )
+        text = re.sub(r"\s+,\s+", ", ", text)
+        text = re.sub(r"\(\s*,\s*", "(", text)
+        text = re.sub(r"\s+\)", ")", text)
+        text = re.sub(r"\s{2,}", " ", text).strip(" -,")
+
+        return text or activity_type.replace("_", " ").title()
 
     @staticmethod
     def log_activity(
@@ -93,9 +175,9 @@ class ActivityLogger:
         """
         try:
             query = """
-            SELECT activity_type, description, entity_type, user_name, timestamp
+            SELECT id, activity_type, description, entity_type, user_name, timestamp
             FROM Activity_Log
-            ORDER BY timestamp DESC
+            ORDER BY COALESCE(julianday(timestamp), 0) DESC, id DESC
             LIMIT ?
             """
 
@@ -116,7 +198,10 @@ class ActivityLogger:
                 activities.append(
                     {
                         "type": row["activity_type"],
-                        "description": row["description"],
+                        "description": ActivityLogger._sanitize_description(
+                            row["activity_type"],
+                            row["description"] or "",
+                        ),
                         "entity_type": row["entity_type"],
                         "user": row["user_name"] or "System",
                         "time": dt,

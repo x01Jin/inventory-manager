@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
-from datetime import date
+from datetime import date, datetime, timezone
 from collections import OrderedDict
+import re
 
 from inventory_app.database.connection import db
 from inventory_app.gui.reports.query_builder import (
@@ -8,6 +9,7 @@ from inventory_app.gui.reports.query_builder import (
     ReportStatisticsBuilder,
 )
 from inventory_app.utils.logger import logger
+from inventory_app.utils import date_utils
 from inventory_app.gui.reports.report_utils import date_formatter
 from inventory_app.services.movement_types import MovementType
 from inventory_app.services.category_config import DEFAULT_CATEGORIES
@@ -986,9 +988,275 @@ def get_audit_log_data(
             query += ' AND unified."Entity Type" = ?'
             params.append(entity_filter)
 
-        query += ' ORDER BY unified."Timestamp" DESC'
+        query += (
+            ' ORDER BY COALESCE(julianday(unified."Timestamp"), 0) DESC, '
+            'unified."Timestamp" DESC'
+        )
 
-        return db.execute_query(query, tuple(params)) or []
+        raw_rows = db.execute_query(query, tuple(params)) or []
+        return _format_unified_audit_rows(raw_rows)
     except Exception as e:
         logger.error(f"Failed to get audit log data: {e}")
         return []
+
+
+def _humanize_field_name(field_name: Optional[str]) -> str:
+    """Convert technical field names into user-facing labels."""
+    if not field_name:
+        return "-"
+
+    normalized = field_name.strip().replace("_", " ")
+    replacements = {
+        "id": "ID",
+        "sds": "SDS",
+    }
+    parts = [
+        replacements.get(part.lower(), part.capitalize()) for part in normalized.split()
+    ]
+    return " ".join(parts)
+
+
+def _normalize_audit_value(value: Optional[str]) -> str:
+    """Normalize empty/null audit values for report readability."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return text
+
+
+def _parse_audit_datetime(raw_timestamp: str) -> Optional[datetime]:
+    """Parse common audit timestamp formats into datetime objects."""
+    if not raw_timestamp:
+        return None
+
+    timestamp_text = raw_timestamp.strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(timestamp_text)
+    except ValueError:
+        pass
+
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S.%f%z",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(timestamp_text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _format_audit_timestamp(raw_timestamp: str) -> str:
+    """Format timestamps to match dashboard latest-activity style."""
+    dt = _parse_audit_datetime(raw_timestamp)
+    if dt is None:
+        return raw_timestamp
+    return (
+        f"{date_utils.format_date_short(dt)} at {date_utils.format_time_12h(dt.time())}"
+    )
+
+
+def _build_audit_summary(row: Dict[str, str]) -> str:
+    """Build a readable summary sentence for a unified audit row."""
+    action = (row.get("Action") or "").strip()
+    entity_name = _normalize_audit_value(row.get("Entity Name"))
+    entity_type = _normalize_audit_value(row.get("Entity Type"))
+    reason = _normalize_audit_value(row.get("Reason"))
+    entity_label = entity_name or (entity_type if entity_type else "record")
+
+    def _clean_summary_text(text: str) -> str:
+        cleaned = _normalize_audit_value(text)
+        if not cleaned:
+            return ""
+
+        cleaned = re.sub(
+            r"\bitem_id\s*=\s*\d+\b",
+            entity_name or "item",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\bitem\s+id\s+\d+\b",
+            entity_name or "item",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\brequisition_id\s*=\s*\d+\b",
+            "requisition",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\brequisition\s+id\s+\d+\b",
+            "requisition",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\(?\s*defective_item_id\s*=\s*\d+\s*\)?",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(r"\s+,\s+", ", ", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" -,")
+        return cleaned
+
+    reason = _clean_summary_text(reason)
+
+    if action in {"ITEM_UPDATE", "REQUISITION_UPDATE"}:
+        return f"Updated {entity_name}" if entity_name else "Updated record"
+
+    action_map = {
+        "ITEM_DISPOSAL": f"Recorded item disposal for {entity_label}",
+        "DEFECTIVE_RECORDED": f"Recorded defective quantity for {entity_label}",
+        "DEFECTIVE_DISPOSED": f"Confirmed defective disposal for {entity_label}",
+        "DEFECTIVE_NOT_DEFECTIVE": f"Confirmed not-defective review for {entity_label}",
+        "SDS_UPLOADED": f"Updated SDS record for {entity_label}",
+        "SDS_REMOVED": f"Removed SDS record for {entity_label}",
+    }
+    if action in action_map and reason:
+        return f"{action_map[action]}: {reason}"
+    if action in action_map:
+        return action_map[action]
+
+    return reason or action.replace("_", " ").title()
+
+
+def _split_report_deleted_reason(reason: str) -> tuple[str, str]:
+    """Split report-deletion reason into summary and path detail."""
+    text = _normalize_audit_value(reason)
+    if not text:
+        return "", ""
+
+    if "||" in text:
+        summary_part, details_part = text.split("||", 1)
+        return summary_part.strip(), details_part.strip()
+
+    # Backward compatibility: previously formatted as
+    # "Deleted report file: <name> (<path>)"
+    legacy_match = re.match(r"^(Deleted report file:\s*.+?)\s*\(([^()]+)\)\s*$", text)
+    if legacy_match:
+        return (
+            legacy_match.group(1).strip(),
+            f"Deleted file path: {legacy_match.group(2).strip()}",
+        )
+
+    return text, ""
+
+
+def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
+    """Group noisy update rows and attach readable summaries for export."""
+    grouped_updates: dict[tuple, dict] = {}
+    formatted_rows: List[Dict] = []
+
+    for row in rows:
+        action = (row.get("Action") or "").strip()
+        entity_type = _normalize_audit_value(row.get("Entity Type"))
+        entity_id = _normalize_audit_value(row.get("Entity ID"))
+        entity_name = _normalize_audit_value(row.get("Entity Name"))
+        editor = _normalize_audit_value(row.get("Editor")) or "System"
+        timestamp_raw = _normalize_audit_value(row.get("Timestamp"))
+        timestamp_display = _format_audit_timestamp(timestamp_raw)
+        field_name = _humanize_field_name(row.get("Field"))
+        old_value = _normalize_audit_value(row.get("Old Value"))
+        new_value = _normalize_audit_value(row.get("New Value"))
+        reason = _normalize_audit_value(row.get("Reason"))
+
+        base_row = {
+            "Action": action,
+            "Editor": editor,
+            "Summary": "",
+            "Timestamp": timestamp_display,
+            "Entity Type": entity_type,
+            "Entity ID": entity_id,
+            "Entity Name": entity_name,
+            "Change Details": "",
+            "_timestamp_raw": timestamp_raw,
+        }
+
+        if action in {"ITEM_UPDATE", "REQUISITION_UPDATE"}:
+            key = (
+                action,
+                entity_type,
+                entity_id,
+                entity_name,
+                editor,
+                timestamp_raw,
+            )
+            if key not in grouped_updates:
+                grouped_updates[key] = {
+                    **base_row,
+                    "Summary": _build_audit_summary(
+                        {
+                            "Action": action,
+                            "Entity Name": entity_name,
+                            "Reason": reason,
+                        }
+                    ),
+                    "_changes": [],
+                }
+
+            grouped_updates[key]["_changes"].append(
+                (
+                    field_name,
+                    old_value,
+                    new_value,
+                )
+            )
+            continue
+
+        base_row["Summary"] = _build_audit_summary(
+            {
+                "Action": action,
+                "Entity Name": entity_name,
+                "Reason": reason,
+            }
+        )
+
+        if action == "REPORT_DELETED":
+            summary_text, details_text = _split_report_deleted_reason(reason)
+            if summary_text:
+                base_row["Summary"] = summary_text
+            if details_text:
+                base_row["Change Details"] = details_text
+
+        if field_name and (old_value or new_value):
+            old_text = old_value or "(empty)"
+            new_text = new_value or "(empty)"
+            base_row["Change Details"] = f"{field_name}: {old_text} -> {new_text}"
+
+        formatted_rows.append(base_row)
+
+    for grouped in grouped_updates.values():
+        changes = grouped.pop("_changes")
+        grouped["Summary"] = f"{grouped['Summary']} ({len(changes)} field(s) changed)"
+        grouped["Change Details"] = "; ".join(
+            f"{field}: {(old or '(empty)')} -> {(new or '(empty)')}"
+            for field, old, new in changes
+        )
+        formatted_rows.append(grouped)
+
+    def _sort_epoch(row: Dict[str, str]) -> float:
+        dt = _parse_audit_datetime(row.get("_timestamp_raw", "") or "")
+        if dt is None:
+            return 0.0
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+
+    formatted_rows.sort(
+        key=lambda row: (
+            _sort_epoch(row),
+            row.get("Action", ""),
+        ),
+        reverse=True,
+    )
+
+    for row in formatted_rows:
+        row.pop("_timestamp_raw", None)
+
+    return formatted_rows

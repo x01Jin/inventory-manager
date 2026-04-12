@@ -77,6 +77,9 @@ def create_excel_report(
         )
         center_align = Alignment(horizontal="center", vertical="center")
         left_align = Alignment(horizontal="left", vertical="center")
+        wrapped_left_align = Alignment(
+            horizontal="left", vertical="top", wrap_text=True, shrink_to_fit=True
+        )
 
         if not data:
             ws["A1"] = "No data found for the specified period."
@@ -88,6 +91,7 @@ def create_excel_report(
         formatted_headers = format_excel_headers(
             raw_headers, start_date, end_date, granularity
         )
+        is_audit_report = "audit log" in title.lower()
 
         # === ROW 1: Empty ===
 
@@ -198,7 +202,9 @@ def create_excel_report(
                             cell.alignment = Alignment(horizontal="right")
                             cell.number_format = "#,##0"
                         else:
-                            cell.alignment = left_align
+                            cell.alignment = (
+                                wrapped_left_align if is_audit_report else left_align
+                            )
                     current_row += 1
         else:
             # Just write data sequentially if no category grouping
@@ -212,7 +218,9 @@ def create_excel_report(
                         cell.alignment = Alignment(horizontal="right")
                         cell.number_format = "#,##0"
                     else:
-                        cell.alignment = left_align
+                        cell.alignment = (
+                            wrapped_left_align if is_audit_report else left_align
+                        )
                 current_row += 1
 
         # Add grand total row
@@ -266,6 +274,16 @@ def create_excel_report(
 
         # Final column width adjustment
         scan_end_row = min(current_row, 1000)
+        audit_width_overrides = {
+            "Action": 22,
+            "Editor": 16,
+            "Summary": 40,
+            "Timestamp": 27,
+            "Entity Type": 16,
+            "Entity ID": 14,
+            "Entity Name": 27,
+            "Change Details": 44,
+        }
         for col_num in range(1, len(formatted_headers) + 1):
             column_letter = get_column_letter(col_num)
             max_len = ws.column_dimensions[column_letter].width
@@ -274,7 +292,16 @@ def create_excel_report(
                 val = ws.cell(row=r, column=col_num).value
                 if val:
                     max_len = max(max_len, len(str(val)) + 2)
-            ws.column_dimensions[column_letter].width = min(max_len, 50)
+
+            header_text = str(formatted_headers[col_num - 1])
+            if is_audit_report and header_text in audit_width_overrides:
+                ws.column_dimensions[column_letter].width = audit_width_overrides[
+                    header_text
+                ]
+                continue
+
+            width_cap = 42 if is_audit_report else 50
+            ws.column_dimensions[column_letter].width = min(max_len, width_cap)
 
         wb.save(output_path)
         logger.info(f"Report saved to {output_path}")

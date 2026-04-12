@@ -38,6 +38,8 @@ The Activity panel provides an audit trail of recent system events:
 - **Latest Activity**: Single most recent activity with full description, user, and timestamp
 - **Activity History**: Table showing recent activities (dashboard display is limited for readability)
 - Latest Activity row height auto-adjusts to wrapped description text so long entries are fully visible.
+- Activity descriptions are normalized for office users: item/requisition names are shown instead of internal numeric ids.
+- Legacy log lines that contain technical tokens (for example `item_id=...`) are sanitized at display time.
 
 **Activity Types Logged:**
 

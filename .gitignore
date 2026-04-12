@@ -26,3 +26,7 @@ htmlcov/
 coverage.xml
 inventory.db-shm
 inventory.db-wal
+
+#others
+sds/
+reports/

@@ -684,6 +684,15 @@ def test_defective_confirmation_actions_update_history_and_stock(temp_db):
     batch_stats = controller.get_batch_statistics()
     assert batch_stats["total_stock"] == 3
 
+    activity_rows = db.execute_query(
+        "SELECT activity_type, user_name, description FROM Activity_Log WHERE activity_type IN (?, ?) ORDER BY id ASC",
+        ("DEFECTIVE_NOT_DEFECTIVE", "DEFECTIVE_DISPOSED"),
+    )
+    assert len(activity_rows) == 2
+    assert activity_rows[0]["activity_type"] == "DEFECTIVE_NOT_DEFECTIVE"
+    assert activity_rows[1]["activity_type"] == "DEFECTIVE_DISPOSED"
+    assert all(row["user_name"] == "reviewer-1" for row in activity_rows)
+
 
 def test_non_consumable_usage_history_includes_borrow_and_return_events(temp_db):
     """Non-consumables should include borrow/return/lost movement timeline in item history."""

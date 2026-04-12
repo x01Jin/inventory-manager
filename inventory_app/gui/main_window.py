@@ -100,6 +100,9 @@ class MainWindow(QMainWindow):
             0: self.dashboard_page,
         }
 
+        for page_index in (4, 5, 6):
+            self._ensure_page_loaded(page_index)
+
         # Connect navigation
         self.nav_panel.page_changed.connect(self.on_page_changed)
 

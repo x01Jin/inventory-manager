@@ -4,7 +4,7 @@ The Reports page is where you generate, inspect, and export detailed, Excel-comp
 
 ## **Top controls (header)**
 
-- **🔄 Refresh:** Reloads the list of available categories, suppliers, and recent report metadata.
+- **🔄 Refresh:** Reloads category/filter options and refreshes the generated Excel file list from the reports folder.
 - **📅 Date range presets:** Quick presets such as **Last 7 Days**, **Last 30 Days**, **This Month**, **Last Month**, **This Year**, and **Last Year** let you set common ranges in one click.
 - **🚀 Generate Report:** Start generation of the currently selected report with the chosen options. Report generation runs in the background and the UI displays progress messages.
 
@@ -43,6 +43,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 - **Usage by Grade Level:** Item-level usage breakdown with Grade 7/8/9/10 tally columns plus TOTAL QUANTITY and inventory descriptors (size, brand, specs). Supports date range, category, grade, section, and individual-request filtering.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.
 - **Audit Log Report:** Unified audit history including item/requisition changes, disposals, defective recordings, SDS upload/removal events, and activity log events.
+  - Item/requisition field edits are grouped into a single event row with a readable `Summary` description.
 - **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, yearly) depending on granularity.
 
 ## **File output & naming**
@@ -52,13 +53,17 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
   - Date Range Usage: `[granularity]_report_[TIMESTAMP].xlsx` (e.g., `weekly_report_20251201_120000.xlsx`)
   - Inventory: `inventory_[report_type]_[TIMESTAMP].xlsx` (e.g., `inventory_stock_levels_report_20251201_120000.xlsx`)
   - Trends: `trends_report_[group_by]_[TIMESTAMP].xlsx` (e.g., `trends_report_item_20251201_120000.xlsx`)
-- The application saves the file to the application's working directory. After generation, use **Open Report** or **Open Folder** in the Reports panel to open outputs.
+- The application saves generated files to a dedicated `reports` folder inside the application's working directory. If the folder does not exist, it is created automatically on first export.
+- The **Generated Reports** list shows exactly the `.xlsx` files found in that folder.
 
 ## **Status & results panels**
 
 - **Status:** Shows progress, success, and error messages (e.g., "Generating report...", "✅ Report generated successfully!", or specific errors such as invalid date ranges or "No data found"). Failed report generation does not emit success messaging.
-- **Generated Reports:** A short list of generated files from the current session for quick reference.
-- **Open Report / Open Folder:** Actions below Generated Reports open the selected file or its containing folder.
+- **Generated Reports:** A live list of `.xlsx` files currently present in the dedicated reports folder.
+- **Refresh:** Manually re-scan the reports folder for `.xlsx` files.
+- **Open Report / Open Folder:** Actions below Generated Reports open the selected file or the reports folder.
+- **Copy File:** Copies the selected report as a file object to clipboard so it can be pasted into Explorer, email attachment pickers, or supported targets.
+- **Delete:** Removes the selected report file after confirmation and requires editor name/initials for audit logging.
 - **Recent Reports:** A timestamped activity list of recent reports created by the application.
 
 ## **Validation & common warnings**
@@ -102,5 +107,6 @@ Items with current stock of 0 (fully consumed or disposed) are automatically exc
 - If opening a report fails, select the report and use **Open Folder**, then open the file manually from your file manager.
 - If you get "No data found" and believe data should exist, try expanding the date range or removing filters. If results are still missing, contact your administrator and include the filters and date range you used.
 - For repeated permission or I/O issues, check available disk space and file permissions for the application's working directory.
+- If a selected report is deleted or moved externally, refresh the list (or wait for auto-refresh) and select an existing file again.
 
 -- End of Reports Help --

@@ -1190,6 +1190,17 @@ class ItemSDS:
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
 
+    @staticmethod
+    def _get_item_label(item_id: int) -> str:
+        """Return a human-friendly item label for activity text."""
+        try:
+            rows = db.execute_query("SELECT name FROM Items WHERE id = ?", (item_id,))
+            if rows and (rows[0].get("name") or "").strip():
+                return rows[0]["name"].strip()
+        except Exception:
+            pass
+        return "item"
+
     @classmethod
     def get_by_item_id(cls, item_id: int) -> Optional["ItemSDS"]:
         """Get SDS metadata for a specific item."""
@@ -1282,9 +1293,9 @@ class ItemSDS:
                 activity_logger.log_activity(
                     activity_logger.SDS_UPLOADED,
                     (
-                        f"Uploaded SDS for item ID {self.item_id}"
+                        f"Uploaded SDS for {self._get_item_label(self.item_id)}"
                         if is_new_record
-                        else f"Updated SDS for item ID {self.item_id}"
+                        else f"Updated SDS for {self._get_item_label(self.item_id)}"
                     ),
                     self.item_id,
                     "item_sds",
@@ -1313,7 +1324,7 @@ class ItemSDS:
                 )
                 activity_logger.log_activity(
                     activity_logger.SDS_REMOVED,
-                    f"Removed SDS for item ID {item_id}",
+                    f"Removed SDS for {cls._get_item_label(item_id)}",
                     item_id,
                     "item_sds",
                     editor_name,
@@ -1645,9 +1656,17 @@ class Requisition:
                     history_query, (self.id, editor_name, "Requisition deleted")
                 )
 
+                requester_name = "requester"
+                requester_rows = db.execute_query(
+                    "SELECT name FROM Requesters WHERE id = ?",
+                    (self.requester_id,),
+                )
+                if requester_rows and (requester_rows[0].get("name") or "").strip():
+                    requester_name = requester_rows[0]["name"].strip()
+
                 activity_logger.log_activity(
                     activity_logger.REQUISITION_DELETED,
-                    f"Deleted requisition ID {self.id}",
+                    f"Deleted requisition for {requester_name}",
                     self.id,
                     "requisition",
                     editor_name,

@@ -226,9 +226,10 @@ class RequisitionActivityManager:
         """Log a defective item recording activity from return processing."""
         try:
             requester_name = self._get_requester_name(requisition_id)
+            item_name = self._get_item_name(item_id)
             description = (
-                f"recorded defective item quantity {quantity} for {requester_name} "
-                f"(item_id={item_id})"
+                f"recorded {quantity} defective unit(s) of {item_name} "
+                f"for {requester_name}"
             )
 
             success = activity_logger.log_activity(
@@ -422,6 +423,19 @@ class RequisitionActivityManager:
                 f"Failed to get requester name for requisition {requisition_id}: {e}"
             )
             return "Unknown"
+
+    def _get_item_name(self, item_id: int) -> str:
+        """Get item name for activity logging."""
+        try:
+            from inventory_app.database.connection import db
+
+            rows = db.execute_query("SELECT name FROM Items WHERE id = ?", (item_id,))
+            if rows and (rows[0].get("name") or "").strip():
+                return rows[0]["name"].strip()
+            return "item"
+        except Exception as e:
+            logger.error(f"Failed to get item name for item {item_id}: {e}")
+            return "item"
 
 
 # Global instance for easy access

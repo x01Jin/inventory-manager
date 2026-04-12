@@ -14,6 +14,7 @@ from inventory_app.gui.reports.report_utils import date_formatter
 
 # Move Excel and header logic to dedicated modules
 from inventory_app.gui.reports.excel_utils import create_excel_report
+from inventory_app.gui.reports.report_paths import build_report_output_path
 from inventory_app.gui.reports.header_utils import (
     format_excel_headers,
     parse_and_format_period_key,
@@ -114,7 +115,9 @@ class ReportGenerator:
             # Create Excel file
             if not output_path:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_path = f"{granularity}_report_{timestamp}.xlsx"
+                output_path = str(
+                    build_report_output_path(f"{granularity}_report_{timestamp}.xlsx")
+                )
 
             output_path_obj = Path(output_path)
             title = f"{granularity.title()} Usage Report"
@@ -372,7 +375,11 @@ class ReportGenerator:
             # Create Excel file
             if not output_path:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_path = f"inventory_{report_type.lower().replace(' ', '_')}_{timestamp}.xlsx"
+                output_path = str(
+                    build_report_output_path(
+                        f"inventory_{report_type.lower().replace(' ', '_')}_{timestamp}.xlsx"
+                    )
+                )
 
             output_path_obj = Path(output_path)
             self._create_excel_report(
@@ -440,7 +447,11 @@ class ReportGenerator:
             # Create Excel file
             if not output_path:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_path = f"trends_report_{group_by}_{timestamp}.xlsx"
+                output_path = str(
+                    build_report_output_path(
+                        f"trends_report_{group_by}_{timestamp}.xlsx"
+                    )
+                )
 
             output_path_obj = Path(output_path)
             title = f"Trends Report - {group_by.title()}"
@@ -733,7 +744,9 @@ class ReportGenerator:
 
             if not output_path:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_path = f"usage_by_grade_level_{timestamp}.xlsx"
+                output_path = str(
+                    build_report_output_path(f"usage_by_grade_level_{timestamp}.xlsx")
+                )
 
             output_path_obj = Path(output_path)
             self._create_excel_report(

@@ -171,6 +171,12 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
   - Audit Log Report — centralized audit stream across item/requisition updates, disposals, defective recordings, and activity events.
     - SDS activity events are included (`SDS_UPLOADED`, `SDS_REMOVED`).
+    - Defective confirmation actions from item history are also included (`DEFECTIVE_DISPOSED`, `DEFECTIVE_NOT_DEFECTIVE`).
+    - Field-level update events are grouped into one row per edit event (instead of one row per field) with a readable `Summary` column.
+    - Summary text is normalized for non-technical readers: item/requester context is preferred over internal ids.
+    - Technical id tokens embedded in older records (for example `item_id=...`, `requisition_id=...`) are cleaned in report output.
+    - Timestamps are ordered using datetime-aware sorting to keep mixed timestamp formats in correct newest-first order.
+    - Export columns are optimized for readability in this order: `Action`, `Editor`, `Summary`, `Timestamp`, then context columns (`Entity Type`, `Entity ID`, `Entity Name`, `Change Details`).
   - Acquisition History Report — batch-level acquisition rows including explicit batch labels (`B1`, `B2`, and so on) and per-batch dates.
   - Batch Summary Report — grouped per-item batch history output with label/date/quantity details.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
@@ -179,8 +185,13 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 Background Processing and UI Integration
 
 - The `ReportsPage` UI uses a `DateRangeSelector`, filters, and other controls in `reports_page.py` plus `ReportWorker` to run the chosen report in a separate thread.
+- Usage filter option hydration for Grade Level/Section (`ReportsPage.on_usage_filter_type_changed`) is loaded via the shared GUI worker pool so page navigation and filter changes remain responsive on large requester datasets.
+- Category selectors and generated-report file discovery are refreshed asynchronously using the shared worker pool to avoid blocking when opening the Reports page.
 - The `ReportWorker` emits progress updates and handles report generation — the UI listens to `progress`, `finished`, and `error` signals and updates `ReportUIUpdater` (status and recent files list). Failed report payloads are emitted through `error` and do not trigger success-state completion messaging.
-- After generation, report opening is user-driven through panel actions (`Open Report`, `Open Folder`).
+- Generated reports are listed from the actual `reports/` directory (Excel files only), not from in-memory session state, so external file additions/removals are reflected while the page remains open.
+- The Generated Reports panel includes `Refresh`, `Open Report`, `Open Folder`, `Copy File`, and `Delete` actions.
+- `Copy File` copies the selected report as a file-object clipboard entry compatible with Explorer paste flows.
+- `Delete` requires confirmation and editor name/initials, then records a `REPORT_DELETED` activity entry.
 - `ReportConfig` centralizes UI strings, granularity descriptions, and styling for the report UI.
 
 Security and SQL Safety
@@ -206,7 +217,8 @@ Testing
 
 Developer Notes
 
-- The Excel file is written to the current working directory by default with a timestamped filename (`{granularity}_report_{YYYYMMDD_HHMMSS}.xlsx` or for inventory reports, `inventory_{report_type}_{timestamp}.xlsx`).
+- The Excel file is written to a dedicated `reports/` folder under the application's current working directory by default. The folder is auto-created if missing.
+- Default naming patterns remain timestamped (for example, `{granularity}_report_{YYYYMMDD_HHMMSS}.xlsx`, `inventory_{report_type}_{timestamp}.xlsx`, `trends_report_{group_by}_{timestamp}.xlsx`).
 - The report generator logs via `inventory_app.utils.logger` and raises on critical write failures.
 - `openpyxl` is declared in `requirements.txt` and used for workbook creation and styling.
 

@@ -32,6 +32,7 @@ from openpyxl.utils import get_column_letter
 
 from inventory_app.database.connection import db
 from inventory_app.utils.logger import logger
+from inventory_app.gui.reports.report_paths import build_report_output_path
 
 
 # Category display order matching sample reports
@@ -694,7 +695,11 @@ def generate_monthly_usage_report(
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = f"monthly_usage_{month_name}_{year}_{timestamp}.xlsx"
+            output_path = str(
+                build_report_output_path(
+                    f"monthly_usage_{month_name}_{year}_{timestamp}.xlsx"
+                )
+            )
 
         output_path_obj = Path(output_path)
 
