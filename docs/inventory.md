@@ -18,6 +18,9 @@ Underlying tables involved are `Items`, `Item_Batches`, and `Stock_Movements`.
 - Data loads asynchronously to keep the UI responsive.
 - A thin loading indicator is shown at the bottom of the page while refresh is in progress.
 - Post-query processing (item row shaping and status prefetch) runs in a background worker before UI binding.
+- Large inventory result sets bind to the table in progressive row batches, so rows become visible incrementally instead of appearing only after full render.
+- Status color styling is applied in phases (essential first, full pass second) to keep first paint responsive.
+- Statistics cards refresh in a background worker and can complete independently of table row rendering.
 - Progress bar now remains active through inventory table population/styling so long refreshes have visible feedback.
 - Action buttons are temporarily guarded during critical load phases.
 - Virtual scrolling exists as an internal feature flag and is not currently exposed as a user setting.

@@ -6,6 +6,7 @@ from inventory_app.gui.inventory.inventory_page import InventoryPage
 from inventory_app.gui.inventory.inventory_controller import InventoryController
 from inventory_app.gui.inventory.inventory_model import ItemRow
 from inventory_app.gui.inventory.inventory_table import InventoryTable
+from inventory_app.services.item_status_service import item_status_service
 
 
 class _FakeStatus:
@@ -593,3 +594,168 @@ def test_sds_inline_widgets_do_not_overlay_after_repopulate(qtbot):
     assert name_item is not None
     assert name_item.text() == "Acetone"
     assert len(table.findChildren(QWidget, "sdsInlineWrapper")) == 0
+
+
+def test_inventory_table_uses_batched_population_for_large_sets(qtbot, monkeypatch):
+    """Large datasets should populate over multiple UI batches instead of one long loop."""
+    batch_calls = {"count": 0}
+    original_batch = InventoryTable._populate_table_batch
+
+    def wrapped_batch(self, token):
+        batch_calls["count"] += 1
+        return original_batch(self, token)
+
+    monkeypatch.setattr(InventoryTable, "_populate_table_batch", wrapped_batch)
+
+    table = InventoryTable()
+    qtbot.addWidget(table)
+
+    large_data = []
+    for idx in range(220):
+        large_data.append(
+            {
+                "id": idx + 1,
+                "name": f"Item {idx + 1}",
+                "category_name": "Equipment",
+                "size": "N/A",
+                "brand": "Brand",
+                "supplier_name": "Supplier",
+                "other_specifications": None,
+                "expiration_date": None,
+                "calibration_date": None,
+                "acquisition_date": None,
+                "last_modified": None,
+                "has_sds": 0,
+                "is_consumable": False,
+                "total_stock": 10,
+                "available_stock": 10,
+            }
+        )
+
+    table.populate_table(large_data, statuses={}, skip_styling=True)
+
+    qtbot.waitUntil(
+        lambda: table.item(len(large_data) - 1, 1) is not None, timeout=5000
+    )
+
+    assert batch_calls["count"] > 1
+    assert table.rowCount() == len(large_data)
+
+
+def test_filtered_table_reuses_cached_statuses(qtbot, monkeypatch):
+    """Filtering should reuse already-prefetched statuses and avoid extra bulk lookups."""
+
+    def skip_initial_refresh(self):
+        return None
+
+    monkeypatch.setattr(InventoryPage, "refresh_data", skip_initial_refresh)
+
+    page = InventoryPage()
+    qtbot.addWidget(page)
+
+    page.model.set_items(
+        [
+            ItemRow(
+                id=101,
+                name="Cached Item 1",
+                category_name="Equipment",
+                item_type="Non-consumable",
+                size=None,
+                brand=None,
+                supplier_name=None,
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 1),
+                last_modified=None,
+                total_stock=5,
+                available_stock=5,
+            ),
+            ItemRow(
+                id=102,
+                name="Cached Item 2",
+                category_name="Equipment",
+                item_type="Non-consumable",
+                size=None,
+                brand=None,
+                supplier_name=None,
+                other_specifications=None,
+                po_number=None,
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2024, 1, 1),
+                last_modified=None,
+                total_stock=8,
+                available_stock=8,
+            ),
+        ]
+    )
+
+    cached_lookup = {
+        101: _FakeStatus("CAL_WARNING"),
+        102: _FakeStatus("EXPIRED"),
+    }
+    page.model.set_status_lookup(cached_lookup)
+
+    called_with = []
+
+    def track_bulk_status_fetch(item_ids):
+        called_with.append(list(item_ids))
+        return {}
+
+    monkeypatch.setattr(
+        item_status_service, "get_statuses_for_items", track_bulk_status_fetch
+    )
+
+    page._update_filtered_table()
+
+    assert called_with == []
+
+
+def test_inventory_progressive_styling_receives_prefetched_statuses(qtbot, monkeypatch):
+    """Progressive styling should receive non-None statuses from prefetched cache."""
+    table = InventoryTable()
+    qtbot.addWidget(table)
+
+    items = []
+    statuses = {}
+    for idx in range(190):
+        item_id = idx + 1
+        items.append(
+            {
+                "id": item_id,
+                "name": f"Status Item {item_id}",
+                "category_name": "Equipment",
+                "size": None,
+                "brand": None,
+                "supplier_name": None,
+                "other_specifications": None,
+                "expiration_date": None,
+                "calibration_date": None,
+                "acquisition_date": None,
+                "last_modified": None,
+                "has_sds": 0,
+                "is_consumable": False,
+                "total_stock": 5,
+                "available_stock": 5,
+            }
+        )
+        statuses[item_id] = _FakeStatus("EXPIRED")
+
+    seen_statuses = []
+    original_apply = table._apply_row_styling
+
+    def wrapped_apply(row, item_status):
+        seen_statuses.append(item_status)
+        return original_apply(row, item_status)
+
+    monkeypatch.setattr(table, "_apply_row_styling", wrapped_apply)
+
+    table.populate_table(items, statuses=statuses, skip_styling=False)
+
+    qtbot.waitUntil(lambda: len(seen_statuses) > 0, timeout=5000)
+
+    assert any(status is not None for status in seen_statuses)

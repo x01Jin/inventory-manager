@@ -61,6 +61,8 @@ When you run `python -m inventory_app.main`:
 - Requisition page requester options are fetched in background loaders and only applied to UI on the main thread.
 - Requisition dialog item preparation is split into background fetch + background preprocessing + batched UI list rendering.
 - Dashboard schedule chart data retrieval is background-loaded, while UI thread only paints rows.
+- Dashboard alerts are rendered in two phases: Summary first, then progressive batched paint for the full alerts table.
+- Inventory page uses background payload preparation and progressive row binding for large table refreshes so rows appear incrementally while loading continues.
 
 ## Design Boundaries
 

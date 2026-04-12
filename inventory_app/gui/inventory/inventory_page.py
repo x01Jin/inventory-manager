@@ -77,6 +77,7 @@ class InventoryPage(QWidget):
 
         # Track current worker for cancellation
         self._current_worker: Optional[Worker] = None
+        self._stats_worker: Optional[Worker] = None
         self._parallel_loader: Optional[ParallelDataLoader] = None
         self._is_loading = False
 
@@ -199,6 +200,8 @@ class InventoryPage(QWidget):
         # Cancel any existing workers
         if self._current_worker:
             self._current_worker.cancel()
+        if self._stats_worker:
+            self._stats_worker.cancel()
         if self._parallel_loader:
             self._parallel_loader.cancel()
 
@@ -357,13 +360,42 @@ class InventoryPage(QWidget):
             self._apply_current_filters()
 
             # Update stats
-            stats = self.model.get_statistics()
-            self.stats.update_statistics(stats)
+            self._load_stats_async()
 
             logger.info(f"Refreshed inventory data: {len(payload.items)} items loaded")
         except Exception as e:
             logger.error(f"Error applying inventory payload: {e}")
             self._on_load_error((type(e), e, str(e)))
+
+    def _load_stats_async(self) -> None:
+        """Load inventory statistics in background to keep UI responsive."""
+        if self._stats_worker:
+            self._stats_worker.cancel()
+
+        self._stats_worker = Worker(self.model.get_statistics)
+        self._stats_worker.signals.result.connect(self._on_stats_loaded)
+        self._stats_worker.signals.error.connect(self._on_stats_error)
+        self._stats_worker.signals.finished.connect(self._on_stats_finished)
+
+        from inventory_app.gui.utils.worker import worker_pool
+
+        worker_pool.start(self._stats_worker)
+
+    def _on_stats_loaded(self, stats: Dict[str, Any]) -> None:
+        """Apply asynchronously loaded statistics to the stats widget."""
+        try:
+            self.stats.update_statistics(stats)
+        except Exception as e:
+            logger.error(f"Failed to update inventory statistics widget: {e}")
+
+    def _on_stats_error(self, error_tuple: tuple) -> None:
+        """Handle inventory statistics loading errors."""
+        _exctype, value, _tb = error_tuple
+        logger.error(f"Failed to load inventory statistics: {value}")
+
+    def _on_stats_finished(self) -> None:
+        """Clear completed stats worker reference."""
+        self._stats_worker = None
 
     def _on_parallel_error(self, name: str, error: Exception, traceback_str: str):
         """Handle error from parallel loader."""
@@ -665,9 +697,19 @@ class InventoryPage(QWidget):
             table_data.append(row)
 
         item_ids = [row.get("id") for row in table_data if row.get("id")]
-        statuses = {}
-        if item_ids:
-            statuses = item_status_service.get_statuses_for_items(item_ids)
+        statuses = {
+            item_id: self.model.status_lookup.get(item_id)
+            for item_id in item_ids
+            if item_id in self.model.status_lookup
+        }
+
+        missing_item_ids = [
+            item_id for item_id in item_ids if item_id not in self.model.status_lookup
+        ]
+        if missing_item_ids:
+            statuses.update(
+                item_status_service.get_statuses_for_items(missing_item_ids)
+            )
 
         self._populate_table_async(table_data, statuses)
 

@@ -107,7 +107,7 @@ The panel has two tabs:
 - Metrics, activity, and alerts load in parallel using background workers
 - Loading state is shown on metric cards ("...") until data arrives
 - A subtle staged status line appears at the bottom of the dashboard page and progresses per section (`metrics`, `activity`, `alerts`, `schedule`) until ready
-- Alerts rendering is staged so summary appears first and full alerts tab paint is deferred one UI tick for smoother interaction on large payloads
+- Alerts rendering is staged so Summary appears first, then All Alerts renders progressively in row batches to avoid long UI stalls on large alert payloads
 - Dashboard uses the WorkerPool with QThreadPool for background execution
 - Query consolidation reduces database roundtrips versus per-card loading
 - Workers can be cancelled to prevent stale data from overwriting fresh data
@@ -150,3 +150,4 @@ The dashboard implements several performance optimizations:
 3. **Cancellation Support**: Background workers can be cancelled to prevent stale data from overwriting fresh data on rapid refresh
 4. **Parallel Loading**: Metrics, activity, and alerts load simultaneously rather than sequentially
 5. **Batched Metrics Binding**: Metric card values are applied in small UI batches to keep the main window responsive during staged loading
+6. **Progressive Alerts Paint**: Both Summary and All Alerts tables render in small batches, so rows appear incrementally while the dashboard remains interactive

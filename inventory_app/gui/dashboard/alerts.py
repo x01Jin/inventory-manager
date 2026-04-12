@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt6.QtGui import QColor
 from datetime import date
@@ -16,9 +17,18 @@ class AlertsManager:
     """Manager for dashboard alerts display."""
 
     SUMMARY_MAX_ROWS = 50
+    SUMMARY_BATCH_SIZE = 25
+    FULL_BATCH_SIZE = 60
+    FULL_PROGRESSIVE_THRESHOLD = 160
 
     def __init__(self):
         pass
+
+    @staticmethod
+    def _resize_table_to_contents(table: QTableWidget) -> None:
+        """Resize table columns/rows based on rendered cell content."""
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
 
     @staticmethod
     def _format_due_date(value: Optional[date]) -> str:
@@ -150,8 +160,14 @@ class AlertsManager:
             logger.error(f"Failed to load alerts payload: {e}")
             return {"summary": [], "full": []}
 
-    def populate_alerts_table(self, alerts_table: QTableWidget, alerts_data: list):
-        """Populate alerts table with loaded data."""
+    def populate_alerts_table(
+        self,
+        alerts_table: QTableWidget,
+        alerts_data: list,
+        on_complete=None,
+        should_continue=None,
+    ):
+        """Populate summary alerts table in small batches for UI responsiveness."""
         try:
             display_count = min(len(alerts_data), self.SUMMARY_MAX_ROWS)
             alerts_table.setRowCount(display_count)
@@ -163,19 +179,52 @@ class AlertsManager:
             else:
                 alerts_table.setToolTip("")
 
-            for row, r in enumerate(alerts_data[:display_count]):
-                alerts_table.setItem(row, 0, QTableWidgetItem(r["type"]))
-                alerts_table.setItem(row, 1, QTableWidgetItem(r["item"]))
+            summary_rows = alerts_data[:display_count]
 
-                status_item = QTableWidgetItem(r["status"])
-                if r["status"] == "Critical":
-                    status_item.setBackground(QColor(DarkTheme.ERROR_COLOR))
-                elif r["status"] == "Warning":
-                    status_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
-                alerts_table.setItem(row, 2, status_item)
+            def apply_batch(start_index: int = 0):
+                if callable(should_continue) and not should_continue():
+                    return
+
+                end_index = min(start_index + self.SUMMARY_BATCH_SIZE, display_count)
+                for row in range(start_index, end_index):
+                    data = summary_rows[row]
+                    alerts_table.setItem(row, 0, QTableWidgetItem(data["type"]))
+                    alerts_table.setItem(row, 1, QTableWidgetItem(data["item"]))
+
+                    status_item = QTableWidgetItem(data["status"])
+                    if data["status"] == "Critical":
+                        status_color = QColor(DarkTheme.ERROR_COLOR)
+                        status_item.setBackground(status_color)
+                        status_item.setData(
+                            Qt.ItemDataRole.BackgroundRole,
+                            status_color,
+                        )
+                    elif data["status"] == "Warning":
+                        status_color = QColor(DarkTheme.WARNING_COLOR)
+                        status_item.setBackground(status_color)
+                        status_item.setData(
+                            Qt.ItemDataRole.BackgroundRole,
+                            status_color,
+                        )
+                    alerts_table.setItem(row, 2, status_item)
+
+                if end_index < display_count:
+                    QTimer.singleShot(0, lambda: apply_batch(end_index))
+                    return
+
+                QTimer.singleShot(
+                    0, lambda: self._resize_table_to_contents(alerts_table)
+                )
+
+                if callable(on_complete):
+                    on_complete()
+
+            apply_batch()
 
         except Exception as e:
             logger.error(f"Failed to populate alerts table: {e}")
+            if callable(on_complete):
+                on_complete()
 
     def update_alerts_table(self, alerts_table: QTableWidget):
         """Update alerts table with critical alerts."""
@@ -241,7 +290,7 @@ class AlertsManager:
         if header:
             header.setMinimumSectionSize(40)
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
@@ -250,40 +299,96 @@ class AlertsManager:
 
         return alerts_table
 
-    def populate_full_alerts_table(self, alerts_table: QTableWidget, alerts_data: list):
-        """Populate full alerts table without summary cap."""
+    def populate_full_alerts_table(
+        self,
+        alerts_table: QTableWidget,
+        alerts_data: list,
+        on_complete=None,
+        should_continue=None,
+    ):
+        """Populate full alerts table, batching large payloads to avoid UI stalls."""
         try:
             alerts_table.setSortingEnabled(False)
-            alerts_table.setRowCount(len(alerts_data))
+            alerts_table.setRowCount(0)
 
-            for row, data in enumerate(alerts_data):
-                alerts_table.setItem(row, 0, QTableWidgetItem(data["type"]))
-                alerts_table.setItem(row, 1, QTableWidgetItem(data["item"]))
-                alerts_table.setItem(row, 2, QTableWidgetItem(data.get("batch", "-")))
-                alerts_table.setItem(
-                    row, 3, QTableWidgetItem(data.get("category", "N/A"))
-                )
-                alerts_table.setItem(
-                    row, 4, QTableWidgetItem(data.get("due_date", "N/A"))
-                )
-                alerts_table.setItem(
-                    row,
-                    5,
-                    QTableWidgetItem(
-                        "N/A"
-                        if data.get("days_until") is None
-                        else str(data.get("days_until"))
-                    ),
+            def apply_batch(start_index: int = 0):
+                if callable(should_continue) and not should_continue():
+                    return
+
+                end_index = min(start_index + self.FULL_BATCH_SIZE, len(alerts_data))
+
+                if alerts_table.rowCount() < end_index:
+                    alerts_table.setRowCount(end_index)
+
+                for row in range(start_index, end_index):
+                    data = alerts_data[row]
+                    alerts_table.setItem(row, 0, QTableWidgetItem(data["type"]))
+                    alerts_table.setItem(row, 1, QTableWidgetItem(data["item"]))
+                    alerts_table.setItem(
+                        row,
+                        2,
+                        QTableWidgetItem(data.get("batch", "-")),
+                    )
+                    alerts_table.setItem(
+                        row,
+                        3,
+                        QTableWidgetItem(data.get("category", "N/A")),
+                    )
+                    alerts_table.setItem(
+                        row,
+                        4,
+                        QTableWidgetItem(data.get("due_date", "N/A")),
+                    )
+                    alerts_table.setItem(
+                        row,
+                        5,
+                        QTableWidgetItem(
+                            "N/A"
+                            if data.get("days_until") is None
+                            else str(data.get("days_until"))
+                        ),
+                    )
+
+                    status_item = QTableWidgetItem(data["status"])
+                    if data["status"] == "Critical":
+                        status_color = QColor(DarkTheme.ERROR_COLOR)
+                        status_item.setBackground(status_color)
+                        status_item.setData(
+                            Qt.ItemDataRole.BackgroundRole,
+                            status_color,
+                        )
+                    elif data["status"] == "Warning":
+                        status_color = QColor(DarkTheme.WARNING_COLOR)
+                        status_item.setBackground(status_color)
+                        status_item.setData(
+                            Qt.ItemDataRole.BackgroundRole,
+                            status_color,
+                        )
+                    alerts_table.setItem(row, 6, status_item)
+
+                if end_index < len(alerts_data):
+                    # Yield briefly so the UI remains interactive during large loads.
+                    QTimer.singleShot(1, lambda: apply_batch(end_index))
+                    return
+
+                QTimer.singleShot(
+                    0, lambda: self._resize_table_to_contents(alerts_table)
                 )
 
-                status_item = QTableWidgetItem(data["status"])
-                if data["status"] == "Critical":
-                    status_item.setBackground(QColor(DarkTheme.ERROR_COLOR))
-                elif data["status"] == "Warning":
-                    status_item.setBackground(QColor(DarkTheme.WARNING_COLOR))
-                alerts_table.setItem(row, 6, status_item)
+                alerts_table.setSortingEnabled(True)
+                if callable(on_complete):
+                    on_complete()
 
-            alerts_table.setSortingEnabled(True)
+            if len(alerts_data) <= self.FULL_PROGRESSIVE_THRESHOLD:
+                apply_batch(0)
+            else:
+                QTimer.singleShot(0, lambda: apply_batch(0))
 
         except Exception as e:
             logger.error(f"Failed to populate full alerts table: {e}")
+            try:
+                alerts_table.setSortingEnabled(True)
+            except Exception:
+                pass
+            if callable(on_complete):
+                on_complete()

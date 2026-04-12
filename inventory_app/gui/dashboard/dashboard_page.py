@@ -361,21 +361,20 @@ class DashboardPage(QWidget):
             self.alerts_manager.populate_alerts_table(
                 self.alerts_table,
                 payload.get("summary", []),
+                should_continue=lambda: (
+                    self._is_cycle_active(cycle_id) and not self._is_disposing
+                ),
+                on_complete=partial(
+                    self._populate_full_alerts_async,
+                    cycle_id,
+                    payload.get("full", []),
+                ),
             )
         except RuntimeError:
             return
-        # Defer large full-table paint one event tick so summary becomes interactive first.
-        QTimer.singleShot(
-            0,
-            partial(
-                self._finalize_alerts_population,
-                cycle_id,
-                payload.get("full", []),
-            ),
-        )
 
-    def _finalize_alerts_population(self, cycle_id: int, full_alerts):
-        """Finalize deferred alerts table rendering for the active load cycle."""
+    def _populate_full_alerts_async(self, cycle_id: int, full_alerts):
+        """Populate full alerts table in batches and finalize section state."""
         if not self._is_cycle_active(cycle_id) or self._is_disposing:
             return
 
@@ -383,10 +382,13 @@ class DashboardPage(QWidget):
             self.alerts_manager.populate_full_alerts_table(
                 self.all_alerts_table,
                 full_alerts,
+                should_continue=lambda: (
+                    self._is_cycle_active(cycle_id) and not self._is_disposing
+                ),
+                on_complete=partial(self._mark_section_complete, cycle_id, "alerts"),
             )
         except RuntimeError:
             return
-        self._mark_section_complete(cycle_id, "alerts")
 
     def _on_alerts_error(self, cycle_id: int, error):
         """Handle alerts loading error."""

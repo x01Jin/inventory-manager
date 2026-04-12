@@ -40,6 +40,8 @@ CRITICAL_STYLE_CLASSES = {"row-overdue"}
 
 STYLING_BATCH_SIZE = 50
 VISIBLE_ROWS_ESTIMATE = 30
+POPULATION_BATCH_SIZE = 40
+PROGRESSIVE_POPULATION_THRESHOLD = 180
 
 
 class RowColorDelegate(QStyledItemDelegate):
@@ -137,6 +139,12 @@ class InventoryTable(QTableWidget):
         self._styled_rows: Set[int] = set()
         self._row_status_cache: Dict[int, Any] = {}
 
+        self._population_token: int = 0
+        self._population_items: List[Dict[str, Any]] = []
+        self._population_cursor: int = 0
+        self._population_prev_sorting: bool = True
+        self._population_skip_styling: bool = False
+
     def setup_table(self):
         """Setup the table structure and styling."""
         self.setColumnCount(len(self.COLUMNS))
@@ -208,13 +216,15 @@ class InventoryTable(QTableWidget):
     ):
         """Populate the table with inventory items with optional progressive styling."""
         try:
+            self._cancel_population()
+
             prev_sorting = self.isSortingEnabled()
             self.setSortingEnabled(False)
 
             # Remove any existing inline row widgets before rebinding row data.
             self._clear_name_column_widgets()
 
-            self.setRowCount(len(items))
+            self.setRowCount(0)
             logger.debug(
                 f"Populating table with {len(items)} items (skip_styling={skip_styling})"
             )
@@ -222,35 +232,85 @@ class InventoryTable(QTableWidget):
             self._prefetched_statuses = statuses or {}
             self._row_status_cache = {}
             self._styled_rows = set()
-
-            for row, item in enumerate(items):
-                self.populate_row(row, item, skip_styling=skip_styling)
-                if not skip_styling and item.get("total_stock", 0) > 0:
-                    item_id = item.get("id")
-                    if item_id:
-                        self._row_status_cache[row] = (
-                            statuses.get(item_id) if statuses else None
-                        )
-
-            self._prefetched_statuses = {}
-
             self._styling_callback = on_styling_complete
 
-            if not skip_styling:
-                self._start_progressive_styling()
-            else:
-                QTimer.singleShot(100, self.resize_columns)
+            self._population_prev_sorting = prev_sorting
+            self._population_skip_styling = skip_styling
 
-            self.setSortingEnabled(prev_sorting)
-            if prev_sorting:
-                hdr = self.horizontalHeader()
-                if hdr is not None:
-                    hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
-                    hdr.setSortIndicatorShown(False)
-                    self.sortItems(0, Qt.SortOrder.AscendingOrder)
+            if len(items) >= PROGRESSIVE_POPULATION_THRESHOLD:
+                self._population_token += 1
+                token = self._population_token
+                self._population_items = items
+                self._population_cursor = 0
+                logger.debug(
+                    "Starting progressive row population for %s inventory rows",
+                    len(items),
+                )
+                QTimer.singleShot(0, lambda: self._populate_table_batch(token))
+            else:
+                self.setRowCount(len(items))
+                for row, item in enumerate(items):
+                    self.populate_row(row, item, skip_styling=True)
+                self._finalize_population(skip_styling=skip_styling)
 
         except Exception as e:
             logger.error(f"Error populating table: {e}")
+
+    def _cancel_population(self) -> None:
+        """Cancel pending population callbacks by invalidating the active token."""
+        self._population_token += 1
+        self._population_items = []
+        self._population_cursor = 0
+
+    def _populate_table_batch(self, token: int) -> None:
+        """Populate table rows in UI-friendly batches."""
+        if token != self._population_token:
+            return
+
+        total_rows = len(self._population_items)
+        if total_rows == 0:
+            self._finalize_population(skip_styling=self._population_skip_styling)
+            return
+
+        end_row = min(self._population_cursor + POPULATION_BATCH_SIZE, total_rows)
+
+        if self.rowCount() < end_row:
+            self.setRowCount(end_row)
+
+        for row in range(self._population_cursor, end_row):
+            self.populate_row(row, self._population_items[row], skip_styling=True)
+
+        self._population_cursor = end_row
+
+        if self._population_cursor < total_rows:
+            # Small delay lets paint/input events flush between heavy row batches.
+            QTimer.singleShot(1, lambda: self._populate_table_batch(token))
+            return
+
+        self._finalize_population(skip_styling=self._population_skip_styling)
+
+    def _finalize_population(self, skip_styling: bool) -> None:
+        """Finalize sorting and styling once row population has completed."""
+        self._population_items = []
+        self._population_cursor = 0
+
+        self._prefetched_statuses = {}
+
+        if not skip_styling:
+            self._start_progressive_styling()
+        else:
+            QTimer.singleShot(100, self.resize_columns)
+            if self._styling_callback:
+                self._styling_callback()
+                self._styling_callback = None
+
+        self.setSortingEnabled(self._population_prev_sorting)
+        if self._population_prev_sorting:
+            hdr = self.horizontalHeader()
+            if hdr is not None:
+                hdr.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+                hdr.setSortIndicatorShown(False)
+                self.sortItems(0, Qt.SortOrder.AscendingOrder)
 
     def populate_row(self, row: int, item: Dict[str, Any], skip_styling: bool = False):
         """Populate a single row with item data."""
@@ -407,6 +467,11 @@ class InventoryTable(QTableWidget):
             if item_id is not None:
                 name_item.setData(Qt.ItemDataRole.UserRole, item_id)
 
+            if total_stock > 0:
+                self._row_status_cache[row] = item_status
+            else:
+                self._row_status_cache.pop(row, None)
+
             if not skip_styling and total_stock > 0:
                 self._apply_row_styling(row, item_status)
                 self._styled_rows.add(row)
@@ -433,7 +498,16 @@ class InventoryTable(QTableWidget):
         self._styling_phase = STYLING_PHASE_ESSENTIAL
 
         critical_rows = []
-        for row in range(self.rowCount()):
+        visible_start = max(0, self.rowAt(0))
+        viewport = self.viewport()
+        viewport_height = viewport.height() if viewport is not None else 0
+        visible_end = self.rowAt(max(0, viewport_height - 1))
+        if visible_end < 0:
+            visible_end = min(
+                self.rowCount() - 1, visible_start + VISIBLE_ROWS_ESTIMATE
+            )
+
+        for row in range(visible_start, visible_end + 1):
             if row in self._styled_rows:
                 continue
 

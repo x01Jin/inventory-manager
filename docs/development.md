@@ -63,6 +63,8 @@ If you add or change fields:
 - Requisition dialog item loading is two-stage: fetch in background, preprocess availability in background, then batch-render on UI thread.
 - Requisitions table refresh uses incremental append batches; avoid full-table rebuild in each progress step.
 - Dashboard schedule data is fetched in a worker thread; UI thread should only render already-loaded rows.
+- Dashboard alerts rendering should remain staged: Summary first, then All Alerts in UI batches for large payloads.
+- Inventory table refresh should render rows progressively for large result sets and avoid synchronous status/statistics recomputation on the GUI thread.
 - For large list filtering in dialogs, batch updates and minimize repaint frequency (`setUpdatesEnabled(False/True)` around batch updates).
 
 ## Packaging
