@@ -261,14 +261,13 @@ class ImportItemsDialog(QDialog):
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setMaximumHeight(12)
         progress_layout.addWidget(self.progress_bar)
 
         # Status label showing current/total and skipped
         self.status_label = QLabel("Ready to import")
         self.status_label.setStyleSheet("font-weight: bold; padding: 5px;")
         progress_layout.addWidget(self.status_label)
-
-        layout.addWidget(progress_group)
 
         # Buttons (bottom-right)
         buttons_layout = QHBoxLayout()
@@ -282,6 +281,7 @@ class ImportItemsDialog(QDialog):
         buttons_layout.addWidget(self.import_button)
         buttons_layout.addWidget(self.cancel_button)
         layout.addLayout(buttons_layout)
+        layout.addWidget(progress_group)
 
         # Make window fixed size for a consistent UI
         self.setFixedSize(600, 350)

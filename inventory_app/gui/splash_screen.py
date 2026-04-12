@@ -27,29 +27,29 @@ class SplashScreen(QDialog):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(8)
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {DarkTheme.SECONDARY_DARK};
-                border: none;
-                border-radius: 4px;
-            }}
-            QProgressBar::chunk {{
-                background-color: {DarkTheme.ACCENT_COLOR};
-                border-radius: 4px;
-            }}
-        """)
-        layout.addWidget(self.progress_bar)
-
         self.status_label = QLabel("Applying updates...")
         self.status_label.setFont(QFont("Segoe UI", 10))
         self.status_label.setStyleSheet(f"color: {DarkTheme.TEXT_SECONDARY};")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.status_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(6)
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {DarkTheme.SECONDARY_DARK};
+                border: none;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {DarkTheme.ACCENT_COLOR};
+                border-radius: 3px;
+            }}
+        """)
+        layout.addWidget(self.progress_bar)
 
     def update_progress(self, status: str, percent: int) -> None:
         """Update progress bar and status text.

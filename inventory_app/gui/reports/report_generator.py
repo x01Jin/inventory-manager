@@ -398,6 +398,7 @@ class ReportGenerator:
         group_by: str = "item",
         top_n: Optional[int] = None,
         include_consumables: bool = True,
+        category_filter: str = "",
         structured: bool = False,
         output_path: Optional[str] = None,
     ) -> Union[str, Dict[str, Any]]:
@@ -410,6 +411,7 @@ class ReportGenerator:
             group_by: 'item' or 'category'
             top_n: Limit to top N rows by total quantity (None for all)
             include_consumables: whether to include consumable items
+            category_filter: optional category filter
             output_path: optional output path
 
         Returns:
@@ -428,6 +430,7 @@ class ReportGenerator:
                 group_by=group_by,
                 top_n=top_n,
                 include_consumables=include_consumables,
+                category_filter=category_filter,
             )
 
             if not report_data:

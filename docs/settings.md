@@ -27,7 +27,7 @@ Behavior is consistent across tabs:
 - Case-insensitive duplicate checks are enforced (for example, `250ml` and `250mL` are treated as duplicates).
 - Size names are normalized to metric-cased format on save (for example, `250 mL`, `1 L`, `125 g`).
 - Entering the Settings page triggers a single background refresh for `Sizes`, `Brands`, and `Suppliers` together.
-- The refresh uses a top progress bar and runs off the main UI thread to avoid page freezing.
+- The refresh uses a thin progress bar anchored at the bottom of the page and runs off the main UI thread to avoid page freezing.
 - Before rendering tables, the app synchronizes missing Size/Brand reference entries from existing item records so legacy/imported values appear in Settings.
 - Edit/Delete requires selecting an existing entry first.
 - Entries are displayed in a 3-column table: `Name`, `Usage`, and `Status`.

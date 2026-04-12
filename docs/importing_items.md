@@ -19,7 +19,7 @@ The import runs in a background thread to prevent UI freezing during large impor
 2. Enter editor name for audit trail
 3. Click Import - the operation runs in the background
 4. If decimal consumable stocks have missing units, a resolution dialog appears before import starts.
-5. A progress bar displays real-time status: `[current/total], skipped: X`
+5. A thin progress bar in the bottom progress section displays real-time status: `[current/total], skipped: X`
 6. A completion message shows total imported and skipped counts
 
 The import can be cancelled while in progress by clicking the Cancel button.

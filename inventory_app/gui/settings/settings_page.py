@@ -73,9 +73,8 @@ class SettingsPage(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("Refreshing settings references...")
-        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setMaximumHeight(12)
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
 
         # Tab widget
         self.tab_widget = QTabWidget()
@@ -95,6 +94,8 @@ class SettingsPage(QWidget):
 
         # Categories tab (read-only)
         self.create_categories_tab()
+
+        layout.addWidget(self.progress_bar)
 
         self.refresh_data()
 

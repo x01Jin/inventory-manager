@@ -379,9 +379,8 @@ class BaseRequisitionDialog(QDialog):
         self.items_progress_bar = QProgressBar()
         self.items_progress_bar.setTextVisible(True)
         self.items_progress_bar.setFormat("Loading items...")
-        self.items_progress_bar.setMaximumHeight(18)
+        self.items_progress_bar.setMaximumHeight(12)
         self.items_progress_bar.setVisible(False)
-        layout.addWidget(self.items_progress_bar)
 
         # Available items list
         items_group = QGroupBox("📦 Available Items")
@@ -412,6 +411,7 @@ class BaseRequisitionDialog(QDialog):
         items_layout.addWidget(self.add_item_btn)
 
         layout.addWidget(items_group)
+        layout.addWidget(self.items_progress_bar)
 
         # Load initial items asynchronously
         self.load_available_items()

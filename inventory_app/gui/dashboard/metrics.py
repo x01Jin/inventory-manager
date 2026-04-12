@@ -3,7 +3,7 @@ Metrics management for the dashboard.
 Handles metric calculations and card creation.
 """
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout
 from PyQt6.QtCore import Qt, QTimer
@@ -75,7 +75,8 @@ class MetricsManager:
     """Manager for dashboard metrics."""
 
     def __init__(self):
-        pass
+        # Tracks the latest queued UI update per metrics widget.
+        self._widget_update_tokens: Dict[int, int] = {}
 
     def create_compact_metric_card(self, title: str, value: str, loading: bool = False):
         """Create a compact metric card widget."""
@@ -258,6 +259,7 @@ class MetricsManager:
         layout.setSpacing(5)
 
         metric_keys = self.get_metric_keys()
+        value_labels: Dict[str, QLabel] = {}
 
         for i, (key, title) in enumerate(metric_keys):
             row = i // 3
@@ -265,31 +267,111 @@ class MetricsManager:
             value = "..." if loading else "0"
             card = self.create_compact_metric_card(title, value, loading)
             layout.addWidget(card, row, col)
+            value_label = card.findChild(QLabel, "value_label")
+            if value_label is not None:
+                value_labels[key] = value_label
+
+        # Cache labels to avoid repeated layout traversal during updates.
+        setattr(widget, "_metric_value_labels", value_labels)
 
         return widget
+
+    def prepare_metrics_display_values(
+        self, metrics: Optional[Dict[str, int]] = None
+    ) -> Dict[str, str]:
+        """Prepare display-ready metric values without touching Qt widgets."""
+        if metrics is None:
+            metrics = self.get_all_metrics()
+
+        prepared: Dict[str, str] = {}
+        for key, _title in self.get_metric_keys():
+            prepared[key] = str(metrics.get(key, 0))
+        return prepared
+
+    def _get_value_labels(self, metrics_widget) -> Dict[str, QLabel]:
+        """Resolve and cache value labels from the metrics widget."""
+        labels = getattr(metrics_widget, "_metric_value_labels", None)
+        if isinstance(labels, dict) and labels:
+            return labels
+
+        resolved: Dict[str, QLabel] = {}
+        layout = metrics_widget.layout()
+        if not layout:
+            return resolved
+
+        metric_keys = self.get_metric_keys()
+        for i, (key, _title) in enumerate(metric_keys):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            card = item.widget()
+            if card is None:
+                continue
+            value_label = card.findChild(QLabel, "value_label")
+            if value_label is not None:
+                resolved[key] = value_label
+
+        setattr(metrics_widget, "_metric_value_labels", resolved)
+        return resolved
+
+    def update_metrics_widget_async(
+        self,
+        metrics_widget,
+        display_values: Dict[str, str],
+        on_complete: Optional[Callable[[], None]] = None,
+        batch_size: int = 3,
+    ):
+        """Apply metric values in small UI batches to keep the event loop responsive."""
+        try:
+            widget_id = id(metrics_widget)
+            next_token = self._widget_update_tokens.get(widget_id, 0) + 1
+            self._widget_update_tokens[widget_id] = next_token
+
+            metric_items = [
+                (key, display_values.get(key, "0")) for key, _ in self.get_metric_keys()
+            ]
+            state = {"index": 0}
+
+            def apply_batch():
+                if self._widget_update_tokens.get(widget_id) != next_token:
+                    return
+
+                labels = self._get_value_labels(metrics_widget)
+                if not labels:
+                    return
+
+                end_index = min(state["index"] + max(1, batch_size), len(metric_items))
+                for key, value in metric_items[state["index"] : end_index]:
+                    label = labels.get(key)
+                    if label is not None:
+                        try:
+                            label.setText(value)
+                        except RuntimeError:
+                            return
+
+                state["index"] = end_index
+                if state["index"] < len(metric_items):
+                    QTimer.singleShot(0, apply_batch)
+                elif on_complete:
+                    on_complete()
+
+            QTimer.singleShot(0, apply_batch)
+        except RuntimeError:
+            # Widget may already be torn down while queued callbacks are pending.
+            return
 
     def update_metrics_widget(
         self, metrics_widget, metrics: Optional[Dict[str, int]] = None
     ):
         """Update the metrics widget with current data."""
         try:
-            if metrics is None:
-                metrics = self.get_all_metrics()
-            metric_keys = self.get_metric_keys()
+            prepared = self.prepare_metrics_display_values(metrics)
+            labels = self._get_value_labels(metrics_widget)
 
-            layout = metrics_widget.layout()
-            if not layout:
-                return
-
-            for i, (key, title) in enumerate(metric_keys):
-                value = str(metrics.get(key, 0))
-                card = layout.itemAt(i).widget()
-                if card:
-                    card_layout = card.layout()
-                    if card_layout and card_layout.count() >= 1:
-                        value_label = card_layout.itemAt(0).widget()
-                        if hasattr(value_label, "setText"):
-                            value_label.setText(value)
+            for key, value in prepared.items():
+                label = labels.get(key)
+                if label is not None:
+                    label.setText(value)
 
         except Exception as e:
             logger.error(f"Failed to update metrics widget: {e}")

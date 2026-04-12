@@ -230,6 +230,8 @@ Common Reports
 - Expiration
 - Calibration Due (calibration-enabled categories only)
 - Trends (grouping by item or category; time-series heatmap/top-N). Default granularity is `Auto` (uses the same smart granularity rules as Usage reports); manual granularity selection is still supported.
+  - Trends filters: category filter, include-consumables toggle, group-by (item/category), top-N, and granularity.
+  - Category selector supports `All Categories` (no category restriction) or a specific category that is propagated end-to-end into trends data queries.
 - **Update History Report** - Shows history of edits to inventory items including editor name, timestamp, and reason
 - **Disposal History Report** - Shows disposed items with disposal date, reason, and who disposed them
 - **Defective Items Report** - Shows defective/broken items returned with condition type, notes, reporter, and date
@@ -249,6 +251,12 @@ The Usage by Grade Level Report tracks item consumption across educational group
   - By section (All Sections or specific)
   - **Individual Requests Only**: Checkbox to show only ad-hoc/unaffiliated requisitions. When disabled, export includes both regular and individual requests.
 - **Source**: Requisitions joined with Requesters and grouped per item/category with grade-level SUM columns
+
+## Filter Behavior Contract
+
+- Combo-based filters normalize `All ...` sentinel options into empty values before worker dispatch.
+- Empty filter values represent "no filter" and are intentionally passed through report generator/data-source layers.
+- Trends reports now follow the same contract as usage and inventory reports for category filtering.
 
 ## Defective Items Report
 

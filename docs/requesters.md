@@ -33,7 +33,7 @@ Requesters are categorized into three types, each with specific required fields:
 ## Data Loading
 
 - Requester data loads asynchronously in a background thread
-- A progress indicator displays during loading
+- A thin progress indicator is shown at the bottom of the page during loading
 - The table populates progressively as data becomes available
 - Buttons are disabled during data load to prevent conflicts
 

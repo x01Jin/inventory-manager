@@ -144,6 +144,7 @@ class ReportsPage(QWidget):
 
         # Progress Bar
         self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumHeight(12)
         self.progress_bar.setVisible(False)
         config_layout.addWidget(self.progress_bar, 0)  # Stretch factor 0: stays compact
 
@@ -512,6 +513,15 @@ class ReportsPage(QWidget):
         group_layout.addWidget(self.trends_group_by)
         options_layout.addLayout(group_layout)
 
+        category_layout = QHBoxLayout()
+        category_layout.setSpacing(4)
+        category_layout.addWidget(QLabel("Category:"))
+        self.trends_category_combo = QComboBox()
+        self.trends_category_combo.addItem("All Categories")
+        self.load_categories(self.trends_category_combo)
+        category_layout.addWidget(self.trends_category_combo)
+        options_layout.addLayout(category_layout)
+
         top_layout = QHBoxLayout()
         top_layout.setSpacing(4)
         top_layout.addWidget(QLabel(ReportConfig.LABELS["top_items"]))
@@ -677,6 +687,14 @@ class ReportsPage(QWidget):
                 combo_box.addItem(category)
         except Exception as e:
             logger.error(f"Failed to load categories: {e}")
+
+    @staticmethod
+    def _normalized_combo_value(combo_box: QComboBox, all_label: str) -> str:
+        """Return normalized combo value where sentinel "all" becomes empty."""
+        current_text = combo_box.currentText().strip()
+        if current_text == all_label:
+            return ""
+        return current_text
 
     def load_grade_levels_combo(self, combo: QComboBox):
         """Load grade levels from database into a given combo box."""
@@ -888,9 +906,9 @@ class ReportsPage(QWidget):
             year = self.monthly_year_spin.value()
             month = self.monthly_month_combo.currentIndex() + 1
 
-            category_filter = self.monthly_category_combo.currentText()
-            if category_filter == "All Categories":
-                category_filter = ""
+            category_filter = self._normalized_combo_value(
+                self.monthly_category_combo, "All Categories"
+            )
 
             report_style = "detailed"  # Default to full title
 
@@ -939,9 +957,9 @@ class ReportsPage(QWidget):
             return
 
         # Get filter values
-        category_filter = self.category_combo.currentText()
-        if category_filter == "All Categories":
-            category_filter = ""
+        category_filter = self._normalized_combo_value(
+            self.category_combo, "All Categories"
+        )
 
         include_consumables = self.consumable_check.isChecked()
         show_individual_only = self.show_individual_only_check.isChecked()
@@ -971,20 +989,20 @@ class ReportsPage(QWidget):
             self.reset_ui()
             return
 
-        category_filter = self.category_combo.currentText()
-        if category_filter == "All Categories":
-            category_filter = ""
+        category_filter = self._normalized_combo_value(
+            self.category_combo, "All Categories"
+        )
 
         filter_type = self.usage_filter_type_combo.currentText()
         filter_value = ""
         if filter_type == "Grade Level":
-            filter_value = self.usage_filter_value_combo.currentText()
-            if filter_value == "All Grades":
-                filter_value = ""
+            filter_value = self._normalized_combo_value(
+                self.usage_filter_value_combo, "All Grades"
+            )
         elif filter_type == "Section":
-            filter_value = self.usage_filter_value_combo.currentText()
-            if filter_value == "All Sections":
-                filter_value = ""
+            filter_value = self._normalized_combo_value(
+                self.usage_filter_value_combo, "All Sections"
+            )
 
         show_individual_only = self.show_individual_only_check.isChecked()
 
@@ -1025,9 +1043,9 @@ class ReportsPage(QWidget):
         }
 
         # Category filter (used differently for some reports)
-        category_filter = self.inv_category_combo.currentText()
-        if category_filter == "All Categories":
-            category_filter = ""
+        category_filter = self._normalized_combo_value(
+            self.inv_category_combo, "All Categories"
+        )
 
         # Report-specific filters
         if inventory_report_type == "Low Stock Alert":
@@ -1079,6 +1097,10 @@ class ReportsPage(QWidget):
 
         include_consumables = self.trends_include_consumables.isChecked()
 
+        category_filter = self._normalized_combo_value(
+            self.trends_category_combo, "All Categories"
+        )
+
         gran_text = self.trends_granularity.currentText().lower()
         granularity = None if gran_text == "auto" else gran_text
 
@@ -1091,6 +1113,7 @@ class ReportsPage(QWidget):
             group_by=group_by_key,
             top_n=top_n,
             include_consumables=include_consumables,
+            category_filter=category_filter,
         )
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_report_finished)
@@ -1109,13 +1132,12 @@ class ReportsPage(QWidget):
             return
 
         editor_filter = self.audit_editor_filter.text().strip()
-        action_filter = self.audit_action_filter.currentText()
-        entity_filter = self.audit_entity_filter.currentText()
-
-        if action_filter == "All Actions":
-            action_filter = ""
-        if entity_filter == "All Entities":
-            entity_filter = ""
+        action_filter = self._normalized_combo_value(
+            self.audit_action_filter, "All Actions"
+        )
+        entity_filter = self._normalized_combo_value(
+            self.audit_entity_filter, "All Entities"
+        )
 
         self.worker = ReportWorker(
             "inventory",

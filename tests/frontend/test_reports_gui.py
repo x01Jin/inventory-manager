@@ -70,3 +70,43 @@ def test_reports_centralized_labels():
     # Ensure tooltips and labels reference ReportConfig constants
     assert "ReportConfig.GRANULARITY_TOOLTIP" in page_source
     assert "ReportConfig.LABELS" in page_source
+
+
+def test_trends_category_filter_passed_to_worker(qtbot, monkeypatch):
+    """Trends category selector should propagate normalized value into ReportWorker."""
+
+    created_workers = []
+
+    class _DummySignal:
+        def connect(self, _slot):
+            return None
+
+    class _DummyWorker:
+        def __init__(self, _report_type, _start_date, _end_date, **kwargs):
+            self.kwargs = kwargs
+            self.progress = _DummySignal()
+            self.finished = _DummySignal()
+            self.error = _DummySignal()
+            created_workers.append(self)
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(
+        "inventory_app.gui.reports.reports_page.ReportWorker", _DummyWorker
+    )
+
+    page = ReportsPage()
+    qtbot.addWidget(page)
+
+    assert page.trends_category_combo.itemText(0) == "All Categories"
+
+    page.trends_category_combo.setCurrentText("All Categories")
+    page.generate_trends_report()
+    assert created_workers[-1].kwargs.get("category_filter") == ""
+
+    if page.trends_category_combo.findText("Equipment") == -1:
+        page.trends_category_combo.addItem("Equipment")
+    page.trends_category_combo.setCurrentText("Equipment")
+    page.generate_trends_report()
+    assert created_workers[-1].kwargs.get("category_filter") == "Equipment"

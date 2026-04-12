@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QInputDialog,
     QProgressBar,
-    QTabWidget
+    QTabWidget,
 )
 from PyQt6.QtCore import pyqtSignal
 from inventory_app.gui.requesters.requester_model import RequesterModel
@@ -100,7 +100,9 @@ class RequestersPage(QWidget):
         layout.addLayout(action_layout)
 
         search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel("Search by name, grade, section, or department:"))
+        search_layout.addWidget(
+            QLabel("Search by name, grade, section, or department:")
+        )
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter search term...")
@@ -117,9 +119,8 @@ class RequestersPage(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("Loading requesters... %p%")
-        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setMaximumHeight(12)
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
 
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #444; }")
@@ -143,17 +144,26 @@ class RequestersPage(QWidget):
         layout.addWidget(self.tabs)
 
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;")
+        self.status_label.setStyleSheet(
+            f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;"
+        )
         layout.addWidget(self.status_label)
+        layout.addWidget(self.progress_bar)
 
     def _setup_connections(self):
         """Setup signal connections between components."""
         self.students_table.requester_selected.connect(self._on_requester_selected)
-        self.students_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.students_table.requester_double_clicked.connect(
+            self._on_requester_double_clicked
+        )
         self.teachers_table.requester_selected.connect(self._on_requester_selected)
-        self.teachers_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.teachers_table.requester_double_clicked.connect(
+            self._on_requester_double_clicked
+        )
         self.faculty_table.requester_selected.connect(self._on_requester_selected)
-        self.faculty_table.requester_double_clicked.connect(self._on_requester_double_clicked)
+        self.faculty_table.requester_double_clicked.connect(
+            self._on_requester_double_clicked
+        )
 
     def _on_tab_changed(self, index: int) -> None:
         """Handle tab change to update current table."""
@@ -221,7 +231,7 @@ class RequestersPage(QWidget):
 
             # Update status
             stats = result["stats"]
-            type_counts = stats.get('type_breakdown', {})
+            type_counts = stats.get("type_breakdown", {})
             status_text = f"Total: {stats['total_requesters']} requesters"
             if type_counts:
                 type_parts = [f"{t.capitalize()}: {c}" for t, c in type_counts.items()]

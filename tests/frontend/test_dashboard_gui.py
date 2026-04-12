@@ -120,3 +120,34 @@ def test_latest_activity_height_expands_for_long_description(qtbot):
     assert latest_table.rowCount() == 1
     assert latest_table.rowHeight(0) > 20
     assert latest_table.maximumHeight() > manager.LATEST_ACTIVITY_MIN_HEIGHT
+
+
+def test_dashboard_shows_progressive_loading_status(qtbot, monkeypatch):
+    """Dashboard should track staged loading progress and reach ready state."""
+
+    monkeypatch.setattr(
+        DashboardPage,
+        "_load_metrics_async",
+        lambda self, cycle_id: self._mark_section_complete(cycle_id, "metrics"),
+    )
+    monkeypatch.setattr(
+        DashboardPage,
+        "_load_activity_async",
+        lambda self, cycle_id: self._mark_section_complete(cycle_id, "activity"),
+    )
+    monkeypatch.setattr(
+        DashboardPage,
+        "_load_alerts_async",
+        lambda self, cycle_id: self._mark_section_complete(cycle_id, "alerts"),
+    )
+    monkeypatch.setattr(
+        DashboardPage,
+        "_load_schedule_async",
+        lambda self, cycle_id: self._mark_section_complete(cycle_id, "schedule"),
+    )
+
+    page = DashboardPage()
+    qtbot.addWidget(page)
+
+    assert page._load_completed == page._load_total
+    assert page.dashboard_loading_status.text() == "Dashboard ready"

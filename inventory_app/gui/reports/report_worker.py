@@ -177,6 +177,7 @@ class ReportWorker(QThread):
         group_by = getattr(self, "group_by", "item")
         top_n = getattr(self, "top_n", None)
         include_consumables = getattr(self, "include_consumables", True)
+        category_filter = getattr(self, "category_filter", "")
 
         return report_generator.generate_trends_report(
             self.start_date,
@@ -185,6 +186,7 @@ class ReportWorker(QThread):
             group_by=group_by,
             top_n=top_n,
             include_consumables=include_consumables,
+            category_filter=category_filter,
         )
 
     # end of class

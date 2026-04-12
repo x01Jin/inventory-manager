@@ -139,9 +139,8 @@ class RequisitionsPage(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("Loading requisitions... %p%")
-        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setMaximumHeight(12)
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
 
         # Create main horizontal splitter for (filters + table) + preview
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -195,6 +194,7 @@ class RequisitionsPage(QWidget):
             f"color: {Theme.TEXT_SECONDARY}; font-size: {Theme.FONT_SIZE_NORMAL}pt;"
         )
         layout.addWidget(self.status_label)
+        layout.addWidget(self.progress_bar)
 
     def _setup_connections(self):
         """Setup signal connections between components."""

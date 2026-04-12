@@ -4,13 +4,14 @@ from pathlib import Path
 from openpyxl import load_workbook
 from inventory_app.database.connection import db
 from inventory_app.database.models import Item
-from inventory_app.gui.reports.report_generator import ReportGenerator
+from inventory_app.gui.reports.report_generator import ReportGenerator, report_generator
 from inventory_app.gui.reports.query_builder import ReportQueryBuilder
 from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
     get_stock_levels_data,
     get_audit_log_data,
     get_usage_by_grade_level_data,
+    get_trends_data,
 )
 from inventory_app.gui.reports.monthly_usage_report import generate_monthly_usage_report
 from inventory_app.gui.reports.report_utils import date_formatter
@@ -418,3 +419,107 @@ def test_monthly_usage_report_includes_grade_tally_columns(temp_db, tmp_path):
     assert ws.cell(row=4, column=9).value == "GRADE 9"
     assert ws.cell(row=4, column=10).value == "GRADE 10"
     assert ws.cell(row=4, column=11).value == "TOTAL GRADE USAGE"
+
+
+def test_trends_data_respects_category_filter(temp_db):
+    """Trends data should include only rows from selected category."""
+    categories = db.execute_query(
+        "SELECT id, name FROM Categories WHERE name IN (?, ?)",
+        ("Equipment", "Apparatus"),
+    )
+    category_map = {row["name"]: row["id"] for row in categories}
+    assert "Equipment" in category_map
+    assert "Apparatus" in category_map
+
+    equipment_item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Equipment Trend Item", category_map["Equipment"]),
+        return_last_id=True,
+    )[1]
+    apparatus_item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Apparatus Trend Item", category_map["Apparatus"]),
+        return_last_id=True,
+    )[1]
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Trend Requester",),
+        return_last_id=True,
+    )[1]
+
+    req_one = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "requested",
+            "2025-01-10",
+            "Equipment Activity",
+            "2025-01-10 09:00:00",
+            "2025-01-10 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+    req_two = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "requested",
+            "2025-01-12",
+            "Apparatus Activity",
+            "2025-01-12 09:00:00",
+            "2025-01-12 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_one, equipment_item_id, 4),
+    )
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (req_two, apparatus_item_id, 3),
+    )
+
+    rows = get_trends_data(
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        granularity="daily",
+        group_by="item",
+        category_filter="Equipment",
+    )
+
+    assert rows
+    assert all(row.get("CATEGORIES") == "Equipment" for row in rows)
+    assert any(row.get("ITEMS") == "Equipment Trend Item" for row in rows)
+    assert all(row.get("ITEMS") != "Apparatus Trend Item" for row in rows)
+
+
+def test_report_worker_passes_trends_category_filter(monkeypatch):
+    """ReportWorker trends path should pass category_filter through to generator."""
+    captured = {}
+
+    def _fake_generate_trends_report(*_args, **kwargs):
+        captured.update(kwargs)
+        return "ok.xlsx"
+
+    monkeypatch.setattr(
+        report_generator,
+        "generate_trends_report",
+        _fake_generate_trends_report,
+    )
+
+    worker = ReportWorker(
+        "trends",
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+        granularity="weekly",
+        category_filter="Equipment",
+        include_consumables=True,
+    )
+
+    result = worker._generate_trends_report()
+
+    assert result == "ok.xlsx"
+    assert captured.get("category_filter") == "Equipment"

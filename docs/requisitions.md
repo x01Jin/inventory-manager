@@ -8,7 +8,7 @@
 ## Data Loading
 
 - Data loads asynchronously in a background thread to prevent UI freezes
-- A progress indicator displays during loading
+- A thin progress indicator is anchored at the bottom of the page during loading
 - The table populates progressively as data becomes available
 - Buttons are disabled during data load to prevent conflicts
 

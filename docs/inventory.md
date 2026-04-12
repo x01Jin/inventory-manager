@@ -16,7 +16,7 @@ Underlying tables involved are `Items`, `Item_Batches`, and `Stock_Movements`.
 ## Loading and Performance
 
 - Data loads asynchronously to keep the UI responsive.
-- Loading indicators are shown while refresh is in progress.
+- A thin loading indicator is shown at the bottom of the page while refresh is in progress.
 - Post-query processing (item row shaping and status prefetch) runs in a background worker before UI binding.
 - Progress bar now remains active through inventory table population/styling so long refreshes have visible feedback.
 - Action buttons are temporarily guarded during critical load phases.

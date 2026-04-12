@@ -7,7 +7,7 @@ UI freezes on slower hardware. Supports parallel data loading for improved
 performance on multi-core systems.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, cast
 from dataclasses import dataclass
 from PyQt6.QtWidgets import (
     QWidget,
@@ -144,9 +144,8 @@ class InventoryPage(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("Loading inventory... %p%")
-        self.progress_bar.setMaximumHeight(20)
+        self.progress_bar.setMaximumHeight(12)
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
 
         # Main content area with splitter
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -168,6 +167,7 @@ class InventoryPage(QWidget):
         # Set splitter proportions (30% top, 70% bottom)
         splitter.setSizes([300, 700])
         layout.addWidget(splitter)
+        layout.addWidget(self.progress_bar)
 
     def _setup_connections(self):
         """Setup signal connections between components."""
@@ -320,7 +320,9 @@ class InventoryPage(QWidget):
             )
             items.append(item)
 
-        item_ids = [item.get("id") for item in raw_data if item.get("id")]
+        item_ids = cast(
+            List[int], [item.get("id") for item in raw_data if item.get("id")]
+        )
         statuses: Dict[int, Any] = {}
         if item_ids:
             statuses = item_status_service.get_statuses_for_items(item_ids)

@@ -5,8 +5,14 @@ Extracts UI creation logic into reusable, focused components.
 
 from typing import Tuple, Optional
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QLabel, QPushButton,
-    QGroupBox, QProgressBar, QTextEdit, QSplitter, QListWidget
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+    QGroupBox,
+    QProgressBar,
+    QTextEdit,
+    QSplitter,
+    QListWidget,
 )
 
 from inventory_app.gui.styles import DarkTheme
@@ -39,7 +45,7 @@ class ReportUIComponents:
     @staticmethod
     def create_config_panel() -> QGroupBox:
         """Create the report configuration panel."""
-        return QGroupBox(ReportConfig.GROUP_TITLES['config'])
+        return QGroupBox(ReportConfig.GROUP_TITLES["config"])
 
     @staticmethod
     def create_granularity_info_section(parent_layout):
@@ -67,9 +73,11 @@ class ReportUIComponents:
         return granularity_info
 
     @staticmethod
-    def create_date_range_section(parent_layout, callback=None) -> Tuple[DateRangeSelector, QLabel]:
+    def create_date_range_section(
+        parent_layout, callback=None
+    ) -> Tuple[DateRangeSelector, QLabel]:
         """Create the date range selection section."""
-        date_group = QGroupBox(ReportConfig.GROUP_TITLES['date_range'])
+        date_group = QGroupBox(ReportConfig.GROUP_TITLES["date_range"])
         layout = QVBoxLayout(date_group)
 
         # Available date range info
@@ -97,7 +105,7 @@ class ReportUIComponents:
     def create_generate_button(parent_layout, callback=None) -> QPushButton:
         """Create the generate report button."""
         generate_btn = QPushButton(ReportConfig.GENERATE_BUTTON_TEXT)
-        generate_btn.setStyleSheet(ReportConfig.BUTTON_STYLES['generate'])
+        generate_btn.setStyleSheet(ReportConfig.BUTTON_STYLES["generate"])
 
         if callback:
             generate_btn.clicked.connect(callback)
@@ -109,15 +117,16 @@ class ReportUIComponents:
     def create_progress_bar(parent_layout) -> QProgressBar:
         """Create the progress bar."""
         progress_bar = QProgressBar()
+        progress_bar.setMaximumHeight(12)
         progress_bar.setVisible(False)
-        progress_bar.setStyleSheet(ReportConfig.BUTTON_STYLES['progress_bar'])
+        progress_bar.setStyleSheet(ReportConfig.BUTTON_STYLES["progress_bar"])
         parent_layout.addWidget(progress_bar)
         return progress_bar
 
     @staticmethod
     def create_status_panel() -> Tuple[QGroupBox, QTextEdit, QTextEdit]:
         """Create the status and preview panel."""
-        status_group = QGroupBox(ReportConfig.GROUP_TITLES['status'])
+        status_group = QGroupBox(ReportConfig.GROUP_TITLES["status"])
         layout = QVBoxLayout(status_group)
 
         # Status Text Area
@@ -128,7 +137,7 @@ class ReportUIComponents:
         layout.addWidget(status_text)
 
         # Recent Reports
-        recent_group = QGroupBox(ReportConfig.GROUP_TITLES['recent_reports'])
+        recent_group = QGroupBox(ReportConfig.GROUP_TITLES["recent_reports"])
         recent_layout = QVBoxLayout(recent_group)
 
         recent_reports_text = QTextEdit()
@@ -146,16 +155,22 @@ class ReportStyler:
     """Styling utilities for report components."""
 
     @staticmethod
-    def apply_button_state(button: QPushButton, enabled: bool, text: Optional[str] = None):
+    def apply_button_state(
+        button: QPushButton, enabled: bool, text: Optional[str] = None
+    ):
         """Apply enabled/disabled state to a button."""
         button.setEnabled(enabled)
         if text:
             button.setText(text)
 
     @staticmethod
-    def update_granularity_display(info_label: QLabel, current_granularity: Optional[str] = None):
+    def update_granularity_display(
+        info_label: QLabel, current_granularity: Optional[str] = None
+    ):
         """Update the granularity information display."""
-        granularity_text = ReportConfig.get_all_granularity_descriptions(current_granularity)
+        granularity_text = ReportConfig.get_all_granularity_descriptions(
+            current_granularity
+        )
         info_label.setText(granularity_text)
 
     @staticmethod
@@ -167,7 +182,12 @@ class ReportStyler:
 class ReportUIUpdater:
     """Handles UI updates for the reports page."""
 
-    def __init__(self, status_text: QTextEdit, results_list: Optional[QListWidget] = None, recent_reports_text: Optional[QTextEdit] = None):
+    def __init__(
+        self,
+        status_text: QTextEdit,
+        results_list: Optional[QListWidget] = None,
+        recent_reports_text: Optional[QTextEdit] = None,
+    ):
         """Initialize with UI components."""
         self.status_text = status_text
         self.results_list = results_list
