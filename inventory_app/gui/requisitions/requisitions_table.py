@@ -20,6 +20,7 @@ from inventory_app.gui.requisitions.requisitions_model import RequisitionRow
 from inventory_app.utils.logger import logger
 from inventory_app.utils.date_utils import format_date_short, format_time_12h
 from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.utils.table_sizing import autosize_table_columns
 
 # Some PyQt6 stubs (Pylance) may not expose newer ItemDataRole attributes like SortRole.
 # Use getattr with a safe fallback to avoid static analysis errors while keeping runtime
@@ -309,14 +310,11 @@ class RequisitionsTable(QTableWidget):
         """Resize requester column to fit content with word wrapping."""
         # Enable word wrapping for proper text display in requester column
         self.setWordWrap(True)
-
-        # Only resize the requester column (column 1) since others are fixed width
-        # This allows the column to expand to fit content but won't exceed max width
-        self.resizeColumnToContents(1)
-
-        # Ensure requester column doesn't exceed maximum width
-        if self.columnWidth(1) > 240:
-            self.setColumnWidth(1, 240)
+        autosize_table_columns(
+            self,
+            width_limits={0: (150, 150), 1: (180, 320), 2: (220, 220)},
+            skip_columns=[0, 2],
+        )
 
     def _on_header_clicked(self, section: int) -> None:
         """Handle initial header clicks to choose sensible default sort for each column.

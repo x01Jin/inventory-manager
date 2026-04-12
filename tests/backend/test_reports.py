@@ -13,6 +13,8 @@ from inventory_app.gui.reports.data_sources import (
     get_usage_by_grade_level_data,
 )
 from inventory_app.gui.reports.monthly_usage_report import generate_monthly_usage_report
+from inventory_app.gui.reports.report_utils import date_formatter
+from inventory_app.gui.reports.report_worker import ReportWorker
 
 
 @pytest.fixture
@@ -97,6 +99,28 @@ def test_usage_report_generation(temp_db, tmp_path):
             found = True
             break
     assert found
+
+
+def test_report_date_range_description_uses_explicit_dates():
+    """Report period header should show exact selected date range."""
+    desc = date_formatter.get_date_range_description(date(2026, 1, 1), date(2026, 1, 5))
+    assert desc == "Jan 1, 2026 - Jan 5, 2026"
+
+    single = date_formatter.get_date_range_description(
+        date(2026, 1, 1), date(2026, 1, 1)
+    )
+    assert single == "Jan 1, 2026"
+
+
+def test_report_worker_path_classification_rejects_failure_payloads():
+    """Worker should only treat xlsx file paths as successful completion values."""
+    assert ReportWorker._is_successful_path("report_20260101.xlsx") is True
+    assert (
+        ReportWorker._is_successful_path(" Failed to generate Audit Log Report")
+        is False
+    )
+    assert ReportWorker._is_successful_path("Unknown report type: audit") is False
+    assert ReportWorker._is_successful_path("") is False
 
 
 def test_specialized_reports_data_retrieval(temp_db):

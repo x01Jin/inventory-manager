@@ -48,6 +48,8 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 
 - Returns UX: return flows present clear summaries, confirmation prompts, and validation to reduce errors during return processing. Returned requisitions are rendered using a consistent theme color to make returned status easy to identify in lists and previews.
 
+- Final Return dialog loads item data in background to keep UI responsive on large requisitions; processing button stays disabled until load completes.
+
 ## Defective Items Tracking
 
 - During return processing, non-consumable items can be marked as defective

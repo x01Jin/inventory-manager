@@ -80,7 +80,7 @@ class ReportWorker(QThread):
                         file_path.get("error") or "Failed to generate report"
                     )
             else:
-                if file_path and not file_path.startswith("Failed to generate report"):
+                if self._is_successful_path(file_path):
                     self.progress.emit(
                         f"{self.report_type.title()} report generated successfully!"
                     )
@@ -95,6 +95,29 @@ class ReportWorker(QThread):
         except Exception as e:
             logger.error(f"Report generation failed: {e}")
             self.error.emit(f"Report generation failed: {str(e)}")
+
+    @staticmethod
+    def _is_successful_path(result) -> bool:
+        """Return True only for likely valid output-path strings."""
+        if not isinstance(result, str):
+            return False
+
+        normalized = result.strip()
+        if not normalized:
+            return False
+
+        lowered = normalized.lower()
+        failure_markers = (
+            "failed to generate",
+            "unknown report type",
+            "reason:",
+            "traceback",
+            "error",
+        )
+        if any(marker in lowered for marker in failure_markers):
+            return False
+
+        return lowered.endswith(".xlsx")
 
     def _generate_usage_report(self):
         """Generate usage report using existing functionality."""

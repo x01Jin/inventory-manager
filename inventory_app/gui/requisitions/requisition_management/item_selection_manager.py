@@ -232,12 +232,21 @@ class ItemSelectionManager:
         from inventory_app.database.connection import db as global_db
 
         def _create_movements():
+            item_ids = sorted(
+                {item["item_id"] for item in selected_items if item.get("item_id")}
+            )
+            is_consumable_map = {}
+            if item_ids:
+                placeholders = ",".join("?" * len(item_ids))
+                rows = db.execute_query(
+                    f"SELECT id, is_consumable FROM Items WHERE id IN ({placeholders})",
+                    tuple(item_ids),
+                )
+                is_consumable_map = {row["id"]: row["is_consumable"] for row in rows}
+
             # Re-check availability and record movements based on selected items
             for item in selected_items:
-                # Get item consumability
-                item_query = "SELECT is_consumable FROM Items WHERE id = ?"
-                item_result = db.execute_query(item_query, (item["item_id"],))
-                is_consumable = item_result[0]["is_consumable"] if item_result else 1
+                is_consumable = is_consumable_map.get(item["item_id"], 1)
                 movement_type = "RESERVATION" if is_consumable else "REQUEST"
 
                 # Record the movement

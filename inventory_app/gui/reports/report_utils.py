@@ -6,7 +6,7 @@ Uses centralized date utilities from inventory_app.utils.date_utils.
 from datetime import date, timedelta
 from typing import List
 from inventory_app.utils.date_utils import (
-    format_date_long,
+    format_date_short,
     get_month_name,
     get_day_name,
 )
@@ -279,26 +279,10 @@ class ReportDateFormatter:
         Returns:
             Description string
         """
-        days_diff = (end_date - start_date).days + 1
-        granularity = ReportDateFormatter.get_smart_granularity(start_date, end_date)
+        if start_date == end_date:
+            return format_date_short(start_date)
 
-        if days_diff == 1:
-            return f"Single day: {format_date_long(start_date)}"
-        elif days_diff <= 7:
-            return f"{days_diff} days ({granularity} view)"
-        elif days_diff <= 30:
-            weeks = days_diff // 7
-            extra_days = days_diff % 7
-            desc = f"{weeks} week{'s' if weeks > 1 else ''}"
-            if extra_days > 0:
-                desc += f" {extra_days} day{'s' if extra_days > 1 else ''}"
-            return f"{desc} ({granularity} view)"
-        elif days_diff <= 365:
-            months = days_diff // 30
-            return f"~{months} month{'s' if months > 1 else ''} ({granularity} view)"
-        else:
-            years = days_diff // 365
-            return f"~{years} year{'s' if years > 1 else ''} ({granularity} view)"
+        return f"{format_date_short(start_date)} - {format_date_short(end_date)}"
 
     @staticmethod
     def get_fixed_weekly_period_keys(start_date: date, end_date: date) -> List[str]:

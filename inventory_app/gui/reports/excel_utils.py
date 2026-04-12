@@ -265,11 +265,12 @@ def create_excel_report(
         ws.freeze_panes = "A5"
 
         # Final column width adjustment
+        scan_end_row = min(current_row, 1000)
         for col_num in range(1, len(formatted_headers) + 1):
             column_letter = get_column_letter(col_num)
             max_len = ws.column_dimensions[column_letter].width
-            # Scan a few rows for content length
-            for r in range(5, min(current_row, 25)):
+            # Scan content rows to better match real data widths.
+            for r in range(5, scan_end_row):
                 val = ws.cell(row=r, column=col_num).value
                 if val:
                     max_len = max(max_len, len(str(val)) + 2)

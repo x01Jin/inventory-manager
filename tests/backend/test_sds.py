@@ -54,8 +54,37 @@ def test_item_sds_save_and_delete_with_history(temp_db):
     assert history[0]["editor_name"] == "JIN"
     assert history[0]["reason"] == "SDS uploaded"
 
+    activity = db.execute_query(
+        """
+        SELECT activity_type, entity_type, user_name
+        FROM Activity_Log
+        WHERE entity_id = ?
+        ORDER BY id DESC
+        """,
+        (item_id,),
+    )
+    assert activity
+    assert activity[0]["activity_type"] == "SDS_UPLOADED"
+    assert activity[0]["entity_type"] == "item_sds"
+    assert activity[0]["user_name"] == "JIN"
+
     assert ItemSDS.delete_for_item(item_id, "JIN", reason="SDS removed") is True
     assert ItemSDS.get_by_item_id(item_id) is None
+
+    remove_activity = db.execute_query(
+        """
+        SELECT activity_type, entity_type, user_name
+        FROM Activity_Log
+        WHERE entity_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (item_id,),
+    )
+    assert remove_activity
+    assert remove_activity[0]["activity_type"] == "SDS_REMOVED"
+    assert remove_activity[0]["entity_type"] == "item_sds"
+    assert remove_activity[0]["user_name"] == "JIN"
 
 
 def test_sds_storage_service_store_and_remove(tmp_path):

@@ -572,6 +572,8 @@ class ReportsPage(QWidget):
                 "ITEM_ADDED",
                 "ITEM_EDITED",
                 "ITEM_DELETED",
+                "SDS_UPLOADED",
+                "SDS_REMOVED",
                 "REQUISITION_CREATED",
                 "REQUISITION_EDITED",
                 "REQUISITION_RETURNED",

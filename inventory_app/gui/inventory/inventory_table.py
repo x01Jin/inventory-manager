@@ -25,6 +25,7 @@ from PyQt6.QtGui import QShowEvent, QPainter, QBrush
 from PyQt6.QtGui import QColor
 from inventory_app.services.item_status_service import item_status_service
 from inventory_app.gui.inventory.row_styling_service import row_styling_service
+from inventory_app.gui.utils.table_sizing import autosize_table_columns
 from inventory_app.gui.styles import ThemeManager
 from inventory_app.utils.logger import logger
 
@@ -529,15 +530,15 @@ class InventoryTable(QTableWidget):
     def resize_columns(self):
         """Resize columns to fit content."""
         try:
-            for col in range(self.columnCount()):
-                self.resizeColumnToContents(col)
-                width = self.columnWidth(col)
-                min_width, max_width = self.COLUMN_WIDTH_LIMITS.get(col, (80, 220))
+            autosize_table_columns(self, width_limits=self.COLUMN_WIDTH_LIMITS)
 
-                if col == 1:
-                    width = max(width, self._get_name_column_widget_width())
-
-                self.setColumnWidth(col, max(min_width, min(width, max_width)))
+            # Name column may include inline buttons; keep room for widget content.
+            name_col = 1
+            min_width, max_width = self.COLUMN_WIDTH_LIMITS.get(name_col, (120, 450))
+            name_width = max(
+                self.columnWidth(name_col), self._get_name_column_widget_width()
+            )
+            self.setColumnWidth(name_col, max(min_width, min(name_width, max_width)))
         except Exception as e:
             logger.error(f"Error resizing columns: {e}")
 

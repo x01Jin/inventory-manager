@@ -43,6 +43,22 @@ def test_excel_report_ux_features(tmp_path):
     assert ws.cell(row=total_row, column=1).value == "Total"
 
 
+def test_excel_report_column_width_accounts_for_data_content(tmp_path):
+    """Column widths should account for long data values, not header text only."""
+    long_name = "Sodium Bicarbonate Analytical Grade Very Long Label"
+    data = [{"Item": long_name, "Total Quantity": 12}]
+    out = tmp_path / "report_width.xlsx"
+
+    create_excel_report(data, out, "Width Test", date(2025, 1, 1), date(2025, 1, 2))
+
+    wb = load_workbook(out)
+    ws = wb.active
+    assert ws is not None
+
+    # Column A should expand beyond baseline minimum because of long item text.
+    assert ws.column_dimensions["A"].width > 20
+
+
 def test_reports_centralized_labels():
     """Verify that reports page uses centralized ReportConfig labels."""
     from pathlib import Path

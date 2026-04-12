@@ -71,12 +71,13 @@ After creation the requisition is visible in the table and requests/reservations
 ## **Return / Finalize (one-time process)**
 
 1. Select the requisition and click **↩️ Return Items**.
-2. Read the warning: this is a ONE-TIME, FINAL process. Once you click 'Process Returns' the requisition will be LOCKED and cannot be edited.
-3. For **Consumables:** specify how many were returned unused (any remainder is considered consumed). Quantities are integer-based, so volume/mass consumables should use usable stock units (examples: `900ml` import becomes quantity `900`, `1 L` becomes `1000`) to allow partial amounts like `100` or `250`.
-4. For **Non-Consumables:** specify how many were lost/damaged and how many were defective/broken. For defective items:
+2. Wait for item rows to finish loading in the dialog (loading is asynchronous on large requisitions). **Process Returns** stays disabled until data is ready.
+3. Read the warning: this is a ONE-TIME, FINAL process. Once you click 'Process Returns' the requisition will be LOCKED and cannot be edited.
+4. For **Consumables:** specify how many were returned unused (any remainder is considered consumed). Quantities are integer-based, so volume/mass consumables should use usable stock units (examples: `900ml` import becomes quantity `900`, `1 L` becomes `1000`) to allow partial amounts like `100` or `250`.
+5. For **Non-Consumables:** specify how many were lost/damaged and how many were defective/broken. For defective items:
    - Enter the quantity of defective/broken items
    - Add notes describing the defect (required when defective quantity > 0)
-5. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption), defective items (if any), and locks the requisition.
+6. Confirm and enter editor name when prompted. The system records stock movements (returns/consumption), defective items (if any), and locks the requisition.
 
 Stock result summary:
 

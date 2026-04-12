@@ -34,6 +34,7 @@ from inventory_app.utils.date_utils import (
     format_date_short,
 )
 from inventory_app.gui.styles import DarkTheme
+from inventory_app.gui.utils.worker import run_in_background, Worker
 
 
 class ReturnItemWidget(QWidget):
@@ -285,6 +286,7 @@ class ItemReturnDialog(QDialog):
         self.return_processor = ReturnProcessor()
         self.return_items: List[ReturnItem] = []
         self.item_widgets: List[ReturnItemWidget] = []
+        self._load_worker: Optional[Worker] = None
 
         # Get requisition and requester info
         self.requisition = self._get_requisition(requisition_id)
@@ -310,7 +312,7 @@ class ItemReturnDialog(QDialog):
             return
 
         self.setup_ui()
-        self.load_return_data()
+        self._start_async_load()
         logger.info(
             f"One-time return dialog initialized for requisition {requisition_id}"
         )
@@ -346,9 +348,7 @@ class ItemReturnDialog(QDialog):
         info_layout.setContentsMargins(10, 4, 10, 6)
 
         requester_text = (
-            f"👤 {self.requester.name}"
-            if self.requester
-            else "Requester: Unknown"
+            f"👤 {self.requester.name}" if self.requester else "Requester: Unknown"
         )
         requester_label = QLabel(requester_text)
         requester_label.setStyleSheet("font-weight: bold; font-size: 9pt;")
@@ -425,7 +425,7 @@ class ItemReturnDialog(QDialog):
 
         self.process_button = QPushButton("🔒 Process Returns (Final)")
         self.process_button.clicked.connect(self.process_returns)
-        self.process_button.setEnabled(True)
+        self.process_button.setEnabled(False)
         button_layout.addWidget(self.process_button)
 
         cancel_button = QPushButton("❌ Cancel")
@@ -434,16 +434,29 @@ class ItemReturnDialog(QDialog):
 
         layout.addLayout(button_layout)
 
-    def load_return_data(self):
-        """Load return data and create simplified item widgets."""
-        try:
-            # Get return items from processor
-            self.return_items = self.return_processor.get_requisition_items_for_return(
-                self.requisition_id
-            )
+    def _start_async_load(self):
+        """Load return dataset in background to keep dialog responsive."""
+        self.summary_label.setText("Loading return data...")
+        self.process_button.setEnabled(False)
+        self._load_worker = run_in_background(
+            self._fetch_return_data,
+            on_result=self._on_return_data_loaded,
+            on_error=self._on_return_data_error,
+        )
 
-            # Get item names
-            item_names = self._get_item_names()
+    def _fetch_return_data(self):
+        """Fetch return items and display names off the UI thread."""
+        return_items = self.return_processor.get_requisition_items_for_return(
+            self.requisition_id
+        )
+        item_names = self._get_item_names(return_items)
+        return return_items, item_names
+
+    def _on_return_data_loaded(self, payload):
+        """Create item widgets after background data load completes."""
+        try:
+            return_items, item_names = payload
+            self.return_items = return_items
 
             # Clear existing widgets
             self._clear_item_widgets()
@@ -464,12 +477,21 @@ class ItemReturnDialog(QDialog):
 
             # Update summary
             self._update_summary()
+            self.process_button.setEnabled(True)
 
             logger.info(f"Loaded return data for {len(self.return_items)} items")
 
         except Exception as e:
             logger.error(f"Failed to load return data: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load return data: {str(e)}")
+
+    def _on_return_data_error(self, error_tuple):
+        """Handle background data-load errors."""
+        _, value, _ = error_tuple
+        message = str(value) if value else "Failed to load return data."
+        logger.error(f"Failed to load return data: {message}")
+        self.summary_label.setText("Failed to load return data")
+        QMessageBox.critical(self, "Error", f"Failed to load return data: {message}")
 
     def _clear_item_widgets(self):
         """Clear all item widgets."""
@@ -614,10 +636,10 @@ class ItemReturnDialog(QDialog):
             logger.error(f"Failed to get requester {requester_id}: {e}")
             return None
 
-    def _get_item_names(self) -> dict:
+    def _get_item_names(self, return_items: List[ReturnItem]) -> dict:
         """Get item names for display."""
         try:
-            item_ids = [item.item_id for item in self.return_items]
+            item_ids = [item.item_id for item in return_items]
             if not item_ids:
                 return {}
 

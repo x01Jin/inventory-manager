@@ -15,7 +15,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 - **Usage Reports:** Time-bucketed usage of items across the selected date range. Use the **Report Type** dropdown to choose between **Monthly Usage** (grouped by week within a month, with category grouping) or **Date Range** (flexible date range with daily/weekly/monthly/yearly granularity). Monthly Usage supports category filtering and is the default selection. The counts reflect actual laboratory activity dates (when materials were used in lab activities), not when they were borrowed.
 - **Inventory Reports:** Several prebuilt inventory-focused exports including **Stock Levels Report**, **Expiration Report**, **Low Stock Alert**, **Acquisition History**, **Calibration Due Report**, **Update History Report**, **Disposal History Report**, **Usage by Grade Level**, and **Defective Items Report**. Some reports use date ranges (e.g., Acquisition History, Expiration windows). Others show current or historical state.
 - **Trends Reports:** Time-series (pivoted) reports grouped by **Item** or **Category**, with Auto/manual **Granularity** (Daily/Weekly/Monthly/Yearly), and an optional **Top N** filter (Top 10/20/50/All).
-- **Audit Log:** Centralized report stream for auditing. It combines item/requisition updates, disposals, defective recordings, and activity events. Filters include date range, editor name/initials, action type, and entity type.
+- **Audit Log:** Centralized report stream for auditing. It combines item/requisition updates, disposals, defective recordings, SDS lifecycle events, and activity events. Filters include date range, editor name/initials, action type, and entity type.
 
 ## **Filters & Options**
 
@@ -29,7 +29,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 ## **What each report contains (at-a-glance)**
 
 - **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE, PRE/WEEK 1-4/POST, and Total Usage. ACTUAL INVENTORY follows Task 10 stock policy.
-- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels). Filtered by category.
+- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels), and report title period text shows exact selected dates (example: `Jan 1, 2026 - Jan 5, 2026`). Filtered by category.
 - **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits:
   - Consumables: `Original - Consumption - Disposal + Return`
   - Non-consumables: `Original - Disposal` (borrow/request affects availability, not baseline stock)
@@ -41,7 +41,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
 - **Usage by Grade Level:** Item-level usage breakdown with Grade 7/8/9/10 tally columns plus TOTAL QUANTITY and inventory descriptors (size, brand, specs). Supports date range, category, grade, section, and individual-request filtering.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.
-- **Audit Log Report:** Unified audit history including item/requisition changes, disposals, defective recordings, and activity log events.
+- **Audit Log Report:** Unified audit history including item/requisition changes, disposals, defective recordings, SDS upload/removal events, and activity log events.
 - **Trends Reports:** Pivoted time-series tables where rows are items or categories and columns are period buckets (daily, weekly, monthly, yearly) depending on granularity.
 
 ## **File output & naming**
@@ -55,7 +55,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 
 ## **Status & results panels**
 
-- **Status:** Shows progress, success, and error messages (e.g., "Generating report...", "✅ Report generated successfully!", or specific errors such as invalid date ranges or "No data found").
+- **Status:** Shows progress, success, and error messages (e.g., "Generating report...", "✅ Report generated successfully!", or specific errors such as invalid date ranges or "No data found"). Failed report generation does not emit success messaging.
 - **Generated Reports:** A short list of generated files from the current session for quick reference.
 - **Recent Reports:** A timestamped activity list of recent reports created by the application.
 

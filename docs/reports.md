@@ -123,8 +123,10 @@ Generates a time-series usage report for any custom date range with automatic gr
   - Headers are formatted via `_format_excel_headers` and period keys are turned into human-readable labels (daily/weekly/monthly/yearly) with `ReportDateFormatter` helpers.
   - Applies basic styling: bold headers, colored header background, cell borders, centered alignment, and automatic column width adjustments.
   - UX: freeze header panes (`A5` so title and header remain visible), auto-filter enabled on header row for quick data filtering, and numeric formatting for quantity/stock/total columns with right-alignment and thousands grouping where applicable.
+  - Period header always shows exact selected date range in short format (example: `Jan 1, 2026 - Jan 5, 2026`) for date-range reports.
   - Merged cells are handled defensively to avoid type errors.
   - Column sizing detail: header columns receive extra padding (approximately +6 characters) to avoid the sort/filter drop-down obscuring header text in generated Excel files.
+  - Final width pass is content-aware and scans written data rows (with a safety cap) so long values do not get clipped by header-only sizing.
 
 ## How Usage Reports are Generated
 
@@ -165,6 +167,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
   - Audit Log Report — centralized audit stream across item/requisition updates, disposals, defective recordings, and activity events.
+    - SDS activity events are included (`SDS_UPLOADED`, `SDS_REMOVED`).
   - Acquisition History Report — batch-level acquisition rows including explicit batch labels (`B1`, `B2`, and so on) and per-batch dates.
   - Batch Summary Report — grouped per-item batch history output with label/date/quantity details.
 - These inventory queries use `MovementType` values for consistency of stock movement semantics and rely on parameterized `?` placeholders for date bounds and filters where applicable.
@@ -173,7 +176,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
 Background Processing and UI Integration
 
 - The `ReportsPage` UI uses a `DateRangeSelector`, filters, and other controls in `reports_page.py` plus `ReportWorker` to run the chosen report in a separate thread.
-- The `ReportWorker` emits progress updates and handles report generation — the UI listens to `progress`, `finished`, and `error` signals and updates `ReportUIUpdater` (status, recent files list, auto-launch on Windows).
+- The `ReportWorker` emits progress updates and handles report generation — the UI listens to `progress`, `finished`, and `error` signals and updates `ReportUIUpdater` (status, recent files list, auto-launch on Windows). Failed report payloads are emitted through `error` and do not trigger success-state completion messaging.
 - `ReportConfig` centralizes UI strings, granularity descriptions, and styling for the report UI.
 
 Security and SQL Safety

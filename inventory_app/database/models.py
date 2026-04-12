@@ -1013,6 +1013,14 @@ class Item:
                 logger.info(f"Deleting main Items record {self.id}")
                 db.execute_update("DELETE FROM Items WHERE id = ?", (self.id,))
 
+                activity_logger.log_activity(
+                    activity_logger.ITEM_DELETED,
+                    f"Deleted item: {self.name}",
+                    self.id,
+                    "item",
+                    editor_name,
+                )
+
             logger.info(f"Successfully deleted item {self.id} and all related records")
             return True
 
@@ -1210,6 +1218,7 @@ class ItemSDS:
 
         try:
             current_time = datetime.now().isoformat()
+            is_new_record = False
             with db.transaction():
                 existing = db.execute_query(
                     "SELECT id FROM Item_SDS WHERE item_id = ?",
@@ -1238,6 +1247,7 @@ class ItemSDS:
                         ),
                     )
                 else:
+                    is_new_record = True
                     result = db.execute_update(
                         """
                         INSERT INTO Item_SDS (
@@ -1269,6 +1279,18 @@ class ItemSDS:
                     (self.item_id, editor_name, reason),
                 )
 
+                activity_logger.log_activity(
+                    activity_logger.SDS_UPLOADED,
+                    (
+                        f"Uploaded SDS for item ID {self.item_id}"
+                        if is_new_record
+                        else f"Updated SDS for item ID {self.item_id}"
+                    ),
+                    self.item_id,
+                    "item_sds",
+                    editor_name,
+                )
+
             return True
         except Exception as e:
             logger.error(f"Failed to save SDS for item {self.item_id}: {e}")
@@ -1288,6 +1310,13 @@ class ItemSDS:
                     VALUES (?, ?, ?)
                     """,
                     (item_id, editor_name, reason),
+                )
+                activity_logger.log_activity(
+                    activity_logger.SDS_REMOVED,
+                    f"Removed SDS for item ID {item_id}",
+                    item_id,
+                    "item_sds",
+                    editor_name,
                 )
             return True
         except Exception as e:
@@ -1614,6 +1643,14 @@ class Requisition:
                 """
                 db.execute_update(
                     history_query, (self.id, editor_name, "Requisition deleted")
+                )
+
+                activity_logger.log_activity(
+                    activity_logger.REQUISITION_DELETED,
+                    f"Deleted requisition ID {self.id}",
+                    self.id,
+                    "requisition",
+                    editor_name,
                 )
 
                 # Finally delete the requisition

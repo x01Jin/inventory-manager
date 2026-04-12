@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from inventory_app.gui.requesters.requester_model import RequesterRow
 from inventory_app.utils.logger import logger
+from inventory_app.gui.utils.table_sizing import autosize_table_columns
 
 SORT_ROLE = getattr(Qt.ItemDataRole, "SortRole", int(Qt.ItemDataRole.UserRole) + 1)
 
@@ -117,7 +118,9 @@ class RequesterTable(QTableWidget):
                 else:
                     self._populate_faculty_row(row_position, row_data)
 
-            logger.info(f"Populated {self._requester_type} table with {len(requesters)} requesters")
+            logger.info(
+                f"Populated {self._requester_type} table with {len(requesters)} requesters"
+            )
 
             self.setSortingEnabled(prev_sorting)
             if prev_sorting and self.columnCount() > 0:
@@ -129,7 +132,9 @@ class RequesterTable(QTableWidget):
                     self.sortItems(last_col, Qt.SortOrder.AscendingOrder)
         except Exception as e:
             logger.error(f"Failed to populate requesters table: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load requester data: {str(e)}")
+            QMessageBox.critical(
+                self, "Error", f"Failed to load requester data: {str(e)}"
+            )
 
     def _populate_student_row(self, row_position: int, row_data: RequesterRow) -> None:
         """Populate a row for student requesters."""
@@ -191,11 +196,17 @@ class RequesterTable(QTableWidget):
 
         self._set_created_item(row_position, 2, row_data)
 
-    def _set_created_item(self, row_position: int, column: int, row_data: RequesterRow) -> None:
+    def _set_created_item(
+        self, row_position: int, column: int, row_data: RequesterRow
+    ) -> None:
         """Set the created date item in the specified column."""
         created_item = None
         if row_data.created_datetime:
-            from inventory_app.utils.date_utils import format_date_short, format_time_12h
+            from inventory_app.utils.date_utils import (
+                format_date_short,
+                format_time_12h,
+            )
+
             date_str = format_date_short(row_data.created_datetime)
             time_str = format_time_12h(row_data.created_datetime.time())
             created_str = f"{date_str} at {time_str}"
@@ -285,6 +296,17 @@ class RequesterTable(QTableWidget):
 
     def resize_columns_to_contents(self) -> None:
         """Resize columns to fit their contents."""
-        for column in range(self.columnCount()):
-            self.resizeColumnToContents(column)
-        self.setColumnWidth(0, max(self.columnWidth(0), 100))
+        if self._requester_type == "student":
+            limits = {
+                0: (100, 140),
+                1: (180, 320),
+                2: (100, 150),
+                3: (120, 170),
+                4: (140, 240),
+            }
+        elif self._requester_type == "teacher":
+            limits = {0: (100, 140), 1: (180, 320), 2: (180, 320), 3: (140, 240)}
+        else:
+            limits = {0: (100, 140), 1: (220, 360), 2: (140, 240)}
+
+        autosize_table_columns(self, width_limits=limits)
