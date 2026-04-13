@@ -37,8 +37,10 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 ## Workflow
 
 - Create requisitions by selecting a requester and adding items. The system checks stock before saving and reserves quantities so the same stock is not double-allocated.
+- Create/Edit requisition dialogs open in a maximized window by default so requester details, item lists, and schedule controls remain visible on small-screen laptops.
 
 - Available items in requisition dialogs load asynchronously to keep the dialog responsive during item searches.
+- Requisition schedule controls and action areas use compact spacing so controls remain reachable when the window is restored from maximized mode.
 
 - Returns and partial returns supported with logging of consumed or lost items.
 

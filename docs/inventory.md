@@ -42,6 +42,8 @@ The importer supports case-insensitive and spacing-tolerant header matching and 
 - Create: stores item data and initial batch quantity.
 - Edit: updates item data and writes update history.
 - Edit (existing items): includes Batch Acquisition Records management for adding, editing, and removing batch entries (`B1`, `B2`, `B3`, and so on).
+- Add/Edit Item dialogs open in a maximized window by default to provide usable space on small-screen laptops.
+- Add/Edit Item layout keeps Specifications, Batch Acquisition Records, and Editor Information visible together by using responsive section sizing and internal scrolling for dense content.
 - Delete: requires editor attribution and reason; blocked for currently requested items.
 - Add/Edit validation: Name, Category, and Editor Name/Initials are required before save.
 - Add flow duplicate warning: when another item exists with the same normalized name in the same category, the app shows a warning and lets users continue or cancel.

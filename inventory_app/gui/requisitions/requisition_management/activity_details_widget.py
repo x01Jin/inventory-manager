@@ -45,20 +45,20 @@ class ActivityDetailsWidget(QGroupBox):
     def _setup_ui(self):
         """Setup the widget UI."""
         from PyQt6.QtWidgets import QSizePolicy
-        
+
         # Set size policy to expand and fill available space
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
 
         # Activity name
         activity_name_layout = QHBoxLayout()
         activity_name_layout.addWidget(QLabel("Activity Name:"))
         self.activity_name = QLineEdit()
         self.activity_name.setPlaceholderText("(REQUIRED)")
-        self.activity_name.setFixedHeight(25)
+        self.activity_name.setMinimumHeight(24)
         self.activity_name.textChanged.connect(self._on_activity_name_changed)
         activity_name_layout.addWidget(self.activity_name)
         layout.addLayout(activity_name_layout)

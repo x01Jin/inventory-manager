@@ -42,6 +42,7 @@ class ItemEditor(QDialog):
 
     def __init__(self, parent=None, item_id: Optional[int] = None):
         super().__init__(parent)
+        self._maximize_on_first_show = True
         self.item_id = item_id
         self.existing_item = None
         self.categories: List[str] = []
@@ -66,6 +67,7 @@ class ItemEditor(QDialog):
     def setup_ui(self):
         """Setup the dialog UI with a responsive two-column layout."""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
         # Left column will contain Basic Information and Dates & Status stacked vertically.
@@ -75,6 +77,7 @@ class ItemEditor(QDialog):
 
         # Basic Information Group (left column)
         basic_group = QGroupBox("Basic Information")
+        basic_group.setMinimumWidth(380)
         basic_layout = QVBoxLayout(basic_group)
         basic_layout.setSpacing(8)
 
@@ -133,6 +136,7 @@ class ItemEditor(QDialog):
 
         # Dates and Status Group (left column, below basic info)
         dates_group = QGroupBox("Dates and Status")
+        dates_group.setMinimumWidth(380)
         dates_layout = QVBoxLayout(dates_group)
         dates_layout.setSpacing(8)
 
@@ -198,6 +202,8 @@ class ItemEditor(QDialog):
 
         # Specifications Group (right column)
         spec_group = QGroupBox("Specifications")
+        spec_group.setMinimumWidth(440)
+        spec_group.setMinimumHeight(220)
         spec_layout = QVBoxLayout(spec_group)
         spec_layout.setSpacing(8)
 
@@ -228,6 +234,7 @@ class ItemEditor(QDialog):
         self.spec_input.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
+        self.spec_input.setMinimumHeight(80)
         spec_layout.addWidget(self.spec_input)
 
         # SDS section (chemical categories only)
@@ -251,7 +258,10 @@ class ItemEditor(QDialog):
         self.sds_notes_input.setPlaceholderText(
             "Optional quick SDS notes (hazards, first aid, handling)."
         )
-        self.sds_notes_input.setMaximumHeight(90)
+        self.sds_notes_input.setMinimumHeight(72)
+        self.sds_notes_input.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
         spec_layout.addWidget(self.sds_notes_input)
 
         # Editor Information (required) sits under specifications in right column
@@ -268,6 +278,7 @@ class ItemEditor(QDialog):
         right_v.addWidget(spec_group, 3)
         if self.item_id:
             self.batch_group = QGroupBox("Batch Acquisition Records")
+            self.batch_group.setMinimumHeight(180)
             batch_group_layout = QVBoxLayout(self.batch_group)
 
             self.batch_table = QTableWidget()
@@ -282,6 +293,11 @@ class ItemEditor(QDialog):
                 QTableWidget.SelectionMode.SingleSelection
             )
             self.batch_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            self.batch_table.setMinimumHeight(120)
+            self.batch_table.setMaximumHeight(240)
+            self.batch_table.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
             batch_header = self.batch_table.horizontalHeader()
             if batch_header:
                 batch_header.setSectionResizeMode(
@@ -314,7 +330,7 @@ class ItemEditor(QDialog):
             right_v.addWidget(self.batch_group, 2)
         right_v.addWidget(editor_group, 1)
         right_v.addStretch()
-        main_h_layout.addLayout(right_v, 2)
+        main_h_layout.addLayout(right_v, 1)
 
         # Add the two-column layout to the main dialog layout
         layout.addLayout(main_h_layout)
@@ -336,26 +352,30 @@ class ItemEditor(QDialog):
         # SDS controls are shown only for chemical categories.
         self._update_sds_visibility("")
 
-        # Make window size responsive:
-        # prefer 90% of available screen width and 60% of available screen height
+        # Keep a safe restored size while defaulting to maximized display on open.
         screen = QApplication.primaryScreen()
         if screen is not None:
             try:
                 geom = screen.availableGeometry()
-                desired_height = int(geom.height() * 0.6)
-                desired_width = int(geom.width() * 0.9)
+                desired_height = min(780, int(geom.height() * 0.86))
+                desired_width = min(1260, int(geom.width() * 0.9))
             except Exception:
                 desired_height = 700
-                desired_width = 900
+                desired_width = 1050
         else:
             desired_height = 700
-            desired_width = 900
+            desired_width = 1050
 
-        # Set initial size and reasonable minimums so the dialog remains usable on small displays
+        # Set initial restored size and usable minimums.
         self.resize(desired_width, desired_height)
-        # Allow shrinking down to 50% of desired size before layout collapses
-        self.setMinimumWidth(int(desired_width * 0.5))
-        self.setMinimumHeight(int(desired_height * 0.5))
+        self.setMinimumSize(900, 560)
+
+    def showEvent(self, a0):
+        """Open item editor maximized for better small-screen usability."""
+        super().showEvent(a0)
+        if self._maximize_on_first_show:
+            self.showMaximized()
+            self._maximize_on_first_show = False
 
     def on_item_type_changed(self):
         """Update the date field visibility and labels based on item type selection."""

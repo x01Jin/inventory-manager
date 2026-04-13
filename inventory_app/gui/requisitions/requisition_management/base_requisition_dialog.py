@@ -259,6 +259,7 @@ class BaseRequisitionDialog(QDialog):
             parent: Parent widget
         """
         super().__init__(parent)
+        self._maximize_on_first_show = True
         self.mode = mode  # 'create' or 'edit'
 
         # Compose with services and managers
@@ -287,19 +288,22 @@ class BaseRequisitionDialog(QDialog):
             f"{'Create' if self.mode == 'create' else 'Edit'} Laboratory Requisition"
         )
         self.setModal(True)
-        self.setMinimumSize(1000, 540)  # Set minimum size for usability
+        self.setMinimumSize(900, 520)  # Keep restored window usable on smaller screens
+        self.resize(1180, 700)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(5)
 
         # Main horizontal splitter for the entire layout
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setHandleWidth(6)
         main_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing
         layout.addWidget(main_splitter)
 
         # Left section: Vertical splitter containing left/middle panels and schedule
         left_section = QWidget()
-        left_section.setMinimumWidth(500)  # Ensure minimum width for left section
+        left_section.setMinimumWidth(440)  # Ensure minimum width for left section
         left_layout = QVBoxLayout(left_section)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -322,7 +326,9 @@ class BaseRequisitionDialog(QDialog):
 
         # Schedule panel below left and middle panels
         schedule_panel = self._create_requisition_schedule_panel()
-        schedule_panel.setMinimumHeight(120)  # Ensure schedule has minimum height
+        schedule_panel.setMinimumHeight(
+            100
+        )  # Keep schedule visible while saving vertical space
         left_layout.addWidget(schedule_panel)
 
         # Set vertical proportions for left section (top panels get more space than schedule)
@@ -336,11 +342,18 @@ class BaseRequisitionDialog(QDialog):
         main_splitter.addWidget(right_panel)
 
         # Set main splitter proportions (70% left, 30% right)
-        main_splitter.setStretchFactor(0, 70)
-        main_splitter.setStretchFactor(1, 30)
+        main_splitter.setStretchFactor(0, 68)
+        main_splitter.setStretchFactor(1, 32)
 
         # Buttons (abstract - implemented by subclasses)
         self._setup_buttons(layout)
+
+    def showEvent(self, a0):
+        """Open requisition dialogs maximized for small-screen laptop usability."""
+        super().showEvent(a0)
+        if self._maximize_on_first_show:
+            self.showMaximized()
+            self._maximize_on_first_show = False
 
     def _create_requisition_details_panel(self) -> QWidget:
         """Create mode-specific requisition details panel."""
@@ -937,17 +950,17 @@ class CompactRequisitionSchedule(QWidget):
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(8)
+        main_layout.setSpacing(6)
 
         # Request schedule row
         request_layout = QHBoxLayout()
-        request_layout.setSpacing(5)
+        request_layout.setSpacing(3)
 
-        request_layout.addWidget(QLabel("Expected to get at :      "))
+        request_layout.addWidget(QLabel("Expected to get at:"))
 
         # Request time selectors - responsive sizing
         self.request_hour = QComboBox()
-        self.request_hour.setMinimumWidth(35)
+        self.request_hour.setMinimumWidth(30)
         self.request_hour.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -956,14 +969,14 @@ class CompactRequisitionSchedule(QWidget):
         request_layout.addWidget(QLabel(":"))
 
         self.request_minute = QComboBox()
-        self.request_minute.setMinimumWidth(35)
+        self.request_minute.setMinimumWidth(30)
         self.request_minute.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         request_layout.addWidget(self.request_minute)
 
         self.request_ampm = QComboBox()
-        self.request_ampm.setMinimumWidth(35)
+        self.request_ampm.setMinimumWidth(30)
         self.request_ampm.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -973,7 +986,7 @@ class CompactRequisitionSchedule(QWidget):
 
         # Request date selectors - responsive sizing
         self.request_month = QComboBox()
-        self.request_month.setMinimumWidth(45)
+        self.request_month.setMinimumWidth(42)
         self.request_month.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -982,7 +995,7 @@ class CompactRequisitionSchedule(QWidget):
         request_layout.addWidget(QLabel("/"))
 
         self.request_day = QComboBox()
-        self.request_day.setMinimumWidth(35)
+        self.request_day.setMinimumWidth(30)
         self.request_day.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -991,7 +1004,7 @@ class CompactRequisitionSchedule(QWidget):
         request_layout.addWidget(QLabel("/"))
 
         self.request_year = QComboBox()
-        self.request_year.setMinimumWidth(55)
+        self.request_year.setMinimumWidth(50)
         self.request_year.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1002,13 +1015,13 @@ class CompactRequisitionSchedule(QWidget):
 
         # Return schedule row
         return_layout = QHBoxLayout()
-        return_layout.setSpacing(5)
+        return_layout.setSpacing(3)
 
-        return_layout.addWidget(QLabel("Expected return at :      "))
+        return_layout.addWidget(QLabel("Expected return at:"))
 
         # Return time selectors - responsive sizing
         self.return_hour = QComboBox()
-        self.return_hour.setMinimumWidth(35)
+        self.return_hour.setMinimumWidth(30)
         self.return_hour.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1017,14 +1030,14 @@ class CompactRequisitionSchedule(QWidget):
         return_layout.addWidget(QLabel(":"))
 
         self.return_minute = QComboBox()
-        self.return_minute.setMinimumWidth(35)
+        self.return_minute.setMinimumWidth(30)
         self.return_minute.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         return_layout.addWidget(self.return_minute)
 
         self.return_ampm = QComboBox()
-        self.return_ampm.setMinimumWidth(35)
+        self.return_ampm.setMinimumWidth(30)
         self.return_ampm.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1034,7 +1047,7 @@ class CompactRequisitionSchedule(QWidget):
 
         # Return date selectors - responsive sizing
         self.return_month = QComboBox()
-        self.return_month.setMinimumWidth(45)
+        self.return_month.setMinimumWidth(42)
         self.return_month.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1043,7 +1056,7 @@ class CompactRequisitionSchedule(QWidget):
         return_layout.addWidget(QLabel("/"))
 
         self.return_day = QComboBox()
-        self.return_day.setMinimumWidth(35)
+        self.return_day.setMinimumWidth(30)
         self.return_day.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1052,7 +1065,7 @@ class CompactRequisitionSchedule(QWidget):
         return_layout.addWidget(QLabel("/"))
 
         self.return_year = QComboBox()
-        self.return_year.setMinimumWidth(55)
+        self.return_year.setMinimumWidth(50)
         self.return_year.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
