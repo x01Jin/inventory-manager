@@ -6,7 +6,7 @@ The Inventory page is the main workspace for item records, stock visibility, and
 
 - View inventory rows with stock and alert context.
 - Add, edit, delete, and import items.
-- Search and filter by text, category, supplier, item type, lifecycle status, and acquisition date range.
+- Search and filter by text, category, supplier, PO number, item type, lifecycle status, and acquisition date range.
 - Surface date-based alert states through row coloring.
 - Open per-item usage history directly from the inventory table.
 - Open and maintain Safety Data Sheets (SDS) for chemical items.
@@ -61,7 +61,7 @@ Categories are fixed by system configuration and determine default item type/dat
 
 ## Inventory Fields
 
-- Brand, Supplier, Other Specifications, Expiry/Disposal Date, Item Type, and Acquisition Date are supported in add/edit and import flows.
+- Brand, Supplier, PO Number, Other Specifications, Expiry/Disposal Date, Item Type, and Acquisition Date are supported in add/edit and import flows.
 - Supplier values are stored by `supplier_id` and resolved from supplier names during import.
 - Size values are normalized to canonical metric casing in manual and import flows.
 - Manual add/edit treats the default `Select Supplier` as no supplier (`NULL`), not a text value.
@@ -151,7 +151,7 @@ The system prevents stock from going negative.
 
 ## Search, Filters, and Usage History
 
-- Search is case-insensitive and matches item name, category, and supplier text.
+- Search is case-insensitive and matches item name, category, supplier, and PO number text.
 - Search and filter controls use responsive horizontal sizing and expand to fill available panel width.
 - Category, supplier, and item type filters are exact-match dropdown filters.
 - Status filter supports `Expiring`, `Expired/Overdue`, `Calibration Warning`, and `Calibration Due`.

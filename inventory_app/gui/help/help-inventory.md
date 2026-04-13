@@ -39,7 +39,7 @@ The Inventory page is the primary place to view, search, and manage all items, b
 
 ## **Filters & Search**
 
-- **🔍 Search:** Search by item name, category, or supplier. Typing updates the table instantly.
+- **🔍 Search:** Search by item name, category, supplier, or PO number. Typing updates the table instantly.
 - **📂 Category:** Filter the table to a single category or choose **All Categories** to show everything.
 - **🏢 Supplier:** Filter the table to a single supplier or choose **All Suppliers**.
 - **🧪 Item Type:** Filter by `Consumable`, `Non-consumable`, or other configured item type values.
@@ -59,6 +59,7 @@ The table shows one row per item/batch grouping. Column list and descriptions:
 - **SDS button beside Name (chemicals only):** Quick-open action for external file viewing. Missing entries show an SDS-required message.
 - **Size / Brand / Other Specifications:** Size supports dropdown suggestions and direct typed entry; brand and other specifications remain free-form.
 - **Supplier:** Supplier name (if provided).
+- **PO Number:** Optional purchase order reference for procurement tracking and report export.
 - **Calibration Date:** For non-consumables, this stores **last calibration date**; due date is computed as +1 year for alerts.
 - **Expiry/Disposal Date:** For consumables this is expiration; for non-consumables this is disposal date.
 - **Item Type:** `Consumable` or `Non-Consumable` — affects which date is shown (expiration vs calibration/disposal).
@@ -148,7 +149,7 @@ The Quick Statistics block shows several counts and small alerts:
 
 ## **Search & Filter behavior (exact matching rules)**
 
-- The **Search** box matches text inside `name`, `category`, or `supplier` (case-insensitive, substring match).
+- The **Search** box matches text inside `name`, `category`, `supplier`, or `po_number` (case-insensitive, substring match).
 - Category, Supplier, Item Type, and Status filters are exact matches based on dropdown values.
 - Date-range filtering applies to acquisition date when enabled.
 - Date-range filtering uses batch acquisition dates when batch history exists.

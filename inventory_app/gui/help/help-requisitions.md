@@ -7,7 +7,7 @@ The Requisitions page is where you create, manage, and finalize requests for inv
 - **➕ New Requisition:** Open the Create dialog to build a new requisition. Requires selecting a **Requester**, adding one or more **Items**, and setting activity and schedule details. Creation uses an immediate transaction to reserve stock atomically.
 - **✏️ Edit Requisition:** Enabled when a requisition row is selected. Opens the Edit dialog to change requester, items, schedule, and activity details. Editing is disabled for fully processed (returned) requisitions.
 - **↩️ Return Items:** Opens the one-time Final Return dialog for the selected requisition. Use this to record returned quantities, lost/damaged non-consumables, and defective items, then finalize and lock the requisition.
-- **🖨️ Print:** Enabled when a requisition row is selected. Generates an HTML report of the selected requisition with all details for printing or archival.
+- **🖨️ Print:** Enabled when a requisition row is selected. Opens the system print dialog and prints the requisition slip directly using the formatted requisition layout.
 - **🗑️ Delete Requisition:** Permanently deletes the selected requisition (prompt + editor name required). Deletion cannot be undone and removes related records.
 - **🔄 Refresh:** Reloads requisition data, updates statuses (requested/active/overdue) and requester options.
 
@@ -95,14 +95,14 @@ Tips:
 
 ## **Print a Requisition**
 
-- Select a requisition and click **🖨️ Print**. An HTML file will be generated containing a professional, formatted report of the requisition with:
+- Select a requisition and click **🖨️ Print**. The app opens the system print dialog and sends a professional requisition slip to the selected printer. The printed slip includes:
   - Requisition ID and status
   - Requester information (name, affiliation, group)
   - Timeline (expected request and return dates)
   - Activity details (name, date, students, groups)
   - Complete list of requested items and quantities
   - For returned requisitions: return details showing consumables returned/consumed, non-consumables returned/lost, and defective items
-- You will be prompted to choose a save location and filename for the HTML file. You can open the file in any web browser and use the browser's print function (Ctrl+P) to print or save as PDF.
+- If you cancel the print dialog, no output is generated.
 
 ## **Validation & common warnings**
 

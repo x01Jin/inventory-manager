@@ -106,6 +106,96 @@ def test_requisition_html_generation(temp_db):
     assert "Lab Test" in html
     assert "Test Item" in html
     assert "REQUESTED" in html.upper()
+    assert html.count("<h2>Timeline</h2>") == 1
+    assert html.count("<h2>Requested Items (") == 1
+
+
+def test_direct_print_helper_accepts_dialog(monkeypatch):
+    """Direct print helper should print HTML when the print dialog is accepted."""
+    from inventory_app.gui.requisitions import requisitions_page as page_module
+    from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
+    from PyQt6.QtWidgets import QDialog
+
+    captured = {"html": None, "printed": False, "title": ""}
+
+    class FakePrinter:
+        class PrinterMode:
+            HighResolution = object()
+
+        def __init__(self, mode):
+            self.mode = mode
+
+    class FakeDialog:
+        def __init__(self, printer, parent):
+            self.printer = printer
+
+        def setWindowTitle(self, title):
+            captured["title"] = title
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    class FakeDocument:
+        def setHtml(self, html):
+            captured["html"] = html
+
+        def print(self, printer):
+            captured["printed"] = True
+
+    monkeypatch.setattr(page_module, "QPrinter", FakePrinter)
+    monkeypatch.setattr(page_module, "QPrintDialog", FakeDialog)
+    monkeypatch.setattr(page_module, "QTextDocument", FakeDocument)
+
+    html = "<html><body><h1>Print Me</h1></body></html>"
+    result = RequisitionsPage._print_html_content(html)
+
+    assert result is True
+    assert captured["title"] == "Print Requisition Slip"
+    assert captured["html"] == html
+    assert captured["printed"] is True
+
+
+def test_direct_print_helper_handles_cancel(monkeypatch):
+    """Direct print helper should return False when user cancels print dialog."""
+    from inventory_app.gui.requisitions import requisitions_page as page_module
+    from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
+    from PyQt6.QtWidgets import QDialog
+
+    class FakePrinter:
+        class PrinterMode:
+            HighResolution = object()
+
+        def __init__(self, mode):
+            self.mode = mode
+
+    class FakeDialog:
+        def __init__(self, printer, parent):
+            self.printer = printer
+
+        def setWindowTitle(self, title):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    class FakeDocument:
+        def setHtml(self, html):
+            raise AssertionError(
+                "setHtml should not be called when printing is cancelled"
+            )
+
+        def print(self, printer):
+            raise AssertionError(
+                "print should not be called when printing is cancelled"
+            )
+
+    monkeypatch.setattr(page_module, "QPrinter", FakePrinter)
+    monkeypatch.setattr(page_module, "QPrintDialog", FakeDialog)
+    monkeypatch.setattr(page_module, "QTextDocument", FakeDocument)
+
+    result = RequisitionsPage._print_html_content("<html></html>")
+
+    assert result is False
 
 
 def test_item_po_field_persistence(temp_db):

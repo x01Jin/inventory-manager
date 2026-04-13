@@ -28,17 +28,17 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
 
 ## **What each report contains (at-a-glance)**
 
-- **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE, PRE/WEEK 1-4/POST, and Total Usage. ACTUAL INVENTORY follows Task 10 stock policy.
-- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels), and report title period text shows exact selected dates (example: `Jan 1, 2026 - Jan 5, 2026`). Includes supplier in base columns and supports category filtering in UI.
+- **Monthly Usage Report:** Items grouped by category with weekly breakdown for a selected month. Includes columns: ITEMS, CATEGORIES, ACTUAL INVENTORY, SIZE, BRAND, PO NUMBER, OTHER SPECIFICATIONS, GRADE 7-10, TOTAL GRADE USAGE, PRE/WEEK 1-4/POST, and Total Usage. ACTUAL INVENTORY follows Task 10 stock policy.
+- **Date Range Usage Report:** Period-by-period breakdown of quantity moved/used per item (columns represent time-period buckets determined by granularity). Headers and period labels are formatted for readability (title-case and human-friendly period labels), and report title period text shows exact selected dates (example: `Jan 1, 2026 - Jan 5, 2026`). Includes supplier and PO Number in base columns and supports category filtering in UI.
 - **Stock Levels Report:** Current stock per item (includes total and available quantities where appropriate). Useful for stock-taking and audits:
   - Consumables: `Original - Consumption - Disposal + Return`
   - Non-consumables: `Original - Disposal` (borrow/request affects availability, not baseline stock)
-  - Includes supplier names in exported rows.
+  - Includes supplier names and PO Number values in exported rows.
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).
 - **Calibration Due Report:** Items in calibration-enabled categories (default: Equipment) with calibration due within the selected window.
-- **Update History Report:** Complete history of all edits to inventory items within the date range, including who edited (editor name), when, reason, and field-level old/new values when available.
+- **Update History Report:** Complete history of all edits to inventory items within the date range, including item PO Number, who edited (editor name), when, reason, and field-level old/new values when available.
 - **Disposal History Report:** Profile of disposed/deleted items with disposal date, reason, who disposed them, and category grouping.
 - **Usage by Grade Level:** Item-level usage breakdown with Grade 7/8/9/10 tally columns plus TOTAL QUANTITY and inventory descriptors (size, brand, specs). Supports date range, category, grade, section, and individual-request filtering.
 - **Defective Items Report:** Items reported as defective or damaged during requisition returns, including quantity, notes, and who reported.

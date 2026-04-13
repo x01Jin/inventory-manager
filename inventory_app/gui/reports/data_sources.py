@@ -62,6 +62,7 @@ def get_dynamic_report_data(
                     row.get("BRAND"),
                     row.get("OTHER SPECIFICATIONS"),
                     row.get("SUPPLIER"),
+                    row.get("PO NUMBER"),
                 )
                 if item_key not in pivoted:
                     base = {
@@ -72,6 +73,7 @@ def get_dynamic_report_data(
                         "BRAND": item_key[4],
                         "OTHER SPECIFICATIONS": item_key[5],
                         "SUPPLIER": item_key[6],
+                        "PO NUMBER": item_key[7],
                     }
                     for k in period_keys:
                         base[k] = 0
@@ -122,6 +124,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                 i.size AS "Size",
                 i.brand AS "Brand",
                 COALESCE(s.name, 'N/A') AS "Supplier",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 COALESCE(stock.original_stock, 0) AS "Original Stock",
                 CASE
                     WHEN i.is_consumable = 1 THEN
@@ -168,7 +171,7 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, s.name, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, s.name, i.po_number, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
 
         # Filter out items with 0 current stock (depleted/disposed items)
         query += ' HAVING "Current Stock" > 0'
@@ -219,6 +222,7 @@ def get_trends_data(
                 "BRAND",
                 "OTHER SPECIFICATIONS",
                 "SUPPLIER",
+                "PO NUMBER",
                 "TOTAL QUANTITY",
             }
         ]
@@ -271,6 +275,7 @@ def get_expiration_data(
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 i.expiration_date AS "Expiration Date",
                 COALESCE(stock.total_stock, 0) AS "Stock Quantity",
                 i.other_specifications AS "Specifications"
@@ -312,7 +317,7 @@ def get_expiration_data(
             query += " AND c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.expiration_date, i.other_specifications, stock.total_stock ORDER BY i.expiration_date"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.po_number, i.expiration_date, i.other_specifications, stock.total_stock ORDER BY i.expiration_date"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -396,6 +401,7 @@ def get_acquisition_history_data(
                 ib.quantity_received AS "Quantity Received",
                 'B' || ib.batch_number AS "Batch",
                 s.name AS "Supplier",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 i.other_specifications AS "Specifications"
             FROM Item_Batches ib
             JOIN Items i ON i.id = ib.item_id
@@ -438,6 +444,7 @@ def get_calibration_due_data(
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 i.calibration_date AS "Calibration Date",
                 i.other_specifications AS "Specifications"
             FROM Items i
@@ -510,6 +517,7 @@ def get_update_history_data(
             SELECT
                 i.name AS "Item Name",
                 c.name AS "Category",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 uh.editor_name AS "Editor",
                 uh.edit_timestamp AS "Edit Date/Time",
                 uh.reason AS "Reason for Edit",
@@ -560,6 +568,7 @@ def get_disposal_history_data(
                 COALESCE(c.name, '[Category Unknown]') AS "Category",
                 COALESCE(i.size, '-') AS "Size",
                 COALESCE(i.brand, '-') AS "Brand",
+                COALESCE(i.po_number, '-') AS "PO Number",
                 dh.reason AS "Disposal Reason",
                 dh.disposal_timestamp AS "Disposal Date",
                 dh.editor_name AS "Disposed By"
@@ -636,6 +645,7 @@ def get_usage_by_grade_level_data(
                 COALESCE(i.size, '') AS "SIZE",
                 COALESCE(i.brand, '') AS "BRAND",
                 COALESCE(i.other_specifications, '') AS "OTHER SPECIFICATIONS",
+                COALESCE(i.po_number, '') AS "PO NUMBER",
                 """
         query += ",\n                ".join(grade_sum_columns)
         query += """,
@@ -761,6 +771,7 @@ def get_item_usage_details(item_name: str) -> List[Dict]:
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 req.name AS "Requested By",
                 req.grade_level AS "Grade Level",
                 req.section AS "Section",
@@ -811,7 +822,8 @@ def get_item_batch_summary(item_name: str = "") -> List[Dict]:
                 ) AS "Batch History",
                 COUNT(ib.id) AS "Total Batches",
                 COALESCE(SUM(ib.quantity_received), 0) AS "Total Received",
-                s.name AS "Supplier"
+                s.name AS "Supplier",
+                COALESCE(i.po_number, 'N/A') AS "PO Number"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Item_Batches ib ON ib.item_id = i.id
@@ -823,7 +835,7 @@ def get_item_batch_summary(item_name: str = "") -> List[Dict]:
             query += " WHERE i.name LIKE ?"
             params.append(f"%{item_name}%")
 
-        query += " GROUP BY i.id, i.name, c.name, s.name ORDER BY i.name"
+        query += " GROUP BY i.id, i.name, c.name, s.name, i.po_number ORDER BY i.name"
 
         return db.execute_query(query, tuple(params)) or []
 
@@ -854,6 +866,7 @@ def get_defective_items_data(
                 c.name AS "Category",
                 i.size AS "Size",
                 i.brand AS "Brand",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
                 di.quantity AS "Defective Quantity",
                 di.notes AS "Notes",
                 COALESCE(di.editor_name, di.reported_by) AS "Reported By",

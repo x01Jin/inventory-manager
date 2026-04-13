@@ -10,7 +10,8 @@ performance.
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QShowEvent
+from PyQt6.QtGui import QShowEvent, QTextDocument
+from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -20,10 +21,10 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QMessageBox,
     QInputDialog,
+    QDialog,
     QSplitter,
     QSizePolicy,
     QProgressBar,
-    QFileDialog,
 )
 
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -36,7 +37,7 @@ from inventory_app.gui.requisitions.requisition_management import (
     EditRequisitionDialog,
     ItemReturnDialog,
 )
-from inventory_app.gui.utils.worker import Worker, run_in_background
+from inventory_app.gui.utils.worker import Worker
 from inventory_app.gui.utils.parallel_loader import (
     ParallelDataLoader,
     LoadTask,
@@ -619,10 +620,10 @@ class RequisitionsPage(QWidget):
 
     def print_requisition(self):
         """
-        Print or export the currently selected requisition.
+        Print the currently selected requisition using the system print dialog.
 
         Per beta test requirement B.2: In REQUISITIONS, have an option to print.
-        Exports requisition details to a printable PDF or HTML file.
+        Uses the generated requisition HTML as the print layout source.
         """
         requisition_id = self.table.get_selected_requisition_id()
         if not requisition_id:
@@ -637,59 +638,38 @@ class RequisitionsPage(QWidget):
                 QMessageBox.warning(self, "Error", "Could not load requisition data.")
                 return
 
-            # Ask user where to save the file
-            file_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Save Requisition Report",
-                f"requisition_{requisition_id}.html",
-                "HTML Files (*.html);;All Files (*.*)",
-            )
-
-            if not file_path:
-                return  # User cancelled
-
-            self._set_loading_state(True, f"Exporting requisition {requisition_id}...")
-            run_in_background(
-                self._build_and_save_requisition_html,
-                requisition_summary,
-                file_path,
-                on_result=self._on_requisition_export_complete,
-                on_error=self._on_requisition_export_error,
-                on_finished=lambda: self._set_loading_state(False),
-            )
+            html_content = self._generate_requisition_html(requisition_summary)
+            if self._print_html_content(html_content, parent=self):
+                QMessageBox.information(
+                    self,
+                    "Print Sent",
+                    "The requisition slip was sent to the selected printer.",
+                )
+                logger.info(f"Requisition {requisition_id} sent to printer")
+            else:
+                logger.info(f"Printing cancelled for requisition {requisition_id}")
 
         except Exception as e:
             logger.error(f"Failed to print requisition {requisition_id}: {e}")
             QMessageBox.critical(
-                self, "Error", f"Failed to export requisition: {str(e)}"
+                self, "Error", f"Failed to print requisition: {str(e)}"
             )
 
     @staticmethod
-    def _build_and_save_requisition_html(
-        req_summary, file_path: str
-    ) -> tuple[int | None, str]:
-        html_content = RequisitionsPage._generate_requisition_html(req_summary)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        requisition_id = getattr(getattr(req_summary, "requisition", None), "id", None)
-        return requisition_id, file_path
+    def _print_html_content(
+        html_content: str, parent: Optional[QWidget] = None
+    ) -> bool:
+        """Open a system print dialog and print requisition HTML when accepted."""
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, parent)
+        dialog.setWindowTitle("Print Requisition Slip")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
 
-    def _on_requisition_export_complete(self, result: tuple[int | None, str]) -> None:
-        requisition_id, file_path = result
-        QMessageBox.information(
-            self,
-            "Success",
-            f"Requisition report saved successfully!\n\n"
-            f"File: {file_path}\n\n"
-            "You can open this file in a browser and use Print (Ctrl+P) to print it.",
-        )
-        logger.info(f"Requisition {requisition_id} exported to {file_path}")
-
-    def _on_requisition_export_error(self, error: tuple) -> None:
-        message = "Failed to export requisition"
-        if len(error) >= 2:
-            message = str(error[1])
-        QMessageBox.critical(self, "Error", f"Failed to export requisition: {message}")
+        document = QTextDocument()
+        document.setHtml(html_content)
+        document.print(printer)
+        return True
 
     def _set_loading_state(self, is_loading: bool, text: str = "Loading...") -> None:
         self.refresh_button.setEnabled(not is_loading)
@@ -1032,47 +1012,6 @@ class RequisitionsPage(QWidget):
     
     <div class="section">
         <h2>Requested Items ({req_summary.total_items})</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 50px;">#</th>
-                    <th>Item Name</th>
-                    <th style="width: 100px;">Quantity</th>
-                </tr>
-            </thead>
-            <tbody>
-                {items_rows}
-            </tbody>
-        </table>
-    </div>
-    </div>
-    
-    <div class="section">
-        <h2>⏰ Timeline</h2>
-        <div class="info-grid">
-            <span class="info-label">Expected Request:</span>
-            <span>{expected_request_str}</span>
-            <span class="info-label">Expected Return:</span>
-            <span>{expected_return_str}</span>
-        </div>
-    </div>
-    
-    <div class="section">
-        <h2>📝 Activity Details</h2>
-        <div class="info-grid">
-            <span class="info-label">Activity:</span>
-            <span>{req.lab_activity_name}</span>
-            <span class="info-label">Activity Date:</span>
-            <span>{activity_date_str}</span>
-            <span class="info-label">Students:</span>
-            <span>{req.num_students or "N/A"}</span>
-            <span class="info-label">Groups:</span>
-            <span>{req.num_groups or "N/A"}</span>
-        </div>
-    </div>
-    
-    <div class="section">
-        <h2>📦 Requested Items ({req_summary.total_items})</h2>
         <table>
             <thead>
                 <tr>

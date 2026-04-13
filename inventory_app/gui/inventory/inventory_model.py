@@ -97,7 +97,7 @@ class InventoryModel:
         return self.filtered_items
 
     def filter_by_search(self, search_term: str) -> None:
-        """Filter items by search term (name, category, supplier)."""
+        """Filter items by search term (name, category, supplier, PO number)."""
         self.search_term = search_term.strip()
         self._apply_filters()
 
@@ -214,6 +214,7 @@ class InventoryModel:
                         item.supplier_name
                         and search_lower in item.supplier_name.lower()
                     )
+                    or (item.po_number and search_lower in item.po_number.lower())
                 )
             ]
 

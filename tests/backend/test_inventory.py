@@ -101,6 +101,57 @@ def test_item_likely_duplicate_lookup_is_category_scoped(temp_db):
     assert excluded_matches == []
 
 
+def test_inventory_model_search_includes_po_number(temp_db):
+    """Inventory search should match PO Number text in addition to other fields."""
+    model = InventoryModel()
+    model.set_items(
+        [
+            ItemRow(
+                id=1,
+                name="Acetic Acid",
+                category_name="Chemicals-Liquid",
+                item_type="Consumable",
+                size="500 mL",
+                brand="LabBrand",
+                supplier_name="Supplier A",
+                other_specifications=None,
+                po_number="PO-AAA-101",
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=True,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                total_stock=100,
+                available_stock=100,
+            ),
+            ItemRow(
+                id=2,
+                name="Beaker",
+                category_name="Apparatus",
+                item_type="Non-consumable",
+                size="250 mL",
+                brand="Pyrex",
+                supplier_name="Supplier B",
+                other_specifications=None,
+                po_number="PO-BBB-202",
+                expiration_date=None,
+                calibration_date=None,
+                is_consumable=False,
+                acquisition_date=date(2025, 1, 1),
+                last_modified=None,
+                total_stock=20,
+                available_stock=18,
+            ),
+        ]
+    )
+
+    model.filter_by_search("aaa-101")
+    filtered = model.get_filtered_items()
+
+    assert len(filtered) == 1
+    assert filtered[0].id == 1
+
+
 def test_stock_movement_logic(temp_db):
     """Verify stock movement types and service parameterization."""
     from inventory_app.services.stock_movement_service import StockMovementService

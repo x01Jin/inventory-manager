@@ -7,6 +7,7 @@ This document describes the Excel import feature for adding inventory items in b
 - File: Excel (.xlsx)
 - Minimum required columns: **name**, **stocks**, **item type** (accepts many human variants; header matching is case- and space-insensitive)
 - Optional columns: **category**, **size**, **brand**, **supplier**, **other specifications**, **po number**, **expiration date**, **calibration date**, **acquisition date**
+- Imported **po number** values are shown in the Inventory table and included in report exports.
 - Pre-import review: consumable rows with decimal `stocks` and no unit (example: `1.5`) are listed so you can choose a unit (`ml`, `L`, `mg`, `g`, `kg`) or skip each row.
 
 ---

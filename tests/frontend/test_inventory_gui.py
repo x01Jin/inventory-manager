@@ -79,6 +79,43 @@ def test_inventory_page_load(qtbot, mock_inventory_data):
     assert name_item.text() == mock_inventory_data[0]["name"]
 
 
+def test_inventory_table_displays_po_number_column(qtbot):
+    """Inventory table should show PO Number as its own visible column."""
+    table = InventoryTable()
+    qtbot.addWidget(table)
+
+    assert "PO Number" in table.COLUMNS
+
+    table.populate_table(
+        [
+            {
+                "id": 1,
+                "name": "PO Tracked Item",
+                "category_name": "Equipment",
+                "size": "N/A",
+                "brand": "Brand A",
+                "supplier_name": "Supplier A",
+                "po_number": "PO-1001",
+                "other_specifications": "N/A",
+                "expiration_date": None,
+                "calibration_date": None,
+                "acquisition_date": None,
+                "last_modified": None,
+                "has_sds": 0,
+                "is_consumable": False,
+                "total_stock": 10,
+                "available_stock": 10,
+            }
+        ],
+        statuses={},
+        skip_styling=True,
+    )
+
+    po_item = table.item(0, 6)
+    assert po_item is not None
+    assert po_item.text() == "PO-1001"
+
+
 def test_inventory_search_responsiveness(qtbot, mock_inventory_data):
     """Verify that searching/filtering responds within reasonable time."""
     page = InventoryPage()

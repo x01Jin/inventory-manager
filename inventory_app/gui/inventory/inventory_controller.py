@@ -200,7 +200,7 @@ class InventoryController:
             raise
 
     def search_items(self, search_term: str) -> List[Dict[str, Any]]:
-        """Search items by name, category, or supplier."""
+        """Search items by name, category, supplier, or PO number."""
         try:
             if not search_term:
                 return []
@@ -267,7 +267,7 @@ class InventoryController:
                 + self._get_requested_calculations()
                 + """
             ) requested ON i.id = requested.item_id
-            WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ?
+            WHERE i.name LIKE ? OR c.name LIKE ? OR s.name LIKE ? OR i.po_number LIKE ?
             ORDER BY c.name, i.name
             """
             )
@@ -281,6 +281,7 @@ class InventoryController:
                 MovementType.RETURN.value,
                 MovementType.RESERVATION.value,
                 MovementType.REQUEST.value,
+                search_pattern,
                 search_pattern,
                 search_pattern,
                 search_pattern,

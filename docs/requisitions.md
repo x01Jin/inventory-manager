@@ -69,16 +69,16 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 
 ## Print Functionality
 
-- Requisitions can be exported to printable HTML format
-- Click the "Print" button when a requisition is selected
-- HTML report includes:
+- Requisitions can be printed directly using the system print dialog.
+- Click the "Print" button when a requisition is selected.
+- The print layout includes:
   - Requisition ID and status
   - Requester information (name, type, and type-specific details)
   - Timeline (expected request/return dates)
   - Activity details
   - Complete items list with quantities
   - Return details (for processed requisitions)
-- Open the HTML file in a browser and use Ctrl+P to print
+- After confirming the printer in the dialog, the slip is sent directly to the printer queue.
 
 ## Validation & Audit
 

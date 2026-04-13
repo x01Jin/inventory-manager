@@ -223,6 +223,7 @@ def get_monthly_usage_data(
                 END AS actual_inventory,
                 i.size,
                 i.brand,
+                COALESCE(i.po_number, '') AS po_number,
                 i.other_specifications
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
@@ -250,7 +251,7 @@ def get_monthly_usage_data(
             query += " WHERE c.name = ?"
             params.append(category_filter)
 
-        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty ORDER BY c.name, i.name"
+        query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, i.po_number, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty ORDER BY c.name, i.name"
 
         base_items = db.execute_query(query, tuple(params)) or []
 
@@ -317,6 +318,7 @@ def get_monthly_usage_data(
                 "ACTUAL INVENTORY": item["actual_inventory"] or 0,
                 "SIZE": item["size"] or "",
                 "BRAND": item["brand"] or "",
+                "PO NUMBER": item["po_number"] or "",
                 "OTHER SPECIFICATIONS": item["other_specifications"] or "",
             }
 
@@ -445,6 +447,7 @@ def create_monthly_usage_excel(
             "ACTUAL INVENTORY",
             "SIZE",
             "BRAND",
+            "PO NUMBER",
             "OTHER SPECIFICATIONS",
             "GRADE 7",
             "GRADE 8",
@@ -562,12 +565,13 @@ def create_monthly_usage_excel(
             3: 18,  # ACTUAL INVENTORY
             4: 12,  # SIZE
             5: 15,  # BRAND
-            6: 20,  # OTHER SPECIFICATIONS
-            7: 10,  # GRADE 7
-            8: 10,  # GRADE 8
-            9: 10,  # GRADE 9
-            10: 10,  # GRADE 10
-            11: 16,  # TOTAL GRADE USAGE
+            6: 14,  # PO NUMBER
+            7: 20,  # OTHER SPECIFICATIONS
+            8: 10,  # GRADE 7
+            9: 10,  # GRADE 8
+            10: 10,  # GRADE 9
+            11: 10,  # GRADE 10
+            12: 16,  # TOTAL GRADE USAGE
         }
         for col, width in col_widths.items():
             ws.column_dimensions[get_column_letter(col)].width = width

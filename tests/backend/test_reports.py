@@ -11,6 +11,7 @@ from inventory_app.gui.reports.data_sources import (
     get_defective_items_data,
     get_stock_levels_data,
     get_audit_log_data,
+    get_update_history_data,
     get_usage_by_grade_level_data,
     get_trends_data,
     get_dynamic_report_data,
@@ -225,6 +226,13 @@ def test_update_history_report_integrity(temp_db):
     matching = [row for row in history if row.get("field_name") == "name"]
     assert matching[0]["old_value"] == "HistoryItem"
     assert matching[0]["new_value"] == "UpdatedName"
+
+    report_rows = get_update_history_data(date(2020, 1, 1), date(2100, 1, 1))
+    target = next(
+        (row for row in report_rows if row.get("Item Name") == "UpdatedName"), None
+    )
+    assert target is not None
+    assert target["PO Number"] == "N/A"
 
 
 def test_audit_log_data_source(temp_db):
@@ -530,11 +538,12 @@ def test_monthly_usage_report_includes_grade_tally_columns(temp_db, tmp_path):
     ws = wb.active
     assert ws is not None
 
-    assert ws.cell(row=4, column=7).value == "GRADE 7"
-    assert ws.cell(row=4, column=8).value == "GRADE 8"
-    assert ws.cell(row=4, column=9).value == "GRADE 9"
-    assert ws.cell(row=4, column=10).value == "GRADE 10"
-    assert ws.cell(row=4, column=11).value == "TOTAL GRADE USAGE"
+    assert ws.cell(row=4, column=6).value == "PO NUMBER"
+    assert ws.cell(row=4, column=8).value == "GRADE 7"
+    assert ws.cell(row=4, column=9).value == "GRADE 8"
+    assert ws.cell(row=4, column=10).value == "GRADE 9"
+    assert ws.cell(row=4, column=11).value == "GRADE 10"
+    assert ws.cell(row=4, column=12).value == "TOTAL GRADE USAGE"
 
 
 def test_trends_data_respects_category_filter(temp_db):
@@ -677,6 +686,46 @@ def test_usage_report_supplier_filter_targets_item_supplier(temp_db):
     assert rows[0]["SUPPLIER"] == "Supplier A"
 
 
+def test_dynamic_report_data_includes_po_number(temp_db):
+    """Dynamic usage report rows should include PO NUMBER when present on the item."""
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("PO Requester",),
+        return_last_id=True,
+    )[1]
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, po_number) VALUES (?, ?, ?)",
+        ("PO Usage Item", 1, "PO-DYN-900"),
+        return_last_id=True,
+    )[1]
+    requisition_id = db.execute_update(
+        "INSERT INTO Requisitions (requester_id, status, lab_activity_date, lab_activity_name, expected_request, expected_return) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            requester_id,
+            "requested",
+            "2025-02-02",
+            "PO Usage Activity",
+            "2025-02-02 09:00:00",
+            "2025-02-02 12:00:00",
+        ),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Requisition_Items (requisition_id, item_id, quantity_requested) VALUES (?, ?, ?)",
+        (requisition_id, item_id, 2),
+    )
+
+    rows = get_dynamic_report_data(
+        start_date=date(2025, 2, 2),
+        end_date=date(2025, 2, 2),
+        granularity="daily",
+    )
+    row = next((entry for entry in rows if entry.get("ITEMS") == "PO Usage Item"), None)
+
+    assert row is not None
+    assert row["PO NUMBER"] == "PO-DYN-900"
+
+
 def test_stock_levels_data_includes_supplier_column(temp_db):
     """Stock levels data should include supplier name for Task 14 output completeness."""
     supplier_id = db.execute_update(
@@ -685,8 +734,8 @@ def test_stock_levels_data_includes_supplier_column(temp_db):
         return_last_id=True,
     )[1]
     item_id = db.execute_update(
-        "INSERT INTO Items (name, category_id, supplier_id, is_consumable) VALUES (?, ?, ?, ?)",
-        ("Stock Supplier Item", 1, supplier_id, 1),
+        "INSERT INTO Items (name, category_id, supplier_id, po_number, is_consumable) VALUES (?, ?, ?, ?, ?)",
+        ("Stock Supplier Item", 1, supplier_id, "PO-STOCK-123", 1),
         return_last_id=True,
     )[1]
     batch_id = db.execute_update(
@@ -705,6 +754,7 @@ def test_stock_levels_data_includes_supplier_column(temp_db):
 
     assert row is not None
     assert row["Supplier"] == "Stock Supplier"
+    assert row["PO Number"] == "PO-STOCK-123"
 
 
 def test_report_worker_passes_trends_category_filter(monkeypatch):

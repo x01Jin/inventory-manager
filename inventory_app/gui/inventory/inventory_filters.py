@@ -59,7 +59,9 @@ class InventoryFilters(QWidget):
         # Search input
         search_label = QLabel("🔍 Search:")
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search by name, category, or supplier...")
+        self.search_input.setPlaceholderText(
+            "Search by name, category, supplier, or PO number..."
+        )
         self.search_input.setMinimumWidth(260)
         self.search_input.setSizePolicy(
             QSizePolicy.Policy.Expanding,

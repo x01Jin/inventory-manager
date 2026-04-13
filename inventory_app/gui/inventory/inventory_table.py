@@ -102,6 +102,7 @@ class InventoryTable(QTableWidget):
         "Brand",
         "Other Specifications",
         "Supplier",
+        "PO Number",
         "Calibration Date",
         "Expiry/Disposal Date",
         "Item Type",
@@ -116,11 +117,12 @@ class InventoryTable(QTableWidget):
         3: (90, 180),
         4: (120, 260),
         5: (110, 240),
-        6: (110, 180),
-        7: (120, 200),
-        8: (110, 180),
+        6: (110, 220),
+        7: (110, 180),
+        8: (120, 200),
         9: (110, 180),
-        10: (130, 220),
+        10: (110, 180),
+        11: (130, 220),
     }
 
     def __init__(self, parent=None):
@@ -203,7 +205,7 @@ class InventoryTable(QTableWidget):
             self.sortItems(5, Qt.SortOrder.AscendingOrder)
             return
 
-        if section in (6, 7, 9, 10) and current != section:
+        if section in (7, 8, 10, 11) and current != section:
             self.sortItems(section, Qt.SortOrder.AscendingOrder)
             return
 
@@ -327,6 +329,7 @@ class InventoryTable(QTableWidget):
             brand = item.get("brand", "")
             other_specifications = item.get("other_specifications", "")
             supplier_name = item.get("supplier_name", "")
+            po_number = item.get("po_number", "")
             expiration_date = self.format_date(item.get("expiration_date"))
             calibration_date = self.format_date(item.get("calibration_date"))
             acquisition_date = self.format_date(item.get("acquisition_date"))
@@ -401,6 +404,10 @@ class InventoryTable(QTableWidget):
             supplier_item.setData(SORT_ROLE, (supplier_name or "").lower())
             self.setItem(row, 5, supplier_item)
 
+            po_item = self.SortableTableItem(po_number or "N/A")
+            po_item.setData(SORT_ROLE, (po_number or "").lower())
+            self.setItem(row, 6, po_item)
+
             cal_date_item = self.SortableTableItem(calibration_date or "N/A")
             try:
                 from datetime import datetime
@@ -413,7 +420,7 @@ class InventoryTable(QTableWidget):
                     cal_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 cal_date_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 6, cal_date_item)
+            self.setItem(row, 7, cal_date_item)
 
             exp_date_item = self.SortableTableItem(expiration_date or "N/A")
             try:
@@ -427,9 +434,9 @@ class InventoryTable(QTableWidget):
                     exp_date_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 exp_date_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 7, exp_date_item)
+            self.setItem(row, 8, exp_date_item)
 
-            self.setItem(row, 8, QTableWidgetItem(item_type))
+            self.setItem(row, 9, QTableWidgetItem(item_type))
             acquisition_display = acquisition_date
             if batch_count > 1 and acquisition_date and acquisition_date != "N/A":
                 acquisition_display = f"{acquisition_date} (+{batch_count - 1} more)"
@@ -448,7 +455,7 @@ class InventoryTable(QTableWidget):
                 acq_item.setData(SORT_ROLE, float("inf"))
             if batch_summary:
                 acq_item.setToolTip(batch_summary)
-            self.setItem(row, 9, acq_item)
+            self.setItem(row, 10, acq_item)
 
             lm_item = self.SortableTableItem(last_modified)
             try:
@@ -462,7 +469,7 @@ class InventoryTable(QTableWidget):
                     lm_item.setData(SORT_ROLE, float("inf"))
             except Exception:
                 lm_item.setData(SORT_ROLE, float("inf"))
-            self.setItem(row, 10, lm_item)
+            self.setItem(row, 11, lm_item)
 
             if item_id is not None:
                 name_item.setData(Qt.ItemDataRole.UserRole, item_id)

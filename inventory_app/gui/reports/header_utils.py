@@ -26,6 +26,8 @@ REPORT_HEADER_MAP = {
     "Acquisition Date": "Acquisition Date",
     "Calibration Date": "Calibration Date",
     "Supplier": "Supplier",
+    "PO NUMBER": "PO Number",
+    "PO Number": "PO Number",
 }
 
 

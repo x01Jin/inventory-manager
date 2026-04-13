@@ -4,6 +4,7 @@
 
 - Reports support Usage, Inventory, Trends, and Audit analytics. Exports are generated as Excel files using `openpyxl`.
 - **Usage counting is based on lab_activity_date** (when materials are actually used in lab activities), NOT the borrow/request date.
+- All report outputs that list individual items include each item's **PO Number** column for additional identification.
 
 ## Usage Reports
 
@@ -43,6 +44,7 @@ Generates a detailed monthly report in the format specified in beta test require
   - **SIZE**: Item size specification
   - **BRAND**: Item brand
   - **OTHER SPECIFICATIONS**: Additional specifications (wood, metal, glass, etc.)
+  - **PO NUMBER**: Purchase order reference attached to the item
   - **GRADE 7 / GRADE 8 / GRADE 9 / GRADE 10**: Per-item grade usage tally within selected month
   - **TOTAL GRADE USAGE**: Sum of Grade 7-10 usage for the item
   - **PRE/WEEK 1-4/POST**: Usage count for each period based on lab_activity_date
@@ -74,7 +76,7 @@ Generates a time-series usage report for any custom date range with automatic gr
   - Period keys include "excess" ranges for partial weeks/months
   - Parameterized SQL queries to prevent injection
   - Filterable by category
-  - Includes Supplier as a base column in exported rows
+  - Includes Supplier and PO Number as base columns in exported rows
   - Optional consumable item inclusion
   - Preset date ranges for quick selection (Last 7/30/90 Days, This/Last Month, This/Last Year)
 
@@ -163,10 +165,10 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
   - Stock Levels Report:
     - Consumables: `Original - Consumption - Disposal + Return`
     - Non-consumables: `Original - Disposal` (active borrow/request affects availability, not baseline stock)
-    - Includes Supplier column in addition to item/category/size/brand/specifications
+    - Includes Supplier and PO Number columns in addition to item/category/size/brand/specifications
   - Expiration Report — items with `expiration_date` within the given range. Addresses beta test requirement #10 for expiration alerts.
   - Calibration Due Report — items in calibration-enabled categories with `calibration_date` within the range (default policy: Equipment). Addresses beta test requirement #11 for calibration alerts.
-  - Update History Report — history of edits to inventory items with editor name, timestamp, and reason. Addresses beta test requirement #7.
+  - Update History Report — history of edits to inventory items with editor name, timestamp, reason, and item PO Number. Addresses beta test requirement #7.
   - Disposal History Report — disposed items with disposal date, reason, and who disposed them. Addresses beta test requirement #16.
   - Defective Items Report — defective/broken items returned with notes, reporter, and date. Addresses beta test requirement B.3.
   - Audit Log Report — centralized audit stream across item/requisition updates, disposals, defective recordings, and activity events.
