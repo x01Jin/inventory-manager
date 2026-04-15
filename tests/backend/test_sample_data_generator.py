@@ -166,3 +166,73 @@ def test_small_generation_hits_density_and_date_invariants(temp_db):
     type_rows = db.execute_query("SELECT DISTINCT activity_type FROM Activity_Log")
     present_types = {row["activity_type"] for row in type_rows}
     assert required_activity_types.issubset(present_types)
+
+
+def test_generation_creates_defective_and_confirmation_flows(temp_db):
+    config = GenerationConfig(
+        seed=31415,
+        target_requisitions=40,
+        target_requisition_items=420,
+        target_stock_movements=1100,
+        reset_before_generate=True,
+        min_items_per_requisition=8,
+        max_items_per_requisition=12,
+        lost_non_consumable_rate=0.10,
+        defective_non_consumable_rate=0.35,
+        defective_confirmation_disposed_rate=0.45,
+        defective_confirmation_not_defective_rate=0.45,
+        defective_confirmation_pending_rate=0.10,
+    )
+    sim = InventorySimulation(
+        start_date=date(2026, 1, 2),
+        end_date=date(2026, 4, 12),
+        config=config,
+    )
+
+    stats = sim.run()
+
+    defective_count = db.execute_query("SELECT COUNT(*) AS c FROM Defective_Items")[0][
+        "c"
+    ]
+    action_count = db.execute_query("SELECT COUNT(*) AS c FROM Defective_Item_Actions")[
+        0
+    ]["c"]
+
+    assert defective_count > 0
+    assert action_count > 0
+    assert stats["defective_items_created"] == defective_count
+    assert stats["defective_actions_created"] == action_count
+
+    overflow_rows = db.execute_query(
+        """
+        SELECT COUNT(*) AS c
+        FROM Defective_Items di
+        JOIN Requisition_Items ri
+          ON ri.requisition_id = di.requisition_id
+         AND ri.item_id = di.item_id
+        WHERE di.quantity > ri.quantity_requested
+        """
+    )
+    assert overflow_rows[0]["c"] == 0
+
+    invalid_actions = db.execute_query(
+        """
+        SELECT COUNT(*) AS c
+        FROM Defective_Item_Actions dia
+        LEFT JOIN Defective_Items di ON di.id = dia.defective_item_id
+        WHERE di.id IS NULL
+        """
+    )
+    assert invalid_actions[0]["c"] == 0
+
+    action_types = db.execute_query(
+        "SELECT DISTINCT action_type FROM Defective_Item_Actions"
+    )
+    action_type_set = {row["action_type"] for row in action_types}
+    assert {"DISPOSED", "NOT_DEFECTIVE"}.issubset(action_type_set)
+
+    activity_types = db.execute_query("SELECT DISTINCT activity_type FROM Activity_Log")
+    activity_type_set = {row["activity_type"] for row in activity_types}
+    assert "ITEM_MARKED_DEFECTIVE" in activity_type_set
+    assert "DEFECTIVE_DISPOSED" in activity_type_set
+    assert "DEFECTIVE_NOT_DEFECTIVE" in activity_type_set
