@@ -388,6 +388,61 @@ def test_audit_log_includes_defective_confirmation_activity(temp_db):
     assert rows[0]["Editor"] == "auditor"
 
 
+def test_audit_log_rows_never_emit_empty_cells(temp_db):
+    """Audit export rows should use non-empty placeholders for every column."""
+    activity_logger.log_activity(
+        "TEST_EMPTY_CELL_GUARD",
+        "",
+        entity_id=None,
+        entity_type="",
+        user_name="",
+        timestamp="2026-04-14 08:00:00",
+    )
+
+    rows = get_audit_log_data(
+        start_date=date(2026, 4, 14),
+        end_date=date(2026, 4, 14),
+        action_filter="TEST_EMPTY_CELL_GUARD",
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    for key in (
+        "Action",
+        "Editor",
+        "Summary",
+        "Timestamp",
+        "Entity Type",
+        "Entity ID",
+        "Entity Name",
+        "Change Details",
+    ):
+        assert str(row[key]).strip() != ""
+
+
+def test_audit_log_change_details_has_fallback_for_non_field_actions(temp_db):
+    """Audit rows without field deltas should still have a non-empty Change Details value."""
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id) VALUES (?, ?)",
+        ("Disposed Audit Item", 1),
+        return_last_id=True,
+    )[1]
+    db.execute_update(
+        "INSERT INTO Disposal_History (item_id, editor_name, reason, disposal_timestamp) VALUES (?, ?, ?, ?)",
+        (item_id, "Disposer", "", "2026-04-14 09:00:00"),
+    )
+
+    rows = get_audit_log_data(
+        start_date=date(2026, 4, 14),
+        end_date=date(2026, 4, 14),
+        action_filter="ITEM_DISPOSAL",
+        editor_filter="Disposer",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["Change Details"] == "No field-level change details recorded"
+
+
 def test_task10_stock_levels_data_policy(temp_db):
     """Task 10: stock report reflects consumable depletion and non-consumable disposal only."""
     consumable_id = db.execute_update(

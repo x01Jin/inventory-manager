@@ -1037,6 +1037,12 @@ def _normalize_audit_value(value: Optional[str]) -> str:
     return text
 
 
+def _non_empty_audit_value(value: Optional[str], fallback: str) -> str:
+    """Return fallback when an audit cell value is blank."""
+    text = _normalize_audit_value(value)
+    return text if text else fallback
+
+
 def _parse_audit_datetime(raw_timestamp: str) -> Optional[datetime]:
     """Parse common audit timestamp formats into datetime objects."""
     if not raw_timestamp:
@@ -1167,11 +1173,11 @@ def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
     formatted_rows: List[Dict] = []
 
     for row in rows:
-        action = (row.get("Action") or "").strip()
+        action = _non_empty_audit_value(row.get("Action"), "UNKNOWN_ACTION")
         entity_type = _normalize_audit_value(row.get("Entity Type"))
         entity_id = _normalize_audit_value(row.get("Entity ID"))
         entity_name = _normalize_audit_value(row.get("Entity Name"))
-        editor = _normalize_audit_value(row.get("Editor")) or "System"
+        editor = _non_empty_audit_value(row.get("Editor"), "System")
         timestamp_raw = _normalize_audit_value(row.get("Timestamp"))
         timestamp_display = _format_audit_timestamp(timestamp_raw)
         field_name = _humanize_field_name(row.get("Field"))
@@ -1183,10 +1189,10 @@ def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
             "Action": action,
             "Editor": editor,
             "Summary": "",
-            "Timestamp": timestamp_display,
-            "Entity Type": entity_type,
-            "Entity ID": entity_id,
-            "Entity Name": entity_name,
+            "Timestamp": _non_empty_audit_value(timestamp_display, "Unknown timestamp"),
+            "Entity Type": _non_empty_audit_value(entity_type, "N/A"),
+            "Entity ID": _non_empty_audit_value(entity_id, "N/A"),
+            "Entity Name": _non_empty_audit_value(entity_name, "N/A"),
             "Change Details": "",
             "_timestamp_raw": timestamp_raw,
         }
@@ -1242,6 +1248,9 @@ def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
             new_text = new_value or "(empty)"
             base_row["Change Details"] = f"{field_name}: {old_text} -> {new_text}"
 
+        if not _normalize_audit_value(base_row["Change Details"]):
+            base_row["Change Details"] = "No field-level change details recorded"
+
         formatted_rows.append(base_row)
 
     for grouped in grouped_updates.values():
@@ -1251,6 +1260,8 @@ def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
             f"{field}: {(old or '(empty)')} -> {(new or '(empty)')}"
             for field, old, new in changes
         )
+        if not _normalize_audit_value(grouped["Change Details"]):
+            grouped["Change Details"] = "No field-level change details recorded"
         formatted_rows.append(grouped)
 
     def _sort_epoch(row: Dict[str, str]) -> float:
@@ -1270,6 +1281,21 @@ def _format_unified_audit_rows(rows: List[Dict]) -> List[Dict]:
     )
 
     for row in formatted_rows:
+        row["Action"] = _non_empty_audit_value(row.get("Action"), "UNKNOWN_ACTION")
+        row["Editor"] = _non_empty_audit_value(row.get("Editor"), "System")
+        row["Summary"] = _non_empty_audit_value(
+            row.get("Summary"), "No summary available"
+        )
+        row["Timestamp"] = _non_empty_audit_value(
+            row.get("Timestamp"), "Unknown timestamp"
+        )
+        row["Entity Type"] = _non_empty_audit_value(row.get("Entity Type"), "N/A")
+        row["Entity ID"] = _non_empty_audit_value(row.get("Entity ID"), "N/A")
+        row["Entity Name"] = _non_empty_audit_value(row.get("Entity Name"), "N/A")
+        row["Change Details"] = _non_empty_audit_value(
+            row.get("Change Details"),
+            "No field-level change details recorded",
+        )
         row.pop("_timestamp_raw", None)
 
     return formatted_rows
