@@ -77,6 +77,7 @@ Categories are fixed by system configuration and determine default item type/dat
   - Add a new batch with date and quantity.
   - Edit date/quantity for an existing batch.
   - Remove a batch only when it has no stock movement history.
+- Batch sync writes audit rows per effective change: creates, removals, and field-level before/after values (`batch_number`, `date_received`, `quantity_received`, `disposal_date`).
 - Item-level `Items.acquisition_date` remains as a compatibility fallback and is synchronized to the earliest batch date.
 
 ## SDS Management

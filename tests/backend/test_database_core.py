@@ -86,7 +86,7 @@ def test_transaction_rollback_on_failure(temp_db, monkeypatch):
 def test_nested_transaction_behavior(temp_db):
     """Verify manual transaction control and rollback for complex flows."""
     requester = Requester(name="ReqUser")
-    assert requester.save() is True
+    assert requester.save(editor_name="tester") is True
 
     try:
         with db.transaction():

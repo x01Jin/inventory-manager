@@ -4,7 +4,9 @@ from pathlib import Path
 from openpyxl import load_workbook
 from inventory_app.database.connection import db
 from inventory_app.database.models import Item
+from inventory_app.database.models import Requester
 from inventory_app.gui.reports.report_generator import ReportGenerator, report_generator
+from inventory_app.services.requesters_activity import requesters_activity_manager
 from inventory_app.utils.activity_logger import activity_logger
 from inventory_app.gui.reports.query_builder import ReportQueryBuilder
 from inventory_app.gui.reports.data_sources import (
@@ -294,6 +296,55 @@ def test_audit_log_groups_field_level_item_updates(temp_db):
     assert "Updated Grouped Audit Item" in row["Summary"]
     assert "Brand: NA -> LabCorp" in row["Change Details"]
     assert "Supplier ID: (empty) -> 8" in row["Change Details"]
+
+
+def test_requester_activity_rows_are_entity_linked_with_editor(temp_db):
+    """Requester activity entries should carry requester entity_id and editor attribution."""
+    requester = Requester(
+        name="Entity Linked",
+        requester_type="teacher",
+        department="Science",
+    )
+    assert requester.save(editor_name="ReqQA") is True
+    assert isinstance(requester.id, int)
+
+    assert requesters_activity_manager.log_requester_added(
+        requester_name=requester.name,
+        requester_id=requester.id,
+        user_name="ReqQA",
+    )
+
+    requester.department = "Math"
+    assert requester.save(editor_name="ReqQA") is True
+    assert requesters_activity_manager.log_requester_updated(
+        requester_name=requester.name,
+        requester_id=requester.id,
+        update_reason="department: Science -> Math",
+        user_name="ReqQA",
+    )
+
+    assert requester.delete(editor_name="ReqQA") is True
+    assert requesters_activity_manager.log_requester_deleted(
+        requester_name=requester.name,
+        requester_id=requester.id,
+        user_name="ReqQA",
+    )
+
+    rows = db.execute_query(
+        """
+        SELECT activity_type, entity_id, user_name, description
+        FROM Activity_Log
+        WHERE entity_type = 'requester' AND entity_id = ?
+        ORDER BY id ASC
+        """,
+        (requester.id,),
+    )
+    assert len(rows) == 3
+    assert rows[0]["activity_type"] == "REQUESTER_ADDED"
+    assert rows[1]["activity_type"] == "REQUESTER_EDITED"
+    assert rows[2]["activity_type"] == "REQUESTER_DELETED"
+    assert all(row["user_name"] == "ReqQA" for row in rows)
+    assert "department: Science -> Math" in rows[1]["description"]
 
 
 def test_recent_activity_order_handles_mixed_timestamp_formats(temp_db):

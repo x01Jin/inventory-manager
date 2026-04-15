@@ -5,9 +5,15 @@ Provides tab-based form for requester management in laboratory requisitions.
 
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QTabWidget, QWidget,
-    QMessageBox, QFormLayout
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QTabWidget,
+    QWidget,
+    QMessageBox,
+    QFormLayout,
 )
 from PyQt6.QtCore import Qt
 
@@ -186,7 +192,9 @@ class RequesterEditor(QDialog):
 
         except Exception as e:
             logger.error(f"Failed to load requester data: {e}")
-            QMessageBox.warning(self, "Data Load Error", "Failed to load requester information.")
+            QMessageBox.warning(
+                self, "Data Load Error", "Failed to load requester information."
+            )
 
     def validate_input(self) -> tuple[bool, str]:
         """Validate user input.
@@ -225,17 +233,22 @@ class RequesterEditor(QDialog):
             req_type = self._get_current_type()
             name_field = self._get_current_name_field()
             name = name_field.text().strip()
+            editor_name = self.editor_input.text().strip()
 
             existing_check = self._find_existing_requester(name, req_type)
-            if existing_check and (not self.existing_requester or existing_check.id != self.existing_requester.id):
+            if existing_check and (
+                not self.existing_requester
+                or existing_check.id != self.existing_requester.id
+            ):
                 reply = QMessageBox.question(
-                    self, "Duplicate Requester",
+                    self,
+                    "Duplicate Requester",
                     f"A requester with the same name and type already exists.\n\n"
                     f"Name: {existing_check.name}\n"
                     f"Type: {existing_check.requester_type.capitalize()}\n\n"
                     "Do you want to continue creating this duplicate?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
+                    QMessageBox.StandardButton.No,
                 )
                 if reply == QMessageBox.StandardButton.No:
                     return
@@ -244,6 +257,14 @@ class RequesterEditor(QDialog):
                 requester = self.existing_requester
             else:
                 requester = Requester()
+
+            previous_values = {
+                "name": requester.name,
+                "requester_type": requester.requester_type,
+                "grade_level": requester.grade_level,
+                "section": requester.section,
+                "department": requester.department,
+            }
 
             requester.name = name
             requester.requester_type = req_type
@@ -261,34 +282,61 @@ class RequesterEditor(QDialog):
                 requester.section = None
                 requester.department = None
 
-            success = requester.save()
+            success = requester.save(editor_name=editor_name)
 
             if success:
                 action = "updated" if self.existing_requester else "created"
                 logger.info(f"Successfully {action} requester: {requester.name}")
 
-                editor_name = self.editor_input.text().strip()
                 if self.existing_requester:
+                    changed_fields = []
+                    current_values = {
+                        "name": requester.name,
+                        "requester_type": requester.requester_type,
+                        "grade_level": requester.grade_level,
+                        "section": requester.section,
+                        "department": requester.department,
+                    }
+                    for field_name, old_value in previous_values.items():
+                        new_value = current_values[field_name]
+                        if old_value != new_value:
+                            changed_fields.append(
+                                f"{field_name}: {old_value or 'empty'} -> {new_value or 'empty'}"
+                            )
+
                     requesters_activity_manager.log_requester_updated(
                         requester_name=name,
-                        user_name=editor_name
+                        requester_id=requester.id,
+                        update_reason=(
+                            "; ".join(changed_fields)
+                            if changed_fields
+                            else "no field value changes"
+                        ),
+                        user_name=editor_name,
                     )
                 else:
                     requesters_activity_manager.log_requester_added(
                         requester_name=name,
-                        user_name=editor_name
+                        requester_id=requester.id,
+                        user_name=editor_name,
                     )
 
-                QMessageBox.information(self, "Success", f"Requester {action} successfully!")
+                QMessageBox.information(
+                    self, "Success", f"Requester {action} successfully!"
+                )
                 self.accept()
             else:
-                QMessageBox.critical(self, "Error", "Failed to save requester. Please try again.")
+                QMessageBox.critical(
+                    self, "Error", "Failed to save requester. Please try again."
+                )
 
         except Exception as e:
             logger.error(f"Error saving requester: {e}")
             QMessageBox.critical(self, "Error", f"Failed to save requester: {str(e)}")
 
-    def _find_existing_requester(self, name: str, requester_type: str) -> Optional[Requester]:
+    def _find_existing_requester(
+        self, name: str, requester_type: str
+    ) -> Optional[Requester]:
         """Find existing requester with same name and type."""
         try:
             from inventory_app.database.connection import db
@@ -307,7 +355,9 @@ class RequesterEditor(QDialog):
         return None
 
     @staticmethod
-    def get_requester_data(parent=None, requester_id: Optional[int] = None) -> Optional[Requester]:
+    def get_requester_data(
+        parent=None, requester_id: Optional[int] = None
+    ) -> Optional[Requester]:
         """
         Static method to get requester data from dialog.
         Returns the requester object if saved, None if cancelled.

@@ -61,6 +61,35 @@ def test_requisition_save_and_retrieve(temp_db):
     assert any(row["field_name"] == "lab_activity_name" for row in history_rows)
 
 
+def test_requisition_create_requires_editor_and_logs_creator(temp_db):
+    """Create path should require editor and write creator attribution history."""
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)", ("Audit User",), return_last_id=True
+    )[1]
+    assert requester_id is not None
+
+    req = Requisition()
+    req.requester_id = requester_id
+    req.status = "requested"
+    req.lab_activity_name = "Attribution Test"
+
+    assert req.save("") is False
+    assert req.save("QAUser") is True
+
+    history_rows = db.execute_query(
+        """
+        SELECT editor_name, reason
+        FROM Requisition_History
+        WHERE requisition_id = ?
+        ORDER BY id ASC
+        """,
+        (req.id,),
+    )
+    assert history_rows
+    assert history_rows[0]["editor_name"] == "QAUser"
+    assert history_rows[0]["reason"] == "Requisition created"
+
+
 def test_requisition_html_generation(temp_db):
     """Verify HTML generation logic for printing requisitions."""
     from inventory_app.gui.requisitions.requisitions_page import RequisitionsPage
@@ -449,3 +478,49 @@ def test_defective_return_records_activity_event(temp_db):
     assert activity_rows[0]["entity_id"] == item_id
     assert activity_rows[0]["entity_type"] == "item"
     assert activity_rows[0]["user_name"] == "qa-user"
+
+
+def test_status_update_is_idempotent_and_audited_once(temp_db):
+    """Repeated same-status updates should not create duplicate history rows."""
+    from inventory_app.services.requisition_service import RequisitionService
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Status User",),
+        return_last_id=True,
+    )[1]
+    req_id = db.execute_update(
+        """
+        INSERT INTO Requisitions (
+            requester_id, expected_request, expected_return, status, lab_activity_name, lab_activity_date
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            requester_id,
+            "2025-01-01T09:00:00",
+            "2025-01-01T12:00:00",
+            "requested",
+            "Status Audit",
+            "2025-01-01",
+        ),
+        return_last_id=True,
+    )[1]
+    assert req_id is not None
+
+    svc = RequisitionService()
+    assert svc.update_status(req_id, "active", user_name="Auto", reason="first") is True
+    assert (
+        svc.update_status(req_id, "active", user_name="Auto", reason="repeat") is True
+    )
+
+    history_rows = db.execute_query(
+        """
+        SELECT editor_name, reason
+        FROM Requisition_History
+        WHERE requisition_id = ?
+        """,
+        (req_id,),
+    )
+    assert len(history_rows) == 1
+    assert history_rows[0]["editor_name"] == "Auto"
+    assert history_rows[0]["reason"] == "first"

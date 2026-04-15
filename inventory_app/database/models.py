@@ -838,7 +838,19 @@ class Item:
                 if batch.get("id") not in (None, "", 0)
             }
 
+            def _format_batch_snapshot(batch_row: Dict[str, Any]) -> str:
+                batch_number = batch_row.get("batch_number")
+                date_received = batch_row.get("date_received") or ""
+                quantity_received = batch_row.get("quantity_received")
+                disposal_date = batch_row.get("disposal_date") or "none"
+                return (
+                    f"B{batch_number}: date_received={date_received}, "
+                    f"quantity_received={quantity_received}, disposal_date={disposal_date}"
+                )
+
             with db.transaction():
+                history_rows: List[Tuple[Any, ...]] = []
+
                 # Validate quantity updates against committed movements.
                 for batch in normalized_batches:
                     batch_id = batch.get("id")
@@ -887,7 +899,54 @@ class Item:
                                 batch["disposal_date"],
                             ),
                         )
+                        history_rows.append(
+                            (
+                                item_id,
+                                editor_name,
+                                "Batch created during sync",
+                                "batch",
+                                None,
+                                _format_batch_snapshot(batch),
+                            )
+                        )
                     else:
+                        existing = existing_by_id.get(int(batch_id)) or {}
+                        changes = [
+                            (
+                                "batch_number",
+                                existing.get("batch_number"),
+                                batch["batch_number"],
+                            ),
+                            (
+                                "date_received",
+                                existing.get("date_received"),
+                                batch["date_received"],
+                            ),
+                            (
+                                "quantity_received",
+                                existing.get("quantity_received"),
+                                batch["quantity_received"],
+                            ),
+                            (
+                                "disposal_date",
+                                existing.get("disposal_date"),
+                                batch["disposal_date"],
+                            ),
+                        ]
+
+                        for field_name, old_value, new_value in changes:
+                            if old_value != new_value:
+                                history_rows.append(
+                                    (
+                                        item_id,
+                                        editor_name,
+                                        "Batch field updated during sync",
+                                        field_name,
+                                        _audit_text(old_value),
+                                        _audit_text(new_value),
+                                    )
+                                )
+
                         db.execute_update(
                             """
                             UPDATE Item_Batches
@@ -906,6 +965,16 @@ class Item:
 
                 # Remove eligible batches that were omitted from incoming set.
                 for row in removable:
+                    history_rows.append(
+                        (
+                            item_id,
+                            editor_name,
+                            "Batch removed during sync",
+                            "batch",
+                            _format_batch_snapshot(row),
+                            None,
+                        )
+                    )
                     db.execute_update(
                         "DELETE FROM Item_Batches WHERE id = ?", (row["id"],)
                     )
@@ -925,13 +994,14 @@ class Item:
                     (first_batch_date, datetime.now().isoformat(), item_id),
                 )
 
-                db.execute_update(
-                    """
-                    INSERT INTO Update_History (item_id, editor_name, reason)
-                    VALUES (?, ?, ?)
-                    """,
-                    (item_id, editor_name, "Batch records updated"),
-                )
+                if history_rows:
+                    db.execute_many(
+                        """
+                        INSERT INTO Update_History (item_id, editor_name, reason, field_name, old_value, new_value)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        history_rows,
+                    )
 
             return True, "Batch records saved."
         except Exception as e:
@@ -1359,9 +1429,13 @@ class Requester:
     department: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    def save(self) -> bool:
-        """Save or update the requester."""
+    def save(self, editor_name: str, reason: Optional[str] = None) -> bool:
+        """Save or update the requester with mandatory editor attribution."""
         try:
+            if not (editor_name or "").strip():
+                logger.error("Failed to save requester: editor_name is required")
+                return False
+
             if self.id:
                 query = """UPDATE Requesters SET name = ?, requester_type = ?,
                            grade_level = ?, section = ?, department = ? WHERE id = ?"""
@@ -1441,10 +1515,14 @@ class Requester:
             logger.error(f"Failed to get requester {requester_id}: {e}")
             return None
 
-    def delete(self) -> bool:
-        """Delete the requester."""
+    def delete(self, editor_name: str) -> bool:
+        """Delete the requester with mandatory editor attribution."""
         try:
             if not self.id:
+                return False
+
+            if not (editor_name or "").strip():
+                logger.error("Failed to delete requester: editor_name is required")
                 return False
 
             # Check if requester has any associated requisitions
@@ -1494,6 +1572,10 @@ class Requisition:
     def save(self, editor_name: str) -> bool:
         """Save or update the requisition with history tracking."""
         try:
+            if not (editor_name or "").strip():
+                logger.error("Failed to save requisition: editor_name is required")
+                return False
+
             if self.id:
                 existing_rows = db.execute_query(
                     "SELECT * FROM Requisitions WHERE id = ?",
@@ -1616,6 +1698,15 @@ class Requisition:
                     _, self.id = result
                 else:
                     logger.error("Failed to obtain last insert id for Requisition")
+
+                if self.id:
+                    db.execute_update(
+                        """
+                        INSERT INTO Requisition_History (requisition_id, editor_name, reason)
+                        VALUES (?, ?, ?)
+                        """,
+                        (self.id, editor_name, "Requisition created"),
+                    )
 
             return True
         except Exception as e:

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from inventory_app.database.connection import db
+from inventory_app.services.requisition_service import RequisitionService
 from inventory_app.utils.logger import logger
 
 
@@ -26,6 +27,7 @@ class StatusWatcher:
     def __init__(self):
         """Initialize the status watcher."""
         self.current_time = datetime.now()
+        self.requisition_service = RequisitionService()
 
     def update_status_for_requisition(self, requisition_id: int) -> str:
         """
@@ -50,8 +52,8 @@ class StatusWatcher:
             # Calculate new status
             new_status = self._calculate_status(dates)
 
-            # Update in database
-            self._update_status_in_db(requisition_id, new_status)
+            # Update in database only when status changes.
+            self._update_status_in_db(requisition_id, dates, new_status)
 
             logger.info(f"Updated requisition {requisition_id} status to: {new_status}")
             return new_status
@@ -131,7 +133,7 @@ class StatusWatcher:
         # Fallback to requested if dates are invalid
         return "requested"
 
-    def _update_status_in_db(self, requisition_id: int, new_status: str):
+    def _update_status_in_db(self, requisition_id: int, dates: dict, new_status: str):
         """
         Update the status in the database.
 
@@ -140,20 +142,20 @@ class StatusWatcher:
             new_status: New status to set
         """
         try:
-            # Make the update + history insert atomic
-            from inventory_app.database.connection import db as global_db
+            previous_status = (dates.get("current_status") or "").strip()
+            if previous_status == new_status:
+                return
 
-            with global_db.transaction():
-                query = "UPDATE Requisitions SET status = ? WHERE id = ?"
-                db.execute_update(query, (new_status, requisition_id))
-
-                # Log the status change
-                history_query = """
-                INSERT INTO Requisition_History (requisition_id, editor_name, reason)
-                VALUES (?, 'System', ?)
-                """
-                reason = f"Real-time status update to {new_status}"
-                db.execute_update(history_query, (requisition_id, reason))
+            reason = (
+                "Automatic status transition from date watcher "
+                f"({previous_status or 'unknown'} -> {new_status})"
+            )
+            self.requisition_service.update_status(
+                requisition_id,
+                new_status,
+                user_name="System Auto",
+                reason=reason,
+            )
 
         except Exception as e:
             logger.error(

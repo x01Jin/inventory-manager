@@ -83,4 +83,6 @@ The requester's type (Student, Teacher, or Faculty) is displayed along with thei
 ## Validation & Audit
 
 - Every modification requires an editor name and is recorded in history tables to preserve audit trails.
+- New requisitions require editor attribution before transactional save begins. If editor input is empty, the create flow exits before any requisition/item/stock write is attempted.
 - Requisition updates now capture field-level audit values (`field_name`, `old_value`, `new_value`) in history records when changes are detected.
+- Automatic status transitions written by refresh logic and date watchers are recorded through the same requisition status helper with `System Auto` attribution and structured transition reasons.

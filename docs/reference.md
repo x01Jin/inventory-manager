@@ -124,10 +124,12 @@ python scripts/maintenance.py --db-path C:\path\to\inventory.db --days-to-keep 9
 - `Requisitions` - Requisition records with lifecycle
 - `Requisition_Items` - Items in each requisition
 - `Update_History` - Item edit audit trail
-- `Requisition_History` - Requisition edit audit trail
+- `Requisition_History` - Requisition create/edit/status audit trail (including automatic status transitions)
 - `Disposal_History` - Disposed items records
 - `Activity_Log` - Activity events for dashboard and audit reporting (unlimited retention)
 - `Defective_Items` - Defective/broken items from returns
+
+`Update_History` includes field-level old/new values for item edits and batch synchronization changes (batch create, batch remove, and per-field batch deltas).
 
 **Views:**
 

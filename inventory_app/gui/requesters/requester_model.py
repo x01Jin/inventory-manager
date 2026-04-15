@@ -17,6 +17,7 @@ from inventory_app.utils.logger import logger
 @dataclass
 class RequesterRow:
     """Data structure for displaying requester information in tables."""
+
     id: Optional[int] = None
     name: str = ""
     requester_type: str = "teacher"
@@ -78,7 +79,7 @@ class RequesterModel:
                     section=requester.section or "",
                     department=requester.department or "",
                     created_datetime=requester.created_at,
-                    requisitions_count=requisition_counts.get(requester.id, 0)
+                    requisitions_count=requisition_counts.get(requester.id, 0),
                 )
                 rows.append(row)
 
@@ -134,19 +135,13 @@ class RequesterModel:
                 req_type = requester.requester_type or "unknown"
                 type_counts[req_type] = type_counts.get(req_type, 0) + 1
 
-            return {
-                'total_requesters': total_requesters,
-                'type_breakdown': type_counts
-            }
+            return {"total_requesters": total_requesters, "type_breakdown": type_counts}
 
         except Exception as e:
             logger.error(f"Failed to calculate statistics: {e}")
-            return {
-                'total_requesters': 0,
-                'type_breakdown': {}
-            }
+            return {"total_requesters": 0, "type_breakdown": {}}
 
-    def add_requester(self, requester_data: dict) -> bool:
+    def add_requester(self, requester_data: dict, editor_name: str = "System") -> bool:
         """
         Add a new requester.
 
@@ -158,15 +153,20 @@ class RequesterModel:
         """
         try:
             requester = RequesterDB()
-            requester.name = requester_data.get('name', '')
-            requester.requester_type = requester_data.get('requester_type', 'teacher')
-            requester.grade_level = requester_data.get('grade_level')
-            requester.section = requester_data.get('section')
-            requester.department = requester_data.get('department')
+            requester.name = requester_data.get("name", "")
+            requester.requester_type = requester_data.get("requester_type", "teacher")
+            requester.grade_level = requester_data.get("grade_level")
+            requester.section = requester_data.get("section")
+            requester.department = requester_data.get("department")
 
-            success = requester.save()
+            success = requester.save(editor_name=editor_name)
             if success:
                 self.load_data()  # Refresh data
+                requesters_activity_manager.log_requester_added(
+                    requester_name=requester.name,
+                    requester_id=requester.id,
+                    user_name=editor_name,
+                )
                 logger.info(f"Added new requester: {requester.name}")
             return success
 
@@ -174,7 +174,12 @@ class RequesterModel:
             logger.error(f"Failed to add requester: {e}")
             return False
 
-    def update_requester(self, requester_id: int, requester_data: dict) -> bool:
+    def update_requester(
+        self,
+        requester_id: int,
+        requester_data: dict,
+        editor_name: str = "System",
+    ) -> bool:
         """
         Update an existing requester.
 
@@ -190,15 +195,54 @@ class RequesterModel:
             if not requester:
                 return False
 
-            requester.name = requester_data.get('name', requester.name)
-            requester.requester_type = requester_data.get('requester_type', requester.requester_type)
-            requester.grade_level = requester_data.get('grade_level', requester.grade_level)
-            requester.section = requester_data.get('section', requester.section)
-            requester.department = requester_data.get('department', requester.department)
+            previous_values = {
+                "name": requester.name,
+                "requester_type": requester.requester_type,
+                "grade_level": requester.grade_level,
+                "section": requester.section,
+                "department": requester.department,
+            }
 
-            success = requester.save()
+            requester.name = requester_data.get("name", requester.name)
+            requester.requester_type = requester_data.get(
+                "requester_type", requester.requester_type
+            )
+            requester.grade_level = requester_data.get(
+                "grade_level", requester.grade_level
+            )
+            requester.section = requester_data.get("section", requester.section)
+            requester.department = requester_data.get(
+                "department", requester.department
+            )
+
+            success = requester.save(editor_name=editor_name)
             if success:
                 self.load_data()  # Refresh data
+                changed_fields = []
+                current_values = {
+                    "name": requester.name,
+                    "requester_type": requester.requester_type,
+                    "grade_level": requester.grade_level,
+                    "section": requester.section,
+                    "department": requester.department,
+                }
+                for field_name, old_value in previous_values.items():
+                    new_value = current_values[field_name]
+                    if old_value != new_value:
+                        changed_fields.append(
+                            f"{field_name}: {old_value or 'empty'} -> {new_value or 'empty'}"
+                        )
+
+                requesters_activity_manager.log_requester_updated(
+                    requester_name=requester.name,
+                    requester_id=requester.id,
+                    update_reason=(
+                        "; ".join(changed_fields)
+                        if changed_fields
+                        else "no field value changes"
+                    ),
+                    user_name=editor_name,
+                )
                 logger.info(f"Updated requester {requester_id}: {requester.name}")
             return success
 
@@ -224,7 +268,7 @@ class RequesterModel:
                 return False
 
             # Attempt deletion
-            success = requester.delete()
+            success = requester.delete(editor_name=editor_name)
             if success:
                 # Refresh data after successful deletion
                 self.load_data()
@@ -232,12 +276,17 @@ class RequesterModel:
                 # Log activity
                 requesters_activity_manager.log_requester_deleted(
                     requester_name=requester.name,
-                    user_name=editor_name
+                    requester_id=requester.id,
+                    user_name=editor_name,
                 )
 
-                logger.info(f"Successfully deleted requester {requester_id}: {requester.name}")
+                logger.info(
+                    f"Successfully deleted requester {requester_id}: {requester.name}"
+                )
             else:
-                logger.warning(f"Failed to delete requester {requester_id}: requester has associated requisitions")
+                logger.warning(
+                    f"Failed to delete requester {requester_id}: requester has associated requisitions"
+                )
 
             return success
 
@@ -263,11 +312,13 @@ class RequesterModel:
             """
             result = db.execute_query(query, (requester_id,))
             if result and len(result) > 0:
-                count = result[0]['count']
+                count = result[0]["count"]
                 return count > 0
             return False
         except Exception as e:
-            logger.error(f"Failed to check requisitions for requester {requester_id}: {e}")
+            logger.error(
+                f"Failed to check requisitions for requester {requester_id}: {e}"
+            )
             return True  # Return True to be safe (disable deletion if we can't check)
 
     # Private methods
@@ -288,7 +339,9 @@ class RequesterModel:
             logger.error(f"Failed to apply filters: {e}")
             self.filtered_requesters = self.all_requesters.copy()
 
-    def _filter_by_search_term(self, requesters: List[RequesterDB]) -> List[RequesterDB]:
+    def _filter_by_search_term(
+        self, requesters: List[RequesterDB]
+    ) -> List[RequesterDB]:
         """Filter requesters by search term across multiple fields."""
         search_term = self.search_term.lower()
         filtered = []
@@ -326,7 +379,7 @@ class RequesterModel:
             GROUP BY requester_id
             """
             rows = db.execute_query(query)
-            return {row['requester_id']: row['requisition_count'] for row in rows}
+            return {row["requester_id"]: row["requisition_count"] for row in rows}
         except Exception as e:
             logger.error(f"Failed to get requisition counts: {e}")
             return {}

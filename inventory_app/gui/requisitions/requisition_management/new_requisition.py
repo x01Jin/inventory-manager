@@ -184,6 +184,12 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 )
                 return
 
+            # Require editor attribution before any data-changing write starts.
+            editor_name = self.get_editor_name()
+            if not editor_name:
+                QMessageBox.warning(self, "Required", "Editor name is required.")
+                return
+
             # Create requisition using models directly
             from inventory_app.database.models import Requisition, RequisitionItem
             from datetime import date
@@ -211,7 +217,7 @@ class NewRequisitionDialog(BaseRequisitionDialog):
                 requisition.num_groups = num_groups
 
                 # Save requisition; raise on failure to ensure transaction rollback
-                if not requisition.save("System"):
+                if not requisition.save(editor_name):
                     raise Exception("Failed to create requisition")
 
                 if not requisition.id:
@@ -242,12 +248,6 @@ class NewRequisitionDialog(BaseRequisitionDialog):
 
                 if not movement_success:
                     raise Exception("Failed to create stock movements for requisition")
-
-            # Get editor name from user
-            editor_name = self.get_editor_name()
-            if not editor_name:
-                QMessageBox.warning(self, "Required", "Editor name is required.")
-                return
 
             # Log activity
             from inventory_app.services.requisition_activity import (

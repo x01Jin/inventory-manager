@@ -15,6 +15,7 @@ from inventory_app.services.movement_types import MovementType
 from inventory_app.services.requisition_activity import requisition_activity_manager
 from inventory_app.utils.logger import logger
 
+
 class RequisitionService:
     """
     Service for managing requisition lifecycle and related stock movements.
@@ -34,7 +35,7 @@ class RequisitionService:
         lab_activity_date: Optional[date] = None,
         num_students: Optional[int] = None,
         num_groups: Optional[int] = None,
-        user_name: str = "System"
+        user_name: str = "System",
     ) -> Optional[int]:
         """
         Create a new requisition with items and initial stock movements.
@@ -83,13 +84,21 @@ class RequisitionService:
                     req_item.item_id = item["item_id"]
                     req_item.quantity_requested = item["quantity"]
                     if not req_item.save():
-                        raise Exception(f"Failed to save RequisitionItem for item {item['item_id']}")
+                        raise Exception(
+                            f"Failed to save RequisitionItem for item {item['item_id']}"
+                        )
 
                     # Determine movement type based on item consumability
                     item_query = "SELECT is_consumable FROM Items WHERE id = ?"
                     item_result = db.execute_query(item_query, (item["item_id"],))
-                    is_consumable = item_result[0]["is_consumable"] if item_result else 1
-                    movement_type = MovementType.RESERVATION if is_consumable else MovementType.REQUEST
+                    is_consumable = (
+                        item_result[0]["is_consumable"] if item_result else 1
+                    )
+                    movement_type = (
+                        MovementType.RESERVATION
+                        if is_consumable
+                        else MovementType.REQUEST
+                    )
 
                     # Record movement
                     self._record_initial_movement(
@@ -97,11 +106,12 @@ class RequisitionService:
                         item["batch_id"],
                         movement_type,
                         item["quantity"],
-                        requisition_id
+                        requisition_id,
                     )
 
                 # Log activity
                 from inventory_app.database.models import Requester
+
                 requester = Requester.get_by_id(requester_id)
                 requester_name = requester.name if requester else "Unknown"
                 requisition_activity_manager.log_requisition_created(
@@ -113,7 +123,13 @@ class RequisitionService:
             logger.error(f"RequisitionService: Failed to create requisition: {e}")
             return None
 
-    def update_status(self, requisition_id: int, new_status: str, user_name: str = "System") -> bool:
+    def update_status(
+        self,
+        requisition_id: int,
+        new_status: str,
+        user_name: str = "System",
+        reason: Optional[str] = None,
+    ) -> bool:
         """
         Update the status of a requisition.
 
@@ -121,22 +137,54 @@ class RequisitionService:
             requisition_id: ID of the requisition
             new_status: New status (requested, active, overdue, returned)
             user_name: User performing the action
+            reason: Optional reason text for audit history
 
         Returns:
             bool: True if successful
         """
         try:
             if db.in_transaction():
-                return self._update_status_logic(requisition_id, new_status, user_name)
+                return self._update_status_logic(
+                    requisition_id,
+                    new_status,
+                    user_name,
+                    reason,
+                )
             else:
                 with db.transaction():
-                    return self._update_status_logic(requisition_id, new_status, user_name)
+                    return self._update_status_logic(
+                        requisition_id,
+                        new_status,
+                        user_name,
+                        reason,
+                    )
         except Exception as e:
             logger.error(f"RequisitionService: Failed to update status: {e}")
             return False
 
-    def _update_status_logic(self, requisition_id: int, new_status: str, user_name: str = "System") -> bool:
+    def _update_status_logic(
+        self,
+        requisition_id: int,
+        new_status: str,
+        user_name: str = "System",
+        reason: Optional[str] = None,
+    ) -> bool:
         """Internal logic for status update without transaction wrapper."""
+        current_rows = db.execute_query(
+            "SELECT status FROM Requisitions WHERE id = ?",
+            (requisition_id,),
+            use_cache=False,
+        )
+        if not current_rows:
+            logger.warning(
+                f"RequisitionService: requisition {requisition_id} not found for status update"
+            )
+            return False
+
+        previous_status = (current_rows[0].get("status") or "").strip()
+        if previous_status == new_status:
+            return True
+
         query = "UPDATE Requisitions SET status = ? WHERE id = ?"
         db.execute_update(query, (new_status, requisition_id))
 
@@ -145,15 +193,14 @@ class RequisitionService:
         INSERT INTO Requisition_History (requisition_id, editor_name, reason)
         VALUES (?, ?, ?)
         """
-        reason = f"Status updated to {new_status}"
-        db.execute_update(history_query, (requisition_id, user_name, reason))
+        history_reason = reason or (
+            f"Status transition: {previous_status or 'unknown'} -> {new_status}"
+        )
+        db.execute_update(history_query, (requisition_id, user_name, history_reason))
         return True
 
     def process_return(
-        self,
-        requisition_id: int,
-        return_items: List[Dict],
-        user_name: str = "System"
+        self, requisition_id: int, return_items: List[Dict], user_name: str = "System"
     ) -> bool:
         """
         Process the final return of a requisition.
@@ -178,51 +225,75 @@ class RequisitionService:
 
                     if is_consumable:
                         # Remove reservation
-                        self._remove_movement(requisition_id, item_id, batch_id, MovementType.RESERVATION)
-                        
+                        self._remove_movement(
+                            requisition_id, item_id, batch_id, MovementType.RESERVATION
+                        )
+
                         # Record consumption if any
                         qty_returned = item.get("quantity_returned", qty_requested)
                         consumed = qty_requested - qty_returned
                         if consumed > 0:
                             self.stock_service.record_consumption(
-                                item_id, consumed, requisition_id, 
+                                item_id,
+                                consumed,
+                                requisition_id,
                                 f"Consumed during requisition {requisition_id}",
-                                batch_id
+                                batch_id,
                             )
                     else:
                         # Remove request
-                        self._remove_movement(requisition_id, item_id, batch_id, MovementType.REQUEST)
-                        
+                        self._remove_movement(
+                            requisition_id, item_id, batch_id, MovementType.REQUEST
+                        )
+
                         # Record disposal for lost items
                         qty_lost = item.get("quantity_lost", 0)
                         if qty_lost > 0:
                             self.stock_service.record_disposal(
-                                item_id, qty_lost, requisition_id,
+                                item_id,
+                                qty_lost,
+                                requisition_id,
                                 f"Lost during requisition {requisition_id}",
-                                batch_id
+                                batch_id,
                             )
 
                 # Final status update
                 if not self.update_status(requisition_id, "returned", user_name):
                     raise Exception("Failed to update status to returned")
-                requisition_activity_manager.log_requisition_returned(requisition_id, user_name)
-                
+                requisition_activity_manager.log_requisition_returned(
+                    requisition_id, user_name
+                )
+
             return True
         except Exception as e:
             logger.error(f"RequisitionService: Failed to process return: {e}")
             return False
 
-    def _record_initial_movement(self, item_id: int, batch_id: int, m_type: MovementType, qty: int, source_id: int):
+    def _record_initial_movement(
+        self,
+        item_id: int,
+        batch_id: int,
+        m_type: MovementType,
+        qty: int,
+        source_id: int,
+    ):
         """Internal helper to record initial movements."""
         query = """
         INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id)
         VALUES (?, ?, ?, ?, ?, ?)
         """
-        db.execute_update(query, (
-            item_id, batch_id, m_type.value, qty, date.today().isoformat(), source_id
-        ))
+        db.execute_update(
+            query,
+            (item_id, batch_id, m_type.value, qty, date.today().isoformat(), source_id),
+        )
 
-    def _remove_movement(self, requisition_id: int, item_id: int, batch_id: Optional[int], m_type: MovementType):
+    def _remove_movement(
+        self,
+        requisition_id: int,
+        item_id: int,
+        batch_id: Optional[int],
+        m_type: MovementType,
+    ):
         """Internal helper to remove movements."""
         if batch_id is not None:
             query = """

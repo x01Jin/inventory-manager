@@ -25,6 +25,7 @@ class RequestersActivityManager:
     def log_requester_added(
         self,
         requester_name: str,
+        requester_id: int | None = None,
         user_name: str = "System",
         timestamp: str | None = None,
     ) -> bool:
@@ -47,7 +48,7 @@ class RequestersActivityManager:
             success = activity_logger.log_activity(
                 activity_type=activity_logger.REQUESTER_ADDED,
                 description=description,
-                entity_id=None,  # Will be set by caller if needed
+                entity_id=requester_id,
                 entity_type="requester",
                 user_name=user_name,
                 timestamp=timestamp,
@@ -69,6 +70,8 @@ class RequestersActivityManager:
     def log_requester_updated(
         self,
         requester_name: str,
+        requester_id: int | None = None,
+        update_reason: str | None = None,
         user_name: str = "System",
         timestamp: str | None = None,
     ) -> bool:
@@ -85,13 +88,13 @@ class RequestersActivityManager:
         """
         try:
             # Create activity description
-            description = self._format_update_description(requester_name)
+            description = self._format_update_description(requester_name, update_reason)
 
             # Log using existing activity logger
             success = activity_logger.log_activity(
                 activity_type=activity_logger.REQUESTER_EDITED,
                 description=description,
-                entity_id=None,  # Will be set by caller if needed
+                entity_id=requester_id,
                 entity_type="requester",
                 user_name=user_name,
                 timestamp=timestamp,
@@ -113,6 +116,7 @@ class RequestersActivityManager:
     def log_requester_deleted(
         self,
         requester_name: str,
+        requester_id: int | None = None,
         user_name: str = "System",
         timestamp: str | None = None,
     ) -> bool:
@@ -135,7 +139,7 @@ class RequestersActivityManager:
             success = activity_logger.log_activity(
                 activity_type=activity_logger.REQUESTER_DELETED,
                 description=description,
-                entity_id=None,  # Will be set by caller if needed
+                entity_id=requester_id,
                 entity_type="requester",
                 user_name=user_name,
                 timestamp=timestamp,
@@ -196,7 +200,9 @@ class RequestersActivityManager:
         """
         return f"added {requester_name} as a requester"
 
-    def _format_update_description(self, requester_name: str) -> str:
+    def _format_update_description(
+        self, requester_name: str, update_reason: str | None = None
+    ) -> str:
         """
         Format a description for requester updates.
 
@@ -206,6 +212,8 @@ class RequestersActivityManager:
         Returns:
             Formatted description string
         """
+        if update_reason:
+            return f"updated requester {requester_name}: {update_reason}"
         return f"{requester_name}'s details has been edited"
 
     def _format_deletion_description(self, requester_name: str) -> str:

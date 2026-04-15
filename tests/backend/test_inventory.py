@@ -1013,3 +1013,82 @@ def test_category_sync_remaps_legacy_labels(temp_db):
     )
     assert item_rows
     assert item_rows[0]["category_id"] == canonical_id
+
+
+def test_batch_sync_writes_per_field_audit_deltas(temp_db):
+    """Batch sync should log create/update/delete details at field level."""
+    from inventory_app.database.models import Item
+
+    item_id = db.execute_update(
+        "INSERT INTO Items (name, category_id, is_consumable) VALUES (?, ?, ?)",
+        ("Batch Audit Item", 1, 1),
+        return_last_id=True,
+    )[1]
+    assert isinstance(item_id, int)
+
+    existing_batch_id = db.execute_update(
+        """
+        INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received, disposal_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (item_id, 1, "2026-01-01", 10, None),
+        return_last_id=True,
+    )[1]
+    removable_batch_id = db.execute_update(
+        """
+        INSERT INTO Item_Batches (item_id, batch_number, date_received, quantity_received, disposal_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (item_id, 2, "2026-01-02", 5, None),
+        return_last_id=True,
+    )[1]
+    assert isinstance(existing_batch_id, int)
+    assert isinstance(removable_batch_id, int)
+
+    success, message = Item.sync_batches_for_item(
+        item_id,
+        [
+            {
+                "id": existing_batch_id,
+                "batch_number": 1,
+                "date_received": "2026-01-03",
+                "quantity_received": 8,
+                "disposal_date": "2026-12-31",
+            },
+            {
+                "batch_number": 3,
+                "date_received": "2026-01-04",
+                "quantity_received": 4,
+                "disposal_date": None,
+            },
+        ],
+        editor_name="BatchQA",
+    )
+    assert success is True, message
+
+    audit_rows = db.execute_query(
+        """
+        SELECT reason, field_name, old_value, new_value, editor_name
+        FROM Update_History
+        WHERE item_id = ?
+        """,
+        (item_id,),
+    )
+    assert audit_rows
+    assert all(row["editor_name"] == "BatchQA" for row in audit_rows)
+    assert any(row["reason"] == "Batch created during sync" for row in audit_rows)
+    assert any(row["reason"] == "Batch removed during sync" for row in audit_rows)
+    assert any(
+        row["reason"] == "Batch field updated during sync"
+        and row["field_name"] == "date_received"
+        and row["old_value"] == "2026-01-01"
+        and row["new_value"] == "2026-01-03"
+        for row in audit_rows
+    )
+    assert any(
+        row["reason"] == "Batch field updated during sync"
+        and row["field_name"] == "quantity_received"
+        and row["old_value"] == "10"
+        and row["new_value"] == "8"
+        for row in audit_rows
+    )
