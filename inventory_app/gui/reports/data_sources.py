@@ -102,9 +102,11 @@ def get_dynamic_report_data(
         return []
 
 
-def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
+def get_stock_levels_data(
+    category_filter: str = "", include_zero: bool = False
+) -> List[Dict]:
     """Get stock levels data with differentiated logic for consumables vs non-consumables.
-    Excludes items with 0 current stock (depleted/disposed items).
+    Excludes items with 0 current stock unless include_zero=True.
 
     Per beta test requirements:
     - Consumables: deduct consumed quantity from original stock
@@ -177,7 +179,8 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
         query += " GROUP BY i.id, i.name, c.name, i.size, i.brand, s.name, i.po_number, i.other_specifications, i.is_consumable, stock.original_stock, movements.consumed_qty, movements.disposed_qty, movements.returned_qty"
 
         # Filter out items with 0 current stock (depleted/disposed items)
-        query += ' HAVING "Current Stock" > 0'
+        if not include_zero:
+            query += ' HAVING "Current Stock" > 0'
 
         query += " ORDER BY c.name, i.name"
 
@@ -351,6 +354,12 @@ def get_low_stock_data(
             current = r.get("Current Stock") or 0
             original = r.get("Original Stock") or 0
             is_consumable = r.get("Is Consumable")
+            if is_consumable is None:
+                item_type = (r.get("Item Type") or "").strip().lower()
+                if item_type and "consum" in item_type and "non" not in item_type:
+                    is_consumable = 1
+                else:
+                    is_consumable = 0
 
             if abs_thresh is not None:
                 # Absolute threshold override

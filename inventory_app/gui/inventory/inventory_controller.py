@@ -199,6 +199,77 @@ class InventoryController:
             logger.error(f"Error loading inventory data: {e}")
             raise
 
+    def get_inventory_export_data(self) -> List[Dict[str, Any]]:
+        """Return inventory rows formatted for import-ready export."""
+        try:
+            query = """
+            SELECT
+                i.name AS "Item",
+                c.name AS "Category",
+                i.size AS "Size",
+                i.brand AS "Brand",
+                COALESCE(s.name, 'N/A') AS "Supplier",
+                COALESCE(i.po_number, 'N/A') AS "PO Number",
+                COALESCE(stock.original_stock, 0) AS "Original Stock",
+                CASE
+                    WHEN i.is_consumable = 1 THEN
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.consumed_qty, 0) -
+                        COALESCE(movements.disposed_qty, 0) +
+                        COALESCE(movements.returned_qty, 0)
+                    ELSE
+                        COALESCE(stock.original_stock, 0) -
+                        COALESCE(movements.disposed_qty, 0)
+                END AS "Current Stock",
+                i.other_specifications AS "Specifications",
+                COALESCE(
+                    i.item_type,
+                    CASE WHEN i.is_consumable = 1 THEN 'Consumable' ELSE 'Non-consumable' END
+                ) AS "Item Type",
+                i.expiration_date AS "Expiration Date",
+                i.calibration_date AS "Calibration Date",
+                COALESCE(batch_dates.first_batch_date, i.acquisition_date) AS "Acquisition Date"
+            FROM Items i
+            JOIN Categories c ON c.id = i.category_id
+            LEFT JOIN Suppliers s ON s.id = i.supplier_id
+            LEFT JOIN (
+                SELECT
+                    ib.item_id,
+                    COALESCE(SUM(ib.quantity_received), 0) AS original_stock
+                FROM Item_Batches ib
+                WHERE ib.disposal_date IS NULL
+                GROUP BY ib.item_id
+            ) stock ON stock.item_id = i.id
+            LEFT JOIN (
+                SELECT
+                    sm.item_id,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS consumed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS disposed_qty,
+                    COALESCE(SUM(CASE WHEN sm.movement_type = ? THEN sm.quantity ELSE 0 END), 0) AS returned_qty
+                FROM Stock_Movements sm
+                GROUP BY sm.item_id
+            ) movements ON movements.item_id = i.id
+            LEFT JOIN (
+                SELECT item_id, MIN(date_received) AS first_batch_date
+                FROM Item_Batches
+                GROUP BY item_id
+            ) batch_dates ON batch_dates.item_id = i.id
+            ORDER BY c.name, i.name
+            """
+
+            params = (
+                MovementType.CONSUMPTION.value,
+                MovementType.DISPOSAL.value,
+                MovementType.RETURN.value,
+            )
+            rows = db.execute_query(query, params)
+            logger.info(f"Loaded {len(rows)} inventory export rows from database")
+            return rows or []
+
+        except Exception as e:
+            logger.error(f"Error loading inventory export data: {e}")
+            return []
+
     def search_items(self, search_term: str) -> List[Dict[str, Any]]:
         """Search items by name, category, supplier, or PO number."""
         try:

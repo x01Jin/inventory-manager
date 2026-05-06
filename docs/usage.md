@@ -58,6 +58,10 @@ Stock behavior after returns:
 4. Enter editor name and start import.
 5. Review imported and skipped rows.
 
+Export Inventory:
+
+- Click **Export Inventory** to save an `.xlsx` file formatted for re-import (includes original/current stock columns).
+
 Required header groups (header matching is flexible):
 
 - Name: `name`, `item`, `item name`, and similar variants

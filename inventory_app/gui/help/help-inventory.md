@@ -8,6 +8,7 @@ The Inventory page is the primary place to view, search, and manage all items, b
 - **✏️ Edit Item:** Enabled when you select a row; opens the Item Editor to edit the selected item.
 - **🗑️ Delete Item:** Enabled when you select a row; prompts for confirmation and requires your name/initials and a deletion reason. Deletions are permanent.
 - **🔄 Refresh:** Reloads items, filters, and statistics from the database.
+- **⬆️ Export Inventory:** Saves the current inventory to an `.xlsx` file using importer-ready headers (includes original/current stock values).
 - **⬇️ Import Items:** Opens the Import dialog to import items from an `.xlsx` (Excel) file. Use this to add many items at once; each imported row creates a new Item and an initial batch unless skipped.
 - **SDS (row action):** Appears beside item names only for chemical rows (`Chemicals-Solid` and `Chemicals-Liquid`). If SDS exists, it opens the exact SDS file externally. If SDS does not exist, the app shows a message that SDS entry is required.
 - **🧪 SDS Settings (toolbar):** Appears when a chemical row is selected. Use this button to upload, update, or remove SDS records.

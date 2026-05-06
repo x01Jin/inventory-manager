@@ -9,6 +9,8 @@ performance on multi-core systems.
 
 from typing import Optional, Dict, Any, List, cast
 from dataclasses import dataclass
+from datetime import datetime, date
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -20,10 +22,13 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QInputDialog,
     QProgressBar,
+    QFileDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 from inventory_app.gui.styles import get_current_theme
 from inventory_app.utils.logger import logger
 from inventory_app.database.models import ItemSDS
@@ -132,10 +137,14 @@ class InventoryPage(QWidget):
         self.sds_settings_button.setVisible(False)
 
         # Import button (opens dialog explaining required headers and allows importing from excel)
+        self.export_button = QPushButton("⬆️ Export Inventory")
+        self.export_button.clicked.connect(self.export_inventory)
+
         self.import_button = QPushButton("⬇️ Import Items")
         self.import_button.clicked.connect(self.open_import_dialog)
 
         header_layout.addWidget(self.sds_settings_button)
+        header_layout.addWidget(self.export_button)
         header_layout.addWidget(self.import_button)
         header_layout.addWidget(self.add_button)
         header_layout.addWidget(self.edit_button)
@@ -432,6 +441,7 @@ class InventoryPage(QWidget):
         self.refresh_button.setEnabled(True)
         self.add_button.setEnabled(True)
         self.import_button.setEnabled(True)
+        self.export_button.setEnabled(True)
         logger.info("Table population and styling complete")
 
     def _on_load_error(self, error_tuple: tuple):
@@ -462,6 +472,7 @@ class InventoryPage(QWidget):
         self.refresh_button.setEnabled(not is_loading)
         self.add_button.setEnabled(not is_loading)
         self.import_button.setEnabled(not is_loading)
+        self.export_button.setEnabled(not is_loading)
         self.edit_button.setEnabled(False)
         self.delete_button.setEnabled(False)
         self.sds_settings_button.setEnabled(False)
@@ -575,6 +586,95 @@ class InventoryPage(QWidget):
         except Exception as e:
             logger.error(f"Import dialog failed: {e}")
             QMessageBox.critical(self, "Import Error", f"Import failed: {str(e)}")
+
+    def export_inventory(self):
+        """Export inventory in an importer-ready Excel format."""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_name = f"inventory_export_{timestamp}.xlsx"
+            default_path = str(Path.cwd() / default_name)
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Inventory",
+                default_path,
+                "Excel Files (*.xlsx)",
+            )
+            if not file_path:
+                return
+
+            if not file_path.lower().endswith(".xlsx"):
+                file_path = f"{file_path}.xlsx"
+
+            rows = self.controller.get_inventory_export_data()
+            if not rows:
+                QMessageBox.information(
+                    self, "Export", "No inventory data available to export."
+                )
+                return
+
+            self._write_inventory_export(file_path, rows)
+
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"Inventory exported to:\n{file_path}",
+            )
+        except Exception as e:
+            logger.error(f"Inventory export failed: {e}")
+            QMessageBox.critical(
+                self, "Export Error", f"Failed to export inventory: {str(e)}"
+            )
+
+    def _write_inventory_export(
+        self, file_path: str, rows: List[Dict[str, Any]]
+    ) -> None:
+        headers = [
+            "Item",
+            "Category",
+            "Size",
+            "Brand",
+            "Supplier",
+            "PO Number",
+            "Original Stock",
+            "Current Stock",
+            "Specifications",
+            "Item Type",
+            "Expiration Date",
+            "Calibration Date",
+            "Acquisition Date",
+        ]
+
+        wb = Workbook()
+        ws = wb.active
+        if ws is None:
+            raise ValueError("Could not create worksheet")
+
+        ws.title = "Inventory Export"
+        ws.append(headers)
+
+        for row in rows:
+            ws.append([self._format_export_value(row.get(h)) for h in headers])
+
+        for idx, header in enumerate(headers, start=1):
+            max_len = len(header)
+            for row in rows:
+                val = row.get(header)
+                if val is None:
+                    continue
+                max_len = max(max_len, len(str(val)))
+            ws.column_dimensions[get_column_letter(idx)].width = min(max_len + 2, 50)
+
+        ws.freeze_panes = "A2"
+        wb.save(file_path)
+
+    @staticmethod
+    def _format_export_value(value: Any) -> Any:
+        if value is None:
+            return ""
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        return value
 
     def _on_table_selection_changed(self):
         """Handle table selection changes."""

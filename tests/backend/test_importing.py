@@ -7,6 +7,7 @@ from inventory_app.services.item_importer import (
 )
 from inventory_app.gui.reports.data_sources import get_stock_levels_data
 from inventory_app.services.movement_types import MovementType
+from inventory_app.gui.inventory.inventory_controller import InventoryController
 from inventory_app.utils.stock_parser import parse_stock_value, parse_stock_quantity
 
 
@@ -432,3 +433,78 @@ def test_importer_normalizes_spaced_category_aliases(temp_db, tmp_path):
     )
     assert rows
     assert rows[0]["category_name"] == "Chemicals-Solid"
+
+
+def test_inventory_export_data_includes_stock_columns(temp_db):
+    """Export rows should include original/current stock with item type and dates."""
+    consumable_id = db.execute_update(
+        """
+        INSERT INTO Items (name, category_id, is_consumable, item_type, expiration_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ("Export Consumable", 1, 1, "Consumable", "2025-12-31"),
+        return_last_id=True,
+    )[1]
+    non_consumable_id = db.execute_update(
+        """
+        INSERT INTO Items (name, category_id, is_consumable, item_type, calibration_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ("Export NonConsumable", 1, 0, "Non-consumable", "2025-10-01"),
+        return_last_id=True,
+    )[1]
+
+    batch_c_id = db.execute_update(
+        """
+        INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received)
+        VALUES (?, ?, ?, ?)
+        """,
+        (consumable_id, 1, 100, "2025-01-01"),
+        return_last_id=True,
+    )[1]
+    batch_nc_id = db.execute_update(
+        """
+        INSERT INTO Item_Batches (item_id, batch_number, quantity_received, date_received)
+        VALUES (?, ?, ?, ?)
+        """,
+        (non_consumable_id, 1, 20, "2025-01-02"),
+        return_last_id=True,
+    )[1]
+
+    db.execute_update(
+        """
+        INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (consumable_id, batch_c_id, "CONSUMPTION", 15, "2025-01-03"),
+    )
+    db.execute_update(
+        """
+        INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (consumable_id, batch_c_id, "RETURN", 5, "2025-01-04"),
+    )
+    db.execute_update(
+        """
+        INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (non_consumable_id, batch_nc_id, "DISPOSAL", 2, "2025-01-05"),
+    )
+
+    controller = InventoryController()
+    rows = controller.get_inventory_export_data()
+    by_name = {row["Item"]: row for row in rows}
+
+    assert by_name["Export Consumable"]["Original Stock"] == 100
+    assert by_name["Export Consumable"]["Current Stock"] == 90
+    assert by_name["Export Consumable"]["Item Type"] == "Consumable"
+    assert by_name["Export Consumable"]["Expiration Date"] == "2025-12-31"
+    assert by_name["Export Consumable"]["Acquisition Date"] == "2025-01-01"
+
+    assert by_name["Export NonConsumable"]["Original Stock"] == 20
+    assert by_name["Export NonConsumable"]["Current Stock"] == 18
+    assert by_name["Export NonConsumable"]["Item Type"] == "Non-consumable"
+    assert by_name["Export NonConsumable"]["Calibration Date"] == "2025-10-01"
+    assert by_name["Export NonConsumable"]["Acquisition Date"] == "2025-01-02"
