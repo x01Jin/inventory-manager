@@ -34,6 +34,7 @@ There are four main tabs: **Usage Reports**, **Inventory Reports**, **Trends Rep
   - Consumables: `Original - Consumption - Disposal + Return`
   - Non-consumables: `Original - Disposal` (borrow/request affects availability, not baseline stock)
   - Includes supplier names and PO Number values in exported rows.
+  - Includes Item Type values as `Consumable` or `Non-consumable`.
 - **Expiration Report:** Items and batches expiring inside the selected window, with dates and batch details where available.
 - **Low Stock Alert:** Items below the configured threshold. When using percentage mode it applies 20%/10% defaults depending on item type.
 - **Acquisition History:** Incoming/received batches and quantities during the date range, with batch sequence labels (B1, B2, B3, etc.).

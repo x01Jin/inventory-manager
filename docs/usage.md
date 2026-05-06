@@ -61,7 +61,7 @@ Stock behavior after returns:
 Required header groups (header matching is flexible):
 
 - Name: `name`, `item`, `item name`, and similar variants
-- Stock count: `stocks` or `stock`
+- Stock count: `stocks` or `stock`, or the Stock Levels Report headers `original stock` + `current stock`
 - Item type: `item type`, `item_type`, `type`, or equivalent
 
 ## Practical Tips

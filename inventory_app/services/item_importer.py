@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from inventory_app.database.models import Item, Size
 from inventory_app.services.category_config import get_all_category_names
+from inventory_app.services.movement_types import MovementType
 from inventory_app.utils.logger import logger
 from inventory_app.database.connection import db
 from datetime import datetime, date
@@ -22,7 +23,16 @@ from inventory_app.utils.reference_normalization import (
 )
 
 
-REQUIRED_HEADERS = {"name", "stocks", "stock", "item type", "item_type", "type"}
+REQUIRED_HEADERS = {
+    "name",
+    "stocks",
+    "stock",
+    "original stock",
+    "current stock",
+    "item type",
+    "item_type",
+    "type",
+}
 
 # Normalized header key map (space/underscore-insensitive, case-insensitive)
 
@@ -52,6 +62,10 @@ HEADER_MAP = {
     "supplier": "supplier",
     "otherspecifications": "other_specifications",
     "ponumber": "po_number",
+    "originalstock": "original_stock",
+    "original stock": "original_stock",
+    "currentstock": "current_stock",
+    "current stock": "current_stock",
     "expirationdate": "expiration_date",
     "calibrationdate": "calibration_date",
     "acquisitiondate": "acquisition_date",
@@ -243,9 +257,12 @@ def _resolve_header_mapping(ws: Worksheet) -> Tuple[int, Dict[int, str], List[st
 
         has_name = bool(NAME_NORMALIZED & normalized_header_set)
         has_stocks = bool({"stocks", "stock"} & normalized_header_set)
+        has_original = "originalstock" in normalized_header_set
+        has_current = "currentstock" in normalized_header_set
+        has_stock_values = has_stocks or (has_original and has_current)
         has_item_type = bool({"itemtype", "type"} & normalized_header_set)
 
-        if has_name and has_stocks and has_item_type:
+        if has_name and has_stock_values and has_item_type:
             headers = scanned
             header_row_index = i
             break
@@ -268,9 +285,12 @@ def _resolve_header_mapping(ws: Worksheet) -> Tuple[int, Dict[int, str], List[st
         raise ValueError(
             "Missing required header 'name' (or acceptable variants like 'item' or 'item name'). Check if all required headers are present and double check the spelling of the headers"
         )
-    if not ({"stocks", "stock"} & normalized_header_set):
+    has_stocks = bool({"stocks", "stock"} & normalized_header_set)
+    has_original = "originalstock" in normalized_header_set
+    has_current = "currentstock" in normalized_header_set
+    if not (has_stocks or (has_original and has_current)):
         raise ValueError(
-            "Missing required header 'stocks'. Check if all required headers are present and double check the spelling of the headers"
+            "Missing required stock headers. Provide 'stocks' (or 'stock'), or both 'original stock' and 'current stock'. Check if all required headers are present and double check the spelling of the headers"
         )
     if not ({"itemtype", "type"} & normalized_header_set):
         raise ValueError(
@@ -463,6 +483,8 @@ def import_items_from_excel(
             # Required fields
             name = row_data.get("name")
             raw_stocks = row_data.get("stocks")
+            raw_original_stock = row_data.get("original_stock")
+            raw_current_stock = row_data.get("current_stock")
             item_type_raw = row_data.get("item_type")
 
             if name is None or str(name).strip() == "":
@@ -479,22 +501,34 @@ def import_items_from_excel(
                 skipped += 1
                 continue
 
+            uses_original_current = (
+                raw_original_stock is not None or raw_current_stock is not None
+            )
+
             selected_unit = row_unit_overrides.get(row_idx)
-            if selected_unit:
+            if selected_unit and not uses_original_current:
                 raw_stocks = _with_selected_unit(raw_stocks, selected_unit)
 
-            # Parse the free-form stocks cell. This may extract quantity, a size string
-            # (e.g. '900ml', '1 L') and an optional notes string. For size-bearing
-            # entries (volume/mass), quantity comes from the numeric part so consumables
-            # can be requested/returned in partial usable amounts.
+            # Parse stocks. For stock-level report headers we read original/current
+            # directly; for legacy imports we parse the free-form stocks cell.
             size_from_stocks = None
+            stocks_notes = None
             try:
-                from inventory_app.utils.stock_parser import parse_stock_value
+                if uses_original_current:
+                    if raw_original_stock is None:
+                        raw_original_stock = raw_current_stock
+                    if raw_current_stock is None:
+                        raw_current_stock = raw_original_stock
+                    original_stock = _parse_int(raw_original_stock)
+                    current_stock = _parse_int(raw_current_stock)
+                else:
+                    from inventory_app.utils.stock_parser import parse_stock_value
 
-                stock_info = parse_stock_value(raw_stocks)
-                stocks = int(stock_info.get("quantity", 0))
-                size_from_stocks = stock_info.get("size")
-                stocks_notes = stock_info.get("notes")
+                    stock_info = parse_stock_value(raw_stocks)
+                    original_stock = int(stock_info.get("quantity", 0))
+                    current_stock = original_stock
+                    size_from_stocks = stock_info.get("size")
+                    stocks_notes = stock_info.get("notes")
             except ValueError as e:
                 messages.append(f"Row {row_idx}: {str(e)}; skipping")
                 skipped += 1
@@ -513,6 +547,23 @@ def import_items_from_excel(
             # case-insensitively and robustly detect consumable vs non-consumable.
             canonical_item_type = _to_canonical_item_type(item_type_raw)
             is_consumable = 1 if _is_consumable_type(item_type_raw) else 0
+
+            adjustment_qty = 0
+            adjustment_type: Optional[MovementType] = None
+            if current_stock > original_stock:
+                if is_consumable:
+                    adjustment_qty = current_stock - original_stock
+                    adjustment_type = MovementType.RETURN
+                else:
+                    messages.append(
+                        f"Row {row_idx}: current stock ({current_stock}) exceeds original stock ({original_stock}); using current stock as original to keep stock consistent"
+                    )
+                    original_stock = current_stock
+            elif current_stock < original_stock:
+                adjustment_qty = original_stock - current_stock
+                adjustment_type = (
+                    MovementType.CONSUMPTION if is_consumable else MovementType.DISPOSAL
+                )
 
             # Optional fields (text fields default to 'N/A'; date fields return date objects or None)
             size = row_data.get("size")
@@ -647,14 +698,66 @@ def import_items_from_excel(
             try:
                 # item.save() will guard and return False on failures; still protect
                 # against unexpected exceptions to resume importing other rows.
-                success = item.save(editor_name=editor_name, batch_quantity=stocks)
+                success = item.save(
+                    editor_name=editor_name, batch_quantity=original_stock
+                )
                 if success:
                     imported += 1
                     # include parsed size in messages when available
                     msg_size = f", size={size}" if size and size != "N/A" else ""
                     messages.append(
-                        f"Row {row_idx}: imported '{item.name}' ({stocks} units{msg_size})"
+                        f"Row {row_idx}: imported '{item.name}' ({original_stock} units{msg_size})"
                     )
+
+                    if adjustment_qty > 0 and adjustment_type is not None and item.id:
+                        try:
+                            batch_id = None
+                            if original_stock > 0:
+                                batch_row = db.execute_query(
+                                    "SELECT id FROM Item_Batches WHERE item_id = ? ORDER BY id DESC LIMIT 1",
+                                    (item.id,),
+                                )
+                                if batch_row:
+                                    batch_id = batch_row[0]["id"]
+
+                            note = "Import adjustment to match current stock"
+                            movement_date = date.today().isoformat()
+
+                            if batch_id is not None:
+                                db.execute_update(
+                                    """
+                                    INSERT INTO Stock_Movements (item_id, batch_id, movement_type, quantity, movement_date, source_id, note)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                    """,
+                                    (
+                                        item.id,
+                                        batch_id,
+                                        adjustment_type.value,
+                                        adjustment_qty,
+                                        movement_date,
+                                        None,
+                                        note,
+                                    ),
+                                )
+                            else:
+                                db.execute_update(
+                                    """
+                                    INSERT INTO Stock_Movements (item_id, movement_type, quantity, movement_date, source_id, note)
+                                    VALUES (?, ?, ?, ?, ?, ?)
+                                    """,
+                                    (
+                                        item.id,
+                                        adjustment_type.value,
+                                        adjustment_qty,
+                                        movement_date,
+                                        None,
+                                        note,
+                                    ),
+                                )
+                        except Exception as exc:
+                            messages.append(
+                                f"Row {row_idx}: imported '{item.name}' but failed to apply stock adjustment ({exc})"
+                            )
                 else:
                     skipped += 1
                     messages.append(

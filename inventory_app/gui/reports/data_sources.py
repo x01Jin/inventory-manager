@@ -139,7 +139,10 @@ def get_stock_levels_data(category_filter: str = "") -> List[Dict]:
                         COALESCE(movements.disposed_qty, 0)
                 END AS "Current Stock",
                 i.other_specifications AS "Specifications",
-                i.is_consumable AS "Is Consumable"
+                CASE
+                    WHEN i.is_consumable = 1 THEN 'Consumable'
+                    ELSE 'Non-consumable'
+                END AS "Item Type"
             FROM Items i
             JOIN Categories c ON c.id = i.category_id
             LEFT JOIN Suppliers s ON s.id = i.supplier_id

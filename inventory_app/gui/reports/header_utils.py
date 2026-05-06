@@ -28,6 +28,8 @@ REPORT_HEADER_MAP = {
     "Supplier": "Supplier",
     "PO NUMBER": "PO Number",
     "PO Number": "PO Number",
+    "Is Consumable": "Item Type",
+    "Item Type": "Item Type",
 }
 
 

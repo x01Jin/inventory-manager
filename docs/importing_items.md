@@ -5,7 +5,7 @@ This document describes the Excel import feature for adding inventory items in b
 ## Quick summary
 
 - File: Excel (.xlsx)
-- Minimum required columns: **name**, **stocks**, **item type** (accepts many human variants; header matching is case- and space-insensitive)
+- Minimum required columns: **name**, **item type**, and either **stocks** or **original stock + current stock** (accepts many human variants; header matching is case- and space-insensitive)
 - Optional columns: **category**, **size**, **brand**, **supplier**, **other specifications**, **po number**, **expiration date**, **calibration date**, **acquisition date**
 - Imported **po number** values are shown in the Inventory table and included in report exports.
 - Pre-import review: consumable rows with decimal `stocks` and no unit (example: `1.5`) are listed so you can choose a unit (`ml`, `L`, `mg`, `g`, `kg`) or skip each row.
@@ -34,12 +34,14 @@ The import can be cancelled while in progress by clicking the Cancel button.
   - `Item Name`, `itemname`, `names`, `ITEMS` → mapped to `name`
   - `stocks`, `Stock` → mapped to `stocks`
   - `item type`, `item_type`, `type` → mapped to `item type`
-- If the importer cannot find a header row containing the required groups (name + stocks + item type) within the scan window, import fails with a clear message telling you which required columns are missing.
+- If the importer cannot find a header row containing the required groups (name + item type + [stocks or original+current]) within the scan window, import fails with a clear message telling you which required columns are missing.
 
 ## Accepted header variants (examples)
 
 - Name: `name`, `item`, `items`, `item name`, `names` (and other variant spellings that normalize to the same key)
 - Stocks: `stocks`, `stock`
+- Original stock: `original stock`
+- Current stock: `current stock`
 - Item type: `item type`, `item_type`, `type`
 
 ---
@@ -47,7 +49,7 @@ The import can be cancelled while in progress by clicking the Cancel button.
 ## Row parsing rules & defaults 🧾
 
 - **Name**: Required — rows with missing or empty names are skipped and reported.
-- **Stocks**: The importer accepts a variety of free-form `stocks` values. Parsing rules are:
+- **Stocks / Stock Levels**: The importer accepts a variety of free-form `stocks` values. Parsing rules are:
   - **Missing-unit review for consumables**: before import runs, rows classified as consumable that have decimal numeric stocks with no explicit unit (for example, `1.5`) are flagged for manual resolution. You can either:
     - choose a unit from the dropdown (`ml`, `L`, `mg`, `g`, `kg`) so import rewrites the stock value as `<value> <unit>` (example: `1.5` + `L` -> `1.5 L` -> quantity `1500`), or
     - skip that row.
@@ -61,6 +63,7 @@ The import can be cancelled while in progress by clicking the Cancel button.
   - **Package counts with piece details** (e.g., `1 box (100pcs)`, `2 packs of 50 pcs`) are converted to usable stock units using `packages * pieces` (so `1 box (100pcs)` becomes quantity `100`). Piece details are still recorded as notes and appended to `other_specifications`.
   - **Other leading counts with extra info** (e.g., `10 boxes`, `1 set of 8 pieces`) use the leading integer as the quantity; parenthetical or "of N pieces" style details are recorded as notes and appended to `other_specifications`.
   - **Empty / missing** stocks values result in `quantity = 0`.
+  - **Stock Levels Report imports**: when `original stock` and `current stock` are provided, the importer uses `original stock` for the initial batch quantity and adds a stock movement so the computed current stock matches the `current stock` value. Consumables use a consumption adjustment (or return when current exceeds original); non-consumables use a disposal adjustment.
   - **Invalid values** (no parseable number or recognized size) cause the row to be skipped and an explanatory message is included in the import log.
   - **Case & spacing**: size units are matched case-insensitively. They are space-sensitive except when attached to a number (both `900ml` and `900 ml` are accepted).
 
@@ -114,7 +117,7 @@ Categories in the inventory system are fixed and read-only. When importing items
 
 ## What the importer does on success ✅
 
-- Creates a new `Item` record and an initial batch in `Item_Batches` whose `quantity_received` is the `stocks` value (one batch per imported row).
+- Creates a new `Item` record and an initial batch in `Item_Batches` whose `quantity_received` is the `stocks` value (or the `original stock` value when importing from a Stock Levels report).
 - Logs row-level success messages; the dialog shows a summary with the number of imported rows and any rows skipped along with reasons.
 
 ---

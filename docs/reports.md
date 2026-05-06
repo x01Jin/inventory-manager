@@ -166,6 +166,7 @@ Date Range reports are generated in `ReportGenerator.generate_report(start_date,
     - Consumables: `Original - Consumption - Disposal + Return`
     - Non-consumables: `Original - Disposal` (active borrow/request affects availability, not baseline stock)
     - Includes Supplier and PO Number columns in addition to item/category/size/brand/specifications
+    - Includes Item Type with `Consumable` or `Non-consumable` values
   - Expiration Report — items with `expiration_date` within the given range. Addresses beta test requirement #10 for expiration alerts.
   - Calibration Due Report — items in calibration-enabled categories with `calibration_date` within the range (default policy: Equipment). Addresses beta test requirement #11 for calibration alerts.
   - Update History Report — history of edits to inventory items with editor name, timestamp, reason, and item PO Number. Addresses beta test requirement #7.

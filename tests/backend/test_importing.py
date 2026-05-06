@@ -5,6 +5,8 @@ from inventory_app.services.item_importer import (
     collect_consumable_rows_missing_unit,
     import_items_from_excel,
 )
+from inventory_app.gui.reports.data_sources import get_stock_levels_data
+from inventory_app.services.movement_types import MovementType
 from inventory_app.utils.stock_parser import parse_stock_value, parse_stock_quantity
 
 
@@ -239,6 +241,103 @@ def test_importer_edge_cases(temp_db, tmp_path):
         "SELECT id FROM Categories WHERE name = 'Uncategorized'"
     )[0]["id"]
     assert nocat[0]["category_id"] == uncat_id
+
+
+def test_importer_supports_stock_levels_report_headers(temp_db, tmp_path):
+    """Importer should accept Stock Levels Report headers and align current stock."""
+    excel_path = tmp_path / "stock_levels_import.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(
+        [
+            "Item",
+            "Category",
+            "Size",
+            "Brand",
+            "Supplier",
+            "PO Number",
+            "Original Stock",
+            "Current Stock",
+            "Specifications",
+            "Item Type",
+        ]
+    )
+    ws.append(
+        [
+            "Stock Consumable",
+            "Consumables",
+            "N/A",
+            "LabBrand",
+            "Stock Supplier",
+            "PO-IMPORT-1",
+            100,
+            80,
+            "N/A",
+            "Consumable",
+        ]
+    )
+    ws.append(
+        [
+            "Stock NonConsumable",
+            "Equipment",
+            "Standard",
+            "LabBrand",
+            "Stock Supplier",
+            "PO-IMPORT-2",
+            50,
+            45,
+            "N/A",
+            "Non-consumable",
+        ]
+    )
+    wb.save(excel_path)
+
+    imported_count, _ = import_items_from_excel(str(excel_path), editor_name="tester")
+    assert imported_count == 2
+
+    batches = db.execute_query(
+        """
+        SELECT i.name, ib.quantity_received
+        FROM Item_Batches ib
+        JOIN Items i ON i.id = ib.item_id
+        WHERE i.name IN (?, ?)
+        ORDER BY i.name
+        """,
+        ("Stock Consumable", "Stock NonConsumable"),
+    )
+    qty_by_name = {row["name"]: row["quantity_received"] for row in batches}
+    assert qty_by_name["Stock Consumable"] == 100
+    assert qty_by_name["Stock NonConsumable"] == 50
+
+    movements = db.execute_query(
+        """
+        SELECT i.name, sm.movement_type, sm.quantity
+        FROM Stock_Movements sm
+        JOIN Items i ON i.id = sm.item_id
+        WHERE i.name IN (?, ?)
+        ORDER BY i.name, sm.id
+        """,
+        ("Stock Consumable", "Stock NonConsumable"),
+    )
+    mv_by_name = {row["name"]: row for row in movements}
+    assert (
+        mv_by_name["Stock Consumable"]["movement_type"]
+        == MovementType.CONSUMPTION.value
+    )
+    assert mv_by_name["Stock Consumable"]["quantity"] == 20
+    assert (
+        mv_by_name["Stock NonConsumable"]["movement_type"]
+        == MovementType.DISPOSAL.value
+    )
+    assert mv_by_name["Stock NonConsumable"]["quantity"] == 5
+
+    stock_rows = get_stock_levels_data()
+    by_name = {row["Item Name"]: row for row in stock_rows}
+    assert by_name["Stock Consumable"]["Original Stock"] == 100
+    assert by_name["Stock Consumable"]["Current Stock"] == 80
+    assert by_name["Stock NonConsumable"]["Original Stock"] == 50
+    assert by_name["Stock NonConsumable"]["Current Stock"] == 45
 
 
 def test_collect_consumable_rows_missing_unit_detects_decimal_only(temp_db, tmp_path):
