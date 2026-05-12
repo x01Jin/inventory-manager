@@ -90,7 +90,7 @@ class RequesterEditor(QDialog):
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.student_name = QLineEdit()
-        self.student_name.setPlaceholderText("Enter student's full name")
+        self.student_name.setPlaceholderText("Enter Faculty full name")
 
         self.grade_level = QLineEdit()
         self.grade_level.setPlaceholderText("e.g., Grade 7, Grade 10")
@@ -130,7 +130,7 @@ class RequesterEditor(QDialog):
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.faculty_name = QLineEdit()
-        self.faculty_name.setPlaceholderText("Enter faculty name")
+        self.faculty_name.setPlaceholderText("Enter Student's name")
 
         form_layout.addRow("Full Name:", self.faculty_name)
 
