@@ -20,6 +20,7 @@ from PyQt6.QtCore import QTimer
 from inventory_app.gui.styles import DarkTheme, ThemeManager
 from inventory_app.gui.navigation import NavigationPanel
 from inventory_app.gui.dashboard.dashboard_page import DashboardPage
+from inventory_app.services.requisition_service import RequisitionService
 from inventory_app.utils.logger import logger
 
 
@@ -28,6 +29,7 @@ class MainWindow(QMainWindow):
 
     PAGE_REFRESH_INTERVAL = 30.0
     REFRESH_DEBOUNCE_DELAY = 500
+    REQUISITION_STATUS_REFRESH_INTERVAL_MS = 60000
 
     def __init__(self):
         super().__init__()
@@ -39,6 +41,14 @@ class MainWindow(QMainWindow):
         self._refresh_debounce_timer.setSingleShot(True)
         self._refresh_debounce_timer.timeout.connect(self._execute_debounced_refresh)
         self._pending_page_index = None
+
+        self._requisition_status_service = RequisitionService()
+        self._requisition_status_timer = QTimer(self)
+        self._requisition_status_timer.setInterval(
+            self.REQUISITION_STATUS_REFRESH_INTERVAL_MS
+        )
+        self._requisition_status_timer.timeout.connect(self._sync_requisition_statuses)
+        self._requisition_status_timer.start()
 
         # Apply theme based on saved preference
         app_instance = QApplication.instance()
@@ -238,6 +248,24 @@ class MainWindow(QMainWindow):
                 logger.info("Refreshed help tab content")
             except Exception:
                 logger.exception("Failed to refresh help tab content")
+
+    def _sync_requisition_statuses(self) -> None:
+        """Refresh requisition statuses and refresh visible pages if needed."""
+        try:
+            updated_count = (
+                self._requisition_status_service.update_time_based_statuses()
+            )
+            if updated_count <= 0:
+                return
+
+            for page_index in (0, 2):
+                self._page_refresh_times.pop(page_index, None)
+
+            current_index = self.content_stack.currentIndex()
+            if current_index in (0, 2):
+                self._refresh_page_data(current_index)
+        except Exception as e:
+            logger.error(f"Failed to sync requisition statuses: {e}")
 
     def on_page_changed(self, page_index: int):
         """Handle page changes and refresh page data with caching and throttling."""

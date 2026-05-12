@@ -1197,59 +1197,10 @@ class RequisitionsPage(QWidget):
             int: Number of requisitions that had their status updated
         """
         try:
-            from inventory_app.database.connection import db
             from inventory_app.services.requisition_service import RequisitionService
 
-            rows = db.execute_query(
-                """
-                SELECT
-                    id,
-                    status,
-                    CASE
-                        WHEN status = 'returned' THEN 'returned'
-                        WHEN expected_request IS NOT NULL
-                             AND datetime(expected_request) > datetime('now') THEN 'requested'
-                        WHEN expected_request IS NOT NULL
-                             AND expected_return IS NOT NULL
-                             AND datetime(expected_request) <= datetime('now')
-                             AND datetime(expected_return) > datetime('now') THEN 'active'
-                        WHEN expected_return IS NOT NULL
-                             AND datetime(expected_return) <= datetime('now') THEN 'overdue'
-                        ELSE 'requested'
-                    END AS computed_status
-                FROM Requisitions
-                WHERE status IN ('requested', 'active', 'overdue')
-                """,
-                use_cache=False,
-            )
-
-            updates = [
-                (row["id"], row["status"], row["computed_status"])
-                for row in rows
-                if row.get("computed_status")
-                and row["computed_status"] != row["status"]
-            ]
-
-            if not updates:
-                return 0
-
             requisition_service = RequisitionService()
-            updated_count = 0
-            with db.transaction(immediate=True):
-                for requisition_id, old_status, computed_status in updates:
-                    reason = (
-                        "Automatic status transition during refresh "
-                        f"({old_status} -> {computed_status})"
-                    )
-                    if requisition_service.update_status(
-                        requisition_id,
-                        computed_status,
-                        user_name="System Auto",
-                        reason=reason,
-                    ):
-                        updated_count += 1
-
-            return updated_count
+            return requisition_service.update_time_based_statuses()
 
         except Exception as e:
             logger.error(f"Failed to update all requisition statuses: {e}")

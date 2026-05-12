@@ -199,6 +199,117 @@ class RequisitionService:
         db.execute_update(history_query, (requisition_id, user_name, history_reason))
         return True
 
+    def update_time_based_statuses(
+        self, reference_time: Optional[datetime] = None
+    ) -> int:
+        """
+        Update requisition statuses based on expected request/return timestamps.
+
+        Args:
+            reference_time: Optional time to evaluate against (defaults to local now).
+
+        Returns:
+            int: Number of requisitions updated.
+        """
+        try:
+            now = self._normalize_datetime(reference_time or datetime.now())
+
+            rows = db.execute_query(
+                """
+                SELECT id, status, expected_request, expected_return
+                FROM Requisitions
+                WHERE status IN ('requested', 'active', 'overdue')
+                """,
+                use_cache=False,
+            )
+
+            updates = []
+            for row in rows:
+                current_status = (row.get("status") or "requested").strip()
+                expected_request = self._parse_iso_datetime(row.get("expected_request"))
+                expected_return = self._parse_iso_datetime(row.get("expected_return"))
+                computed_status = self._calculate_time_based_status(
+                    current_status,
+                    expected_request,
+                    expected_return,
+                    now,
+                )
+                if computed_status != current_status:
+                    updates.append((row["id"], current_status, computed_status))
+
+            if not updates:
+                return 0
+
+            updated_count = 0
+            with db.transaction(immediate=True):
+                for requisition_id, old_status, computed_status in updates:
+                    reason = (
+                        "Automatic status transition from schedule check "
+                        f"({old_status or 'unknown'} -> {computed_status})"
+                    )
+                    if self.update_status(
+                        requisition_id,
+                        computed_status,
+                        user_name="System Auto",
+                        reason=reason,
+                    ):
+                        updated_count += 1
+
+            return updated_count
+        except Exception as e:
+            logger.error(f"RequisitionService: Failed to refresh statuses: {e}")
+            return 0
+
+    @staticmethod
+    def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+        """Parse ISO datetime string to datetime object."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid datetime value for status check: {value}")
+            return None
+
+    @staticmethod
+    def _normalize_datetime(value: Optional[datetime]) -> Optional[datetime]:
+        """Normalize datetime to local naive time for comparisons."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value
+        return value.astimezone().replace(tzinfo=None)
+
+    def _calculate_time_based_status(
+        self,
+        current_status: str,
+        expected_request: Optional[datetime],
+        expected_return: Optional[datetime],
+        now: Optional[datetime],
+    ) -> str:
+        """Calculate status based on expected dates and current time."""
+        if current_status == "returned":
+            return "returned"
+
+        normalized_now = self._normalize_datetime(now)
+        normalized_request = self._normalize_datetime(expected_request)
+        normalized_return = self._normalize_datetime(expected_return)
+
+        if (
+            normalized_request
+            and normalized_now
+            and normalized_now < normalized_request
+        ):
+            return "requested"
+
+        if normalized_request and normalized_return and normalized_now is not None:
+            if normalized_request <= normalized_now < normalized_return:
+                return "active"
+            if normalized_now >= normalized_return:
+                return "overdue"
+
+        return "requested"
+
     def process_return(
         self, requisition_id: int, return_items: List[Dict], user_name: str = "System"
     ) -> bool:

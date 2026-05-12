@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from inventory_app.database.connection import db
 from inventory_app.database.models import Requisition
 from inventory_app.gui.requisitions.requisitions_model import RequisitionsModel
@@ -59,6 +59,83 @@ def test_requisition_save_and_retrieve(temp_db):
         (req.id,),
     )
     assert any(row["field_name"] == "lab_activity_name" for row in history_rows)
+
+
+def test_requisition_status_updates_by_schedule(temp_db):
+    """Status update service should transition requested/active/overdue."""
+    from inventory_app.services.requisition_service import RequisitionService
+
+    requester_id = db.execute_update(
+        "INSERT INTO Requesters (name) VALUES (?)",
+        ("Status Update User",),
+        return_last_id=True,
+    )[1]
+    assert requester_id is not None
+
+    now = datetime(2026, 5, 12, 10, 0, 0)
+
+    def insert_req(status, expected_request, expected_return, name):
+        return db.execute_update(
+            """
+            INSERT INTO Requisitions (
+                requester_id,
+                expected_request,
+                expected_return,
+                status,
+                lab_activity_name,
+                lab_activity_date
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                requester_id,
+                expected_request.isoformat(),
+                expected_return.isoformat(),
+                status,
+                name,
+                "2026-05-12",
+            ),
+            return_last_id=True,
+        )[1]
+
+    req_future_id = insert_req(
+        "requested",
+        now + timedelta(hours=2),
+        now + timedelta(hours=4),
+        "Future Request",
+    )
+    req_active_id = insert_req(
+        "requested",
+        now - timedelta(hours=1),
+        now + timedelta(hours=1),
+        "Active Request",
+    )
+    req_overdue_id = insert_req(
+        "active",
+        now - timedelta(hours=3),
+        now - timedelta(hours=1),
+        "Overdue Request",
+    )
+    req_returned_id = insert_req(
+        "returned",
+        now - timedelta(hours=4),
+        now - timedelta(hours=2),
+        "Returned Request",
+    )
+
+    service = RequisitionService()
+    updated_count = service.update_time_based_statuses(reference_time=now)
+    assert updated_count == 2
+
+    def get_status(req_id):
+        return db.execute_query(
+            "SELECT status FROM Requisitions WHERE id = ?",
+            (req_id,),
+        )[0]["status"]
+
+    assert get_status(req_future_id) == "requested"
+    assert get_status(req_active_id) == "active"
+    assert get_status(req_overdue_id) == "overdue"
+    assert get_status(req_returned_id) == "returned"
 
 
 def test_requisition_create_requires_editor_and_logs_creator(temp_db):
