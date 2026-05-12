@@ -102,7 +102,7 @@ class RequesterEditor(QDialog):
         form_layout.addRow("Grade Level:", self.grade_level)
         form_layout.addRow("Section:", self.section)
 
-        self.tab_widget.addTab(tab, "Student")
+        self.tab_widget.addTab(tab, "Faculty")
 
     def _setup_teacher_tab(self):
         """Setup the Teacher tab."""
@@ -134,7 +134,7 @@ class RequesterEditor(QDialog):
 
         form_layout.addRow("Full Name:", self.faculty_name)
 
-        self.tab_widget.addTab(tab, "Faculty")
+        self.tab_widget.addTab(tab, "Student")
 
     def _update_tab_positions(self):
         """Ensure tabs are positioned at the top for minimal height."""
