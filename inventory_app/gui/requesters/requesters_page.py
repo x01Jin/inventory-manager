@@ -128,7 +128,7 @@ class RequestersPage(QWidget):
         students_tab = QWidget()
         students_layout = QVBoxLayout(students_tab)
         students_layout.addWidget(self.students_table)
-        self.tabs.addTab(students_tab, "Students")
+        self.tabs.addTab(students_tab, "Faculty/Individual")
 
         teachers_tab = QWidget()
         teachers_layout = QVBoxLayout(teachers_tab)
@@ -138,7 +138,7 @@ class RequestersPage(QWidget):
         faculty_tab = QWidget()
         faculty_layout = QVBoxLayout(faculty_tab)
         faculty_layout.addWidget(self.faculty_table)
-        self.tabs.addTab(faculty_tab, "Faculty/Individual")
+        self.tabs.addTab(faculty_tab, "Students")
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self.tabs)
