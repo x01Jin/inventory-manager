@@ -82,7 +82,7 @@ class RequesterSelector(QDialog):
         students_tab = QWidget()
         students_layout = QVBoxLayout(students_tab)
         students_layout.addWidget(self.students_table)
-        self.tabs.addTab(students_tab, "Students")
+        self.tabs.addTab(students_tab, "Faculty/Individual")
 
         teachers_tab = QWidget()
         teachers_layout = QVBoxLayout(teachers_tab)
@@ -92,7 +92,7 @@ class RequesterSelector(QDialog):
         faculty_tab = QWidget()
         faculty_layout = QVBoxLayout(faculty_tab)
         faculty_layout.addWidget(self.faculty_table)
-        self.tabs.addTab(faculty_tab, "Faculty/Individual")
+        self.tabs.addTab(faculty_tab, "Students")
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
         table_layout.addWidget(self.tabs)
@@ -157,7 +157,9 @@ class RequesterSelector(QDialog):
             self.teachers_table.populate_table(teachers)
             self.faculty_table.populate_table(faculty)
 
-            logger.debug(f"Filtered requesters: {len(students)} students, {len(teachers)} teachers, {len(faculty)} faculty")
+            logger.debug(
+                f"Filtered requesters: {len(students)} students, {len(teachers)} teachers, {len(faculty)} faculty"
+            )
 
         except Exception as e:
             logger.error(f"Failed to filter requesters: {e}")
@@ -174,7 +176,9 @@ class RequesterSelector(QDialog):
                 self.selection_info.setText(f"Selected: {requester.name}")
                 self.select_button.setEnabled(True)
 
-                logger.info(f"Selected requester: {requester.name} (ID: {requester_id})")
+                logger.info(
+                    f"Selected requester: {requester.name} (ID: {requester_id})"
+                )
 
         except Exception as e:
             logger.error(f"Failed to select requester {requester_id}: {e}")
